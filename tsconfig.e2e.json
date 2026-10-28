@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
+    // E2E specs run in Node but pass callbacks that execute inside the page.
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*", "playwright.config.ts", "src/renderer/src/env.d.ts", "src/shared/**/*"]
+}
