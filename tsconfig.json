@@ -1,0 +1,16 @@
+// Entry point for TypeScript: lists the separate configs below, one per environment.
+// `npm run typecheck` (tsc -b) checks every one of them.
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./tsconfig.web.json"
+    },
+    {
+      "path": "./tsconfig.e2e.json"
+    }
+  ]
+}

@@ -1,3 +1,6 @@
+# Files git should never track: installed packages, build output, test reports,
+# secrets, and anything that could contain someone's real photos or catalog.
+
 node_modules/
 dist/
 out/

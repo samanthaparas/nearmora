@@ -1,0 +1,48 @@
+/*
+ * Nearmora design tokens: every color, font, size and spacing value the UI uses, in one place.
+ * Palette values come from the MVP blueprint (section 5). Change a token here and the whole app follows.
+ * Contrast ratios below were calculated with the WCAG 2 formula; they are not
+ * a substitute for checking real screens.
+ */
+:root {
+  /* Brand palette */
+  --nm-cream: #f8f0e8;
+  --nm-blush: #e8b7b0;
+  --nm-lilac: #b9a4c8;
+  --nm-sage: #b8bda6;
+  --nm-plum: #5b414b;
+
+  /* Roles */
+  --nm-surface: var(--nm-cream);
+  --nm-surface-raised: #fffbf7;
+  --nm-text: var(--nm-plum); /* 8.09:1 on cream */
+  --nm-text-muted: #7a6570; /* 4.75:1 on cream */
+  --nm-selected: var(--nm-blush); /* plum text on blush: 5.14:1 */
+  --nm-favorite: var(--nm-sage); /* plum text on sage: 4.72:1 */
+  --nm-primary: var(--nm-plum);
+  --nm-on-primary: var(--nm-cream); /* 8.09:1 */
+  --nm-border-subtle: #e6d9cf; /* decorative only, not for control outlines */
+  --nm-focus-ring: var(--nm-plum); /* lilac alone is 2.02:1, so it's only a halo */
+  --nm-focus-halo: var(--nm-lilac);
+
+  /* Type */
+  --nm-font-display: 'Fraunces Variable', Georgia, serif;
+  --nm-font-ui: 'Source Sans 3 Variable', -apple-system, 'Helvetica Neue', sans-serif;
+  --nm-text-body: 1rem; /* 16px */
+  --nm-text-small: 0.875rem;
+  --nm-text-h1: 2.75rem;
+  --nm-text-h2: 1.75rem;
+
+  /* Spacing: 8px scale */
+  --nm-space-1: 0.5rem;
+  --nm-space-2: 1rem;
+  --nm-space-3: 1.5rem;
+  --nm-space-4: 2rem;
+  --nm-space-6: 3rem;
+
+  /* Shape and size */
+  --nm-radius-card: 12px;
+  --nm-radius-control: 10px;
+  --nm-target-min: 44px;
+  --nm-sidebar-width: 240px;
+}
