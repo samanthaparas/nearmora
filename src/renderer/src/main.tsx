@@ -1,3 +1,7 @@
+/**
+ * Starting point of the UI: loads fonts and global styles, then mounts the React app.
+ */
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 // Fonts are bundled from npm at build time; the app never downloads fonts at runtime.

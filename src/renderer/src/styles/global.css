@@ -1,3 +1,9 @@
+/*
+ * Base styles for the whole UI: page background, default text, headings and focus rings.
+ * Accessibility basics live here so every screen gets them automatically.
+ */
+
+/* Make width/height include padding and border, which makes layouts predictable. */
 *,
 *::before,
 *::after {
@@ -33,12 +39,14 @@ button {
   color: inherit;
 }
 
+/* Keyboard focus is always visible: plum outline for contrast, lilac halo for warmth. */
 :focus-visible {
   outline: 2px solid var(--nm-focus-ring);
   outline-offset: 2px;
   box-shadow: 0 0 0 5px var(--nm-focus-halo);
 }
 
+/* Hides text visually but keeps it available to screen readers. */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -48,6 +56,7 @@ button {
   white-space: nowrap;
 }
 
+/* Respect the macOS "Reduce motion" setting. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

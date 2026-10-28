@@ -1,8 +1,14 @@
+/**
+ * End-to-end security tests that launch the real built app and probe it from inside the window.
+ * They prove the protections work in Electron itself, not just in isolated functions.
+ */
+
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
 
 let app: ElectronApplication
 let page: Page
 
+// Launch the app once and share it across tests. Starting Electron is the slow part.
 test.beforeAll(async () => {
   // Launch the built main process. ELECTRON_RENDERER_URL is removed so the
   // app loads from app://nearmora exactly as a built app does.

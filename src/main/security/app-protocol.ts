@@ -1,3 +1,8 @@
+/**
+ * Serves the built UI from app://nearmora with security headers attached.
+ * Loading from file:// instead would let the page read any file the user can.
+ */
+
 import { pathToFileURL } from 'node:url'
 import { net, protocol } from 'electron'
 import { APP_HOST, APP_SCHEME, contentSecurityPolicy } from './policy'
@@ -17,6 +22,7 @@ export function registerAppSchemeAsPrivileged(): void {
 
 const notFound = () => new Response('Not found', { status: 404 })
 
+// Answers every app:// request: map the URL to a safe file, then attach the security headers.
 export function serveRendererFromAppScheme(rendererRoot: string): void {
   const csp = contentSecurityPolicy('production')
 

@@ -1,3 +1,8 @@
+/**
+ * Decides which built UI file, if any, an app:// URL maps to.
+ * This stops a crafted URL (like ../../) from reading files outside the app's own folder.
+ */
+
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 // The only file types the app:// protocol will serve. Anything else is a 404.

@@ -1,12 +1,19 @@
+/**
+ * Connects the router to Electron's IPC system and holds the handler for each command.
+ * When a new capability is added, its handler goes here.
+ */
+
 import { app, ipcMain } from 'electron'
 import { commands, type CommandName } from '@shared/ipc-contract'
 import { channelFor } from '@shared/ipc-channels'
 import { createRouter, type Handlers } from './router'
 
+// One handler per command in ipc-contract.ts. The Handlers type makes a missing one a compile error.
 const handlers: Handlers = {
   'app:getInfo': () => ({ name: app.getName(), version: app.getVersion() }),
 }
 
+// Wires each command to an IPC channel. Every call goes through the router's checks first.
 export function registerIpc(isTrustedSender: (url: string | undefined) => boolean): void {
   const dispatch = createRouter({
     handlers,

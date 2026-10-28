@@ -1,3 +1,8 @@
+/*
+ * Layout and component styles for the app shell, using BEM class names (block__element--modifier).
+ * All colors and sizes come from tokens.css, so the design stays consistent.
+ */
+
 .app {
   display: grid;
   grid-template-columns: var(--nm-sidebar-width) 1fr;

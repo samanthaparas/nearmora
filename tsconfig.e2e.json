@@ -1,3 +1,5 @@
+// TypeScript settings for the end-to-end tests.
+// They need both Node types (the test runner) and DOM types (code that runs inside the app window).
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {

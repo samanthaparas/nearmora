@@ -1,3 +1,8 @@
+/**
+ * Entry point of the main process: the part of Nearmora with full access to the computer.
+ * It turns on the security guards, serves the UI and opens the window, in that order.
+ */
+
 import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { registerIpc } from './ipc/register'
@@ -15,6 +20,7 @@ app.enableSandbox()
 registerAppSchemeAsPrivileged()
 hardenAllWebContents(trustedOrigins)
 
+// Creates the app window with every security option written out explicitly.
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1440,
@@ -40,11 +46,13 @@ function createMainWindow(): BrowserWindow {
     },
   })
 
+  // Show the window only once it has painted, so the user never sees a blank flash.
   window.once('ready-to-show', () => window.show())
   void window.loadURL(devServerUrl ?? APP_ENTRY_URL)
   return window
 }
 
+// Once Electron is ready: install the guards first, then open the window.
 void app.whenReady().then(() => {
   denyAllPermissions()
   if (devServerOrigin) applyDevelopmentCsp(devServerOrigin)
@@ -59,6 +67,7 @@ void app.whenReady().then(() => {
   })
 })
 
+// Windows and Linux quit when the last window closes; macOS apps conventionally stay open.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })

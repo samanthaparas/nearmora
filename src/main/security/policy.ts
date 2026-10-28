@@ -1,4 +1,7 @@
-// Pure security rules, kept free of Electron imports so unit tests can run them in Node.
+/**
+ * Security rules in plain functions: the content security policy, and which URLs count as "our" app.
+ * They have no Electron imports, so unit tests can run them directly.
+ */
 
 export const APP_SCHEME = 'app'
 export const APP_HOST = 'nearmora'

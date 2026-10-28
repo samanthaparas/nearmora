@@ -1,3 +1,5 @@
+// TypeScript settings for the renderer (the UI).
+// It has browser types but no Node types, matching the sandbox: UI code can't call Node APIs.
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {

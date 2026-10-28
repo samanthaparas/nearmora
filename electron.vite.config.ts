@@ -1,8 +1,12 @@
+/**
+ * Build configuration for all three parts of the desktop app (main, preload, renderer).
+ * One config keeps the three builds consistent and is what `npm run dev` and `npm run build` read.
+ */
+
 import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
-// One config, three builds: main (Node), preload (sandboxed bridge), renderer (browser).
 export default defineConfig({
   main: {
     resolve: { alias: { '@shared': resolve('src/shared') } },

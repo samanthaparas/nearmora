@@ -1,8 +1,14 @@
+/**
+ * Unit tests for the IPC router: the checks that stop untrusted or malformed requests from reaching a handler.
+ * If any of these fail, the UI's security boundary is broken.
+ */
+
 import { describe, expect, it, vi } from 'vitest'
 import { createRouter, type Handlers } from '../../src/main/ipc/router'
 
 const TRUSTED = 'app://nearmora/index.html'
 
+// Builds a router with working default handlers. Each test overrides only what it needs.
 function makeRouter(overrides: Partial<Handlers> = {}) {
   const handlers: Handlers = {
     'app:getInfo': () => ({ name: 'Nearmora', version: '0.0.1' }),

@@ -1,3 +1,8 @@
+/**
+ * The checkpoint every request from the UI passes through before anything runs.
+ * Keeping it free of Electron code lets unit tests prove each security check works.
+ */
+
 import type { z } from 'zod'
 import {
   commands,

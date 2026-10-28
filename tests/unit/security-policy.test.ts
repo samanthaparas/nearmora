@@ -1,3 +1,8 @@
+/**
+ * Unit tests for URL trust checks, the content security policy and the app:// file mapping.
+ * They include known path-traversal tricks, so a regression shows up immediately.
+ */
+
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { APP_ORIGIN, contentSecurityPolicy, isTrustedRendererUrl } from '../../src/main/security/policy'

@@ -1,3 +1,8 @@
+/**
+ * The list of everything the UI is allowed to ask the main process to do, with the exact shape of each request and reply.
+ * It's the single source of truth for the security boundary between the UI and the rest of the computer.
+ */
+
 import { z } from 'zod'
 
 /**

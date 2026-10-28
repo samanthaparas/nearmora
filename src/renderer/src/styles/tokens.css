@@ -1,5 +1,6 @@
 /*
- * Nearmora design tokens. Palette values come from the MVP blueprint (section 5).
+ * Nearmora design tokens: every color, font, size and spacing value the UI uses, in one place.
+ * Palette values come from the MVP blueprint (section 5). Change a token here and the whole app follows.
  * Contrast ratios below were calculated with the WCAG 2 formula; they are not
  * a substitute for checking real screens.
  */

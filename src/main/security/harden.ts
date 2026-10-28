@@ -1,3 +1,8 @@
+/**
+ * App-wide security guards: block navigation, pop-ups and webviews, and deny every browser permission.
+ * These protect the user even if a bug lets unexpected content into the window.
+ */
+
 import { app, session, type Session } from 'electron'
 import { contentSecurityPolicy, isTrustedRendererUrl } from './policy'
 

@@ -1,3 +1,5 @@
+// TypeScript settings for code that runs in Node: the main process, preload, shared code and unit tests.
+// It has Node types but no browser types, so main-process code can't accidentally rely on `window`.
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
