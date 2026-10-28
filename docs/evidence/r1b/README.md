@@ -7,7 +7,7 @@ Labels: [auto] automated · [int] built app, not packaged · [pkg] packaged app 
 | Gate item | Evidence | Label |
 |---|---|---|
 | Clean `npm ci` → lint → typecheck → unit → E2E → package → smoke passes | Run locally from a fresh git worktree with no `node_modules` | [auto] |
-| Same sequence passes on GitHub's macOS runner | **Pending:** needs the branch pushed and the PR's CI run | [ci] |
+| Same sequence passes on GitHub's macOS runner | Passed on PR #2, [run 40789547854](https://github.com/samanthaparas/nearmora/actions/runs/40789547854) (2026-10-28): every step succeeded, 11/11 E2E tests and all 17 packaged checks passed | [ci] |
 | ESLint type-aware rules work | A probe file with a floating promise, `any` and an empty async function produced 3 errors; the real code has 0 | [auto] |
 | better-sqlite3 works in Electron | `--self-test` in the development build and in the packaged app: SQLite 3.53.4, foreign keys enforced, transaction, join | [int] [pkg] |
 | sharp works in Electron | same self-test: libvips 8.18.7, resize and PNG re-encode | [int] [pkg] |
