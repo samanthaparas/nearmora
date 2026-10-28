@@ -1,0 +1,18 @@
+node_modules/
+dist/
+out/
+release/
+coverage/
+playwright-report/
+test-results/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Never commit real photo libraries or local catalogs
+fixtures/private/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
