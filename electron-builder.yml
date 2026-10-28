@@ -1,0 +1,44 @@
+# Turns the built app (out/) into a macOS .app (`npm run package:mac`).
+# It also sets Electron "fuses": switches baked into the binary that turn off
+# debugging and Node features an attacker could use to run code inside the app.
+
+appId: com.samanthaparas.nearmora.dev # Development ID. Choose the final one after name clearance, before any beta ships.
+productName: Nearmora
+directories:
+  output: release
+
+# Only ship the compiled app. Source, docs, tests and dev dependencies stay out.
+# Production dependencies from package.json are added automatically.
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+# Native binaries can't be loaded from inside the asar archive, so these
+# packages are unpacked next to it.
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+  - '**/node_modules/sharp/**'
+  - '**/node_modules/@img/**'
+
+# better-sqlite3 and sharp ship prebuilt Node-API binaries that work in Electron
+# as-is, so we never compile native code during packaging.
+npmRebuild: false
+
+mac:
+  category: public.app-category.photography
+  target:
+    - target: dir # A plain .app folder for now. DMG, signing and notarization come with the beta.
+  identity: null # Unsigned until there's an Apple Developer ID (roadmap decision D10).
+
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
+  # Flipping fuses breaks the binary's signature; Apple Silicon won't run
+  # unsigned code, so this re-applies an ad-hoc (local-only) signature.
+  resetAdHocDarwinSignature: true
