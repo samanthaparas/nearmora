@@ -34,6 +34,10 @@ export function createHandlers({ db, library }: HandlerContext): Handlers {
     },
     'sources:list': () => library.listSources(),
     'sources:rescan': ({ sourceId }) => ({ started: library.startScan(sourceId) }),
+    'sources:reconnect': async ({ sourceId }) => ({ result: await library.reconnect(sourceId) }),
+    'sources:removeImpact': ({ sourceId }) => library.removalImpact(sourceId),
+    'sources:remove': ({ sourceId }) => ({ removed: library.remove(sourceId) }),
+    'scan:pause': ({ sourceId }) => ({ paused: library.pauseScan(sourceId) }),
     'scan:cancel': ({ sourceId }) => ({ cancelled: library.cancelScan(sourceId) }),
     'library:query': (page) => queryLibrary(db, page),
   }

@@ -9,11 +9,13 @@ import { describe, expect, it } from 'vitest'
 import { replaceCatalogFile } from '../../src/main/catalog/backup'
 import { CatalogError, MigrationError } from '../../src/main/catalog/errors'
 import { MIGRATIONS, type Migration } from '../../src/main/catalog/migrations'
-import { readSchemaVersion } from '../../src/main/catalog/migrate'
+import { latestVersion, readSchemaVersion } from '../../src/main/catalog/migrate'
 import { createAlbum, listAlbums } from '../../src/main/catalog/repositories/albums'
 import { openTestCatalog, tempProfile } from './helpers'
 
 const v1 = MIGRATIONS[0]!
+const v2 = MIGRATIONS[1]!
+const LATEST = latestVersion(MIGRATIONS)
 const goodV2: Migration = { version: 2, name: 'add-note', sql: 'ALTER TABLE album ADD COLUMN note TEXT;' }
 // The first statement succeeds and the second fails, so this also proves partial work is rolled back.
 const brokenV2: Migration = {
@@ -26,11 +28,11 @@ const tableNames = (db: Database.Database): string[] =>
   (db.prepare(`SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name`).all() as Array<{ name: string }>).map((r) => r.name)
 
 describe('opening a catalog', () => {
-  it('creates schema v1 with foreign keys and WAL turned on', async () => {
+  it('creates the latest schema with foreign keys and WAL turned on', async () => {
     const { catalogFile } = tempProfile()
     const db = await openTestCatalog(catalogFile)
 
-    expect(readSchemaVersion(db)).toBe(1)
+    expect(readSchemaVersion(db)).toBe(LATEST)
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1)
     expect(db.pragma('journal_mode', { simple: true })).toBe('wal')
     expect(tableNames(db)).toEqual(
@@ -43,7 +45,7 @@ describe('opening a catalog', () => {
     ;(await openTestCatalog(catalogFile, { backupDir })).close()
     const db = await openTestCatalog(catalogFile, { backupDir })
 
-    expect(readSchemaVersion(db)).toBe(1)
+    expect(readSchemaVersion(db)).toBe(LATEST)
     expect(existsSync(backupDir)).toBe(false)
   })
 })
@@ -114,6 +116,20 @@ describe('migrating an existing catalog', () => {
     const kept = readdirSync(backupDir).sort()
     expect(kept).toHaveLength(3)
     expect(kept.map((name) => name.match(/-v(\d+)\.sqlite$/)?.[1])).toEqual(['3', '4', '5'])
+  })
+
+  it('v2 links existing scan jobs to their source, and drops jobs whose source is gone', async () => {
+    const { catalogFile, backupDir } = tempProfile()
+    const old = await openTestCatalog(catalogFile, { migrations: [v1] })
+    old.prepare(`INSERT INTO source VALUES ('s1', '/photos', NULL, 'Photos', 'active', 0, NULL)`).run()
+    const job = old.prepare(`INSERT INTO job (id, kind, status, checkpoint, created_at, updated_at) VALUES (?, 'scan', 'done', ?, 0, 0)`)
+    job.run('kept', JSON.stringify({ sourceId: 's1', counts: {} }))
+    job.run('orphan', JSON.stringify({ sourceId: 'deleted-source', counts: {} }))
+    old.close()
+
+    const db = await openTestCatalog(catalogFile, { backupDir, migrations: [v1, v2] })
+    expect(db.prepare('SELECT id, source_id FROM job').all()).toEqual([{ id: 'kept', source_id: 's1' }])
+    expect(db.pragma('foreign_key_check')).toEqual([])
   })
 
   it('rejects a migration list with a gap', async () => {

@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest'
 import { backupCatalog, BackupManifest, inspectBackup, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
 import { CatalogError } from '../../src/main/catalog/errors'
+import { latestVersion } from '../../src/main/catalog/migrate'
+import { MIGRATIONS } from '../../src/main/catalog/migrations'
 import { createAlbum, getAlbumAssetIds, listAlbums, setAlbumMembers } from '../../src/main/catalog/repositories/albums'
 import { saveReview } from '../../src/main/catalog/repositories/review'
 import { createSimilaritySet, getSetReview } from '../../src/main/catalog/repositories/sets'
@@ -50,7 +52,7 @@ describe('catalog backup', () => {
     expect(folder).toMatch(/Nearmora catalog backup 2026-10-28 1530$/)
     expect(BackupManifest.parse(JSON.parse(readFileSync(join(folder, 'manifest.json'), 'utf8')))).toEqual(manifest)
     expect(manifest).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: latestVersion(MIGRATIONS),
       originalPhotosIncluded: false,
       counts: { sources: 1, assets: 4, favorites: 2, similaritySets: 1, albums: 1, projects: 1 },
     })

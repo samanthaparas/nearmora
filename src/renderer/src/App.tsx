@@ -1,10 +1,11 @@
 /**
  * The app shell: sidebar navigation plus the main content area.
- * The Library screen is real; other sections say they aren't built yet.
+ * The Library and Sources screens are real; other sections say they aren't built yet.
  */
 
 import { useEffect, useState } from 'react'
 import { Library } from './library/Library'
+import { Sources } from './library/Sources'
 import './App.css'
 
 // The five main sections, in the order the blueprint specifies. Settings sits apart at the bottom.
@@ -97,7 +98,7 @@ export function App() {
       </aside>
 
       <main id="main" className="content" tabIndex={-1}>
-        {section === 'Library' ? <Library /> : <NotBuiltYet section={section} />}
+        {section === 'Library' ? <Library /> : section === 'Sources' ? <Sources /> : <NotBuiltYet section={section} />}
       </main>
     </div>
   )

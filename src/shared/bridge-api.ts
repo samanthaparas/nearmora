@@ -16,6 +16,10 @@ export interface NearmoraApi {
   addSource(): Promise<IpcResult<CommandOutput<'sources:add'>>>
   listSources(): Promise<IpcResult<CommandOutput<'sources:list'>>>
   rescanSource(input: CommandInput<'sources:rescan'>): Promise<IpcResult<CommandOutput<'sources:rescan'>>>
+  reconnectSource(input: CommandInput<'sources:reconnect'>): Promise<IpcResult<CommandOutput<'sources:reconnect'>>>
+  sourceRemovalImpact(input: CommandInput<'sources:removeImpact'>): Promise<IpcResult<CommandOutput<'sources:removeImpact'>>>
+  removeSource(input: CommandInput<'sources:remove'>): Promise<IpcResult<CommandOutput<'sources:remove'>>>
+  pauseScan(input: CommandInput<'scan:pause'>): Promise<IpcResult<CommandOutput<'scan:pause'>>>
   cancelScan(input: CommandInput<'scan:cancel'>): Promise<IpcResult<CommandOutput<'scan:cancel'>>>
   queryLibrary(input: CommandInput<'library:query'>): Promise<IpcResult<CommandOutput<'library:query'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */

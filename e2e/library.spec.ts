@@ -1,8 +1,10 @@
 /**
  * End-to-end test of the R3a slice in the real built app: add a folder, watch it scan, see thumbnails,
- * restart and see them again, with the originals proven unchanged. Only the macOS folder picker is replaced.
+ * restart and see them again, go offline and reconnect, and remove the folder, with the originals proven unchanged.
+ * Only the macOS folder picker is replaced.
  */
 
+import { renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { generatePhotoFolder, type GeneratedFolder } from '../tests/support/generate-photos'
@@ -65,4 +67,53 @@ test('after a restart the photos are still there, without rescanning', async () 
   await expect(page.getByRole('list', { name: `Photos, ${folder.expected.distinctPhotos} in total` })).toBeVisible()
   await expect.poll(() => loadedThumbnails(page)).toBe(folder.expected.distinctPhotos)
   await app.close()
+})
+
+test('an unplugged folder shows offline photos, then reconnects after verification', async () => {
+  const before = fingerprintFolder(folder.root)
+  const parked = `${folder.root}-unplugged`
+  renameSync(folder.root, parked) // the test's own folder disappears, standing in for an unplugged drive
+  const { app } = await launchApp(profileDir)
+  const page = await app.firstWindow()
+  try {
+    await expect(page.getByText('Not connected.', { exact: false })).toBeVisible()
+    await expect(page.getByRole('img', { name: /offline/ })).toHaveCount(folder.expected.distinctPhotos)
+
+    // Still missing: reconnecting explains instead of pretending.
+    await page.getByRole('button', { name: 'Reconnect' }).click()
+    await expect(page.getByRole('alert')).toContainText('Still not found')
+
+    renameSync(parked, folder.root)
+    await page.getByRole('button', { name: 'Reconnect' }).click()
+    await expect(page.getByText(`${folder.expected.distinctPhotos} photos · 1 identical copy`, { exact: false })).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByRole('img', { name: /offline/ })).toHaveCount(0)
+  } finally {
+    await app.close()
+  }
+  expect(fingerprintFolder(folder.root)).toEqual(before)
+})
+
+test('the Sources screen shows the impact before removing a folder, and removing leaves the files alone', async () => {
+  const before = fingerprintFolder(folder.root)
+  const { app } = await launchApp(profileDir)
+  const page = await app.firstWindow()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Sources' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Sources' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Remove from Nearmora…' }).click()
+  await expect(page.getByText('Nearmora will forget 6 files in this folder.', { exact: false })).toBeVisible()
+  await expect(page.getByText('The files themselves stay exactly where they are.', { exact: false })).toBeVisible()
+  // The safe choice has focus, so pressing Return by habit keeps the folder.
+  await expect(page.getByRole('button', { name: 'Keep folder' })).toBeFocused()
+  await page.getByRole('button', { name: 'Keep folder' }).click()
+  await expect(page.getByRole('button', { name: 'Remove from Nearmora…' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Remove from Nearmora…' }).click()
+  await page.getByRole('button', { name: 'Remove from Nearmora', exact: true }).click()
+  await expect(page.getByText('No folders added yet.')).toBeVisible()
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Library' }).click()
+  await expect(page.getByRole('heading', { name: 'Choose a folder to get started.' })).toBeVisible()
+  await app.close()
+  expect(fingerprintFolder(folder.root)).toEqual(before)
 })

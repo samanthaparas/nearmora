@@ -1,5 +1,5 @@
 /*
- * Styles for the Library screen: the folder toolbar, scan status lines and the thumbnail grid.
+ * Styles for the Library and Sources screens: the folder toolbar, status lines, removal review and the thumbnail grid.
  * Colors and spacing come from the design tokens so the screen stays consistent with the rest of the app.
  */
 
@@ -35,6 +35,26 @@
   margin: 0;
 }
 
+.library__source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nm-space-1);
+}
+
+/* The removal review: a raised panel so it reads as a decision, not a status line. */
+.library__confirm {
+  flex-basis: 100%;
+  padding: var(--nm-space-2);
+  background: var(--nm-surface-raised);
+  border: 1px solid var(--nm-border-subtle);
+  border-radius: var(--nm-radius-card);
+}
+
+.library__confirm-title {
+  margin: 0 0 var(--nm-space-1);
+  font-weight: 600;
+}
+
 .library__skipped {
   flex-basis: 100%;
   margin: 0;
@@ -61,6 +81,23 @@
   overflow: hidden;
   border-radius: var(--nm-radius-control);
   background: var(--nm-border-subtle);
+}
+
+.library__cell {
+  position: relative;
+}
+
+/* Plum on cream for contrast (8.09:1); the word itself carries the meaning. */
+.library__badge {
+  position: absolute;
+  bottom: var(--nm-space-1);
+  left: var(--nm-space-1);
+  padding: 2px var(--nm-space-1);
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-cream);
+  color: var(--nm-plum);
+  font-size: var(--nm-text-small);
+  font-weight: 600;
 }
 
 .library__thumb {

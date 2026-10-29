@@ -15,6 +15,10 @@ const api: NearmoraApi = {
   addSource: () => ipcRenderer.invoke(channelFor('sources:add')),
   listSources: () => ipcRenderer.invoke(channelFor('sources:list')),
   rescanSource: (input) => ipcRenderer.invoke(channelFor('sources:rescan'), input),
+  reconnectSource: (input) => ipcRenderer.invoke(channelFor('sources:reconnect'), input),
+  sourceRemovalImpact: (input) => ipcRenderer.invoke(channelFor('sources:removeImpact'), input),
+  removeSource: (input) => ipcRenderer.invoke(channelFor('sources:remove'), input),
+  pauseScan: (input) => ipcRenderer.invoke(channelFor('scan:pause'), input),
   cancelScan: (input) => ipcRenderer.invoke(channelFor('scan:cancel'), input),
   queryLibrary: (input) => ipcRenderer.invoke(channelFor('library:query'), input),
   // The listener gets only the event data, never Electron's event object (which carries `sender`).

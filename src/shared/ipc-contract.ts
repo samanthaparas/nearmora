@@ -27,6 +27,8 @@ const SourceSummary = z.object({
   status: z.enum(['active', 'disconnected', 'permission_denied', 'removed']),
   lastScanAt: z.number().int().nullable(),
   lastScan: ScanCounts.nullable(),
+  /** How the last scan ended. 'paused' (including a scan interrupted by quitting) can be resumed. */
+  lastScanState: z.enum(['done', 'paused', 'cancelled', 'failed']).nullable(),
   /** Distinct pictures available in this folder; identical copies count once. */
   pictureCount: count,
   /** Files that are byte-identical copies of a picture already counted. */
@@ -66,9 +68,28 @@ export const commands = {
     input: z.undefined(),
     output: z.array(SourceSummary),
   },
+  // Also resumes a paused scan: unchanged files are skipped, so it carries on where it stopped.
   'sources:rescan': {
     input: z.object({ sourceId: id }),
     output: z.object({ started: z.boolean() }),
+  },
+  // For a folder that went offline: checks it's the same folder before using it again.
+  'sources:reconnect': {
+    input: z.object({ sourceId: id }),
+    output: z.object({ result: z.enum(['reconnected', 'unavailable', 'permission_denied', 'different_folder']) }),
+  },
+  'sources:removeImpact': {
+    input: z.object({ sourceId: id }),
+    output: z.object({ photoFiles: count, picturesOnlyHere: count, favoritesOnlyHere: count, albumsAffected: count }),
+  },
+  // Removes the folder from the catalog only. Files on disk are never touched.
+  'sources:remove': {
+    input: z.object({ sourceId: id }),
+    output: z.object({ removed: z.boolean() }),
+  },
+  'scan:pause': {
+    input: z.object({ sourceId: id }),
+    output: z.object({ paused: z.boolean() }),
   },
   'scan:cancel': {
     input: z.object({ sourceId: id }),
@@ -77,7 +98,16 @@ export const commands = {
   'library:query': {
     input: z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(500) }),
     output: z.object({
-      items: z.array(z.object({ id, width: z.number().int().nullable(), height: z.number().int().nullable(), capturedAt: z.number().int().nullable() })),
+      items: z.array(
+        z.object({
+          id,
+          width: z.number().int().nullable(),
+          height: z.number().int().nullable(),
+          capturedAt: z.number().int().nullable(),
+          /** Only reachable through a disconnected folder: the cached thumbnail shows, the original can't be opened. */
+          offline: z.boolean(),
+        }),
+      ),
       total: count,
     }),
   },
@@ -95,7 +125,7 @@ export type IpcErrorCode = 'UNTRUSTED_SENDER' | 'UNKNOWN_COMMAND' | 'INVALID_INP
 export type MainEvent = {
   type: 'scan'
   sourceId: string
-  state: 'running' | 'done' | 'cancelled' | 'failed'
+  state: 'running' | 'done' | 'paused' | 'cancelled' | 'failed'
   counts: ScanCounts
 }
 

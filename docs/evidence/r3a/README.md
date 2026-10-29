@@ -15,7 +15,7 @@ Labels: [auto] automated · [int] real files and SQLite on disk · [pkg] package
 | Restart keeps photos | Relaunching with the same profile shows the same grid without rescanning | [e2e] |
 | Media worker in the package | `--self-test` starts the worker from the packaged `.app` and gets a thumbnail back | [pkg] |
 | Real fixture pack (88 files) | See below | [int] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run. CI has no private fixtures, so the real-pack test skips there | [ci] |
+| Passes on GitHub's macOS runner | Passed on PR #6, [run 40797840918](https://github.com/samanthaparas/nearmora/actions/runs/40797840918) (2026-10-29): 105 unit and integration tests (the real-pack test skipped as intended, since CI has no private fixtures), 14 E2E tests and all packaged checks, including the media worker inside the `.app` | [ci] |
 
 Totals: 106 unit and integration tests, 14 E2E tests, 19 packaged checks. Package size: 310 MB (was 309 MB).
 
