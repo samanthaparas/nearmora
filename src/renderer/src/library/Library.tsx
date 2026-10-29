@@ -1,30 +1,21 @@
 /**
- * The Library screen: add a photo folder, follow its scan, and browse the photos as a thumbnail grid.
- * Thumbnails load from nm-media:// by picture id; this screen never sees a file path.
+ * The Library screen: add a photo folder, follow its scan, browse "Your moments", search and filter,
+ * and scroll every photo in a virtualized grid. Thumbnails load from nm-media:// by picture id; this screen
+ * never sees a file path.
  */
 
-import { useCallback, useRef, useState, type ReactNode } from 'react'
-import type { CommandOutput } from '@shared/ipc-contract'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { LibraryFilters } from './LibraryFilters'
+import { MomentCards, MomentHeader, type Moment } from './Moments'
+import { PhotoGrid, type Filters } from './PhotoGrid'
 import { SourceStatus } from './SourceStatus'
 import { useSources } from './use-sources'
 import './Library.css'
-
-type Photo = CommandOutput<'library:query'>['items'][number]
-
-const PAGE_SIZE = 200
 
 const REFUSALS: Record<'unavailable' | 'overlap' | 'app_data', string> = {
   unavailable: 'That folder couldn’t be opened. It may have been moved or disconnected.',
   overlap: 'That folder is inside, or contains, a folder you’ve already added, so its photos are already included.',
   app_data: 'That folder contains Nearmora’s own data, so it can’t be added as a photo folder.',
-}
-
-const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' })
-
-// Alt text: the photos have no captions, so describe what we know (the date, and whether it's offline).
-function altFor(photo: Photo): string {
-  const base = photo.capturedAt === null ? 'Photo' : `Photo from ${dateFormat.format(photo.capturedAt)}`
-  return photo.offline ? `${base}, offline` : base
 }
 
 /** Opens the folder picker in main and turns a refusal into a sentence. Shared by Library and Sources. */
@@ -35,28 +26,46 @@ export async function addFolderWithMessage(): Promise<string | null> {
 }
 
 export function Library() {
-  const [photos, setPhotos] = useState<Photo[]>([])
-  const [total, setTotal] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
-  const shownCount = useRef(PAGE_SIZE)
+  const [filters, setFilters] = useState<Filters>({})
+  const [moments, setMoments] = useState<Moment[]>([])
+  const [openMomentId, setOpenMomentId] = useState<string | null>(null)
+  const [choosingCover, setChoosingCover] = useState(false)
+  const [refreshToken, setRefreshToken] = useState(0)
+  const [total, setTotal] = useState<number | null>(null)
 
-  const loadPhotos = useCallback(() => {
-    void window.nearmora.queryLibrary({ offset: 0, limit: shownCount.current }).then((result) => {
-      if (!result.ok) return
-      setPhotos(result.data.items)
-      setTotal(result.data.total)
+  const loadMoments = useCallback(() => {
+    void window.nearmora.listMoments().then((result) => {
+      if (result.ok) setMoments(result.data)
     })
   }, [])
-  const { sources, progress, loadError, refresh } = useSources(loadPhotos)
+  // After each sources refresh (scan progress, reconnect, removal), reload moments and the grid's loaded pages.
+  const onSourcesChanged = useCallback(() => {
+    loadMoments()
+    setRefreshToken((n) => n + 1)
+  }, [loadMoments])
+  const { sources, progress, loadError, refresh } = useSources(onSourcesChanged)
+
+  useEffect(() => {
+    loadMoments()
+  }, [loadMoments])
+
+  const openMoment = moments.find((m) => m.id === openMomentId) ?? null
+  const gridFilters: Filters = openMoment ? { ...filters, momentId: openMoment.id } : filters
+  const filtering = Object.keys(filters).length > 0
 
   async function addFolder() {
     setNotice(await addFolderWithMessage())
     await refresh()
   }
 
-  function showMore() {
-    shownCount.current += PAGE_SIZE
-    loadPhotos()
+  async function chooseCover(assetId: string) {
+    if (!openMoment) return
+    const result = await window.nearmora.updateMoment({ momentId: openMoment.id, coverAssetId: assetId })
+    if (result.ok) {
+      setChoosingCover(false)
+      loadMoments()
+    }
   }
 
   if (sources === null) {
@@ -108,32 +117,43 @@ export function Library() {
         ))}
       </ul>
 
-      {photos.length === 0 ? (
-        <p className="library__empty">
-          {scanning ? 'Photos appear here as they’re found.' : 'No photos found yet. Folders with JPEG or PNG photos appear here once scanned.'}
-        </p>
+      {openMoment ? (
+        <MomentHeader
+          key={openMoment.id}
+          moment={openMoment}
+          choosingCover={choosingCover}
+          onBack={() => {
+            setOpenMomentId(null)
+            setChoosingCover(false)
+          }}
+          onChooseCover={setChoosingCover}
+          onChanged={loadMoments}
+        />
       ) : (
-        <>
-          <ul className="library__grid" aria-label={`Photos, ${total} in total`}>
-            {photos.map((photo) => (
-              <li key={photo.id} className="library__cell">
-                <img className="library__thumb" src={`nm-media://thumb/${photo.id}`} alt={altFor(photo)} loading="lazy" decoding="async" />
-                {/* Text, not just an icon or colour, so the state is clear to everyone. The alt text says it too. */}
-                {photo.offline ? (
-                  <span className="library__badge" aria-hidden="true">
-                    Offline
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {photos.length < total ? (
-            <button type="button" className="button button--secondary library__more" onClick={showMore}>
-              Show more ({photos.length} of {total})
-            </button>
-          ) : null}
-        </>
+        <MomentCards moments={moments} onOpen={(moment) => setOpenMomentId(moment.id)} />
       )}
+
+      <LibraryFilters sources={sources} onChange={setFilters} />
+
+      {total === 0 ? (
+        <div className="library__empty">
+          {filtering ? (
+            <p>No photos match these filters. Try a different search or clear the filters.</p>
+          ) : scanning ? (
+            <p>Photos appear here as they’re found.</p>
+          ) : (
+            <p>No photos found yet. Folders with JPEG or PNG photos appear here once scanned.</p>
+          )}
+        </div>
+      ) : null}
+      <PhotoGrid
+        key={openMoment?.id ?? 'all'}
+        filters={gridFilters}
+        refreshToken={refreshToken}
+        label={openMoment ? 'Photos in this moment' : 'Photos'}
+        onTotal={setTotal}
+        {...(choosingCover ? { onPick: (assetId: string) => void chooseCover(assetId) } : {})}
+      />
     </LibraryHeader>
   )
 }

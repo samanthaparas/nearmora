@@ -123,7 +123,7 @@ describe('rescans, cancelling and missing files (AC2)', () => {
       availability: 'missing',
     })
     // The picture still has its other copy, so it stays in the Library.
-    expect(queryLibrary(db, { offset: 0, limit: 50 }).total).toBe(folder.expected.distinctPhotos)
+    expect(queryLibrary(db, { limit: 50 }).total).toBe(folder.expected.distinctPhotos)
   })
 
   it('counts files over the size limit without opening them', async () => {
@@ -169,7 +169,7 @@ describe('the Library query', () => {
   it('lists each picture once, newest first, with a total', async () => {
     const { db, deps, sourceId, folder } = await setup()
     await scanSource(deps, sourceId)
-    const { items, total } = queryLibrary(db, { offset: 0, limit: 50 })
+    const { items, total } = queryLibrary(db, { limit: 50 })
 
     expect(total).toBe(folder.expected.distinctPhotos)
     expect(new Set(items.map((i) => i.id)).size).toBe(items.length)

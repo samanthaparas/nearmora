@@ -36,6 +36,7 @@
     "@fontsource-variable/fraunces": "5.3.0",
     "@fontsource-variable/source-sans-3": "5.3.1",
     "@playwright/test": "1.64.1",
+    "@tanstack/react-virtual": "3.14.19",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",

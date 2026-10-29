@@ -67,6 +67,8 @@ test('bridge exposes only the named API, frozen', async () => {
       'pauseScan',
       'cancelScan',
       'queryLibrary',
+      'listMoments',
+      'updateMoment',
       'onEvent',
     ],
     frozen: true,

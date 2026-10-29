@@ -22,6 +22,8 @@ export interface NearmoraApi {
   pauseScan(input: CommandInput<'scan:pause'>): Promise<IpcResult<CommandOutput<'scan:pause'>>>
   cancelScan(input: CommandInput<'scan:cancel'>): Promise<IpcResult<CommandOutput<'scan:cancel'>>>
   queryLibrary(input: CommandInput<'library:query'>): Promise<IpcResult<CommandOutput<'library:query'>>>
+  listMoments(): Promise<IpcResult<CommandOutput<'moments:list'>>>
+  updateMoment(input: CommandInput<'moments:update'>): Promise<IpcResult<CommandOutput<'moments:update'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */
   onEvent(listener: (event: MainEvent) => void): () => void
 }

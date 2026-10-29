@@ -20,7 +20,9 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'sources:remove': () => ({ removed: false }),
     'scan:pause': () => ({ paused: false }),
     'scan:cancel': () => ({ cancelled: false }),
-    'library:query': () => ({ items: [], total: 0 }),
+    'library:query': () => ({ items: [], total: 0, nextCursor: null }),
+    'moments:list': () => [],
+    'moments:update': () => ({ updated: true }),
     ...overrides,
   }
   const logError = vi.fn()
