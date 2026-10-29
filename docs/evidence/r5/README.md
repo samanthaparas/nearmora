@@ -17,7 +17,7 @@ Labels: [auto] automated · [int] real SQLite · [e2e] built app · [ci] GitHub 
 | Carousel | One preview per slide ("Preview of slide N of 5") | [e2e] |
 | Delete keeps photos | Project and items gone, all 10 pictures remain; in the app, "Keep project" is focused first and Favorites still lists 5 | [int] [e2e] |
 | Originals untouched | Fingerprints of the generated folder are identical after all Studio tests | [e2e] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+| Passes on GitHub's macOS runner | Failed first on PR #12 (run 40811798384: the flaky watcher test, see below), then passed after the fix, [run 40812762801](https://github.com/samanthaparas/nearmora/actions/runs/40812762801) (2026-10-29): 177 unit, integration and component tests (2 private-pack tests skipped as intended), 29 E2E tests, all packaged checks | [ci] |
 
 Totals: 179 unit, integration and component tests; 29 E2E tests.
 
@@ -37,3 +37,37 @@ Totals: 179 unit, integration and component tests; 29 E2E tests.
 - `favorites-select.png`: Favorites with two photos selected, numbered in pick order; only the two-photo layout is enabled.
 - `collage-editor.png`: a two-photo collage, the first photo zoomed to 125% and moved right, outlined as the one being adjusted.
 - `carousel-editor.png`: a five-slide carousel, one preview per slide.
+
+## Part 2: export
+
+Date: 2026-10-29 · Same machine.
+
+| Gate item | Evidence | Label |
+|---|---|---|
+| Sizes (AC7) | Exactly 1080 × 1080 and 1080 × 1350 JPEGs; every carousel slide 1080 × 1080 | [int] [e2e] |
+| Crops match the layout math (AC7) | A two-tone photo: the left cell's crop (25% across) shows red, the right cell's (75%) shows blue, and the margin shows cream. A rotated (orientation 6) photo is cropped as displayed | [int] |
+| Preview matches export (AC7) | **First owner review: failed.** "The quality of the preview is noticeably way better than the export." Aligned measurements showed brightness and contrast matching within half a level in all four cells; enlarged, the export's saturated edges (red petals) were smeared by JPEG's half-resolution colour (4:2:0). **Fixed:** quality 92, full-resolution colour (4:4:4), mozjpeg. **Second owner review: passed** (2026-10-29). Preview and export "look similar", and the exported bougainvillea cell at actual size "looks right". The owner first saw the enlarged petals as pixelated: that view was a 2.25× nearest-neighbour enlargement made to show pixels, and the export never enlarges originals (it shrinks about 2.5× at zoom 1). The preview's selection outline is the one intended difference | [human] |
+| Colour kept at full resolution | One-pixel red/blue stripes rendered 1:1 come back with an average error under 15 and 4:4:4 recorded in the file; the export's final check now requires 4:4:4. **Control:** back to the default 4:2:0, the stripe test fails, and two exports fail their final check | [int] |
+| Transparency flattened | A fully transparent PNG renders as the cream background | [int] |
+| No GPS, EXIF, XMP, IPTC (AC7) | The source carries GPS (51.5° N), EXIF (Copyright) and XMP (creator), checked; the output has none (sharp metadata and exifr both empty). The export verifies this for every file. **Control:** writing EXIF into the output fails the metadata test and makes two exports fail their final check | [int] |
+| Ordered names, fresh folders, no overwrite (AC8) | "Carousel 01/02/03.jpg" in "Nearmora Carousel 2026-10-29"; a second export goes to "… (2)"; originals' fingerprints are unchanged and the sentinel guard saw no writes in the photo folder | [int] [e2e] |
+| Destination rules | Inside a photo folder, inside app data, or read-only: refused with a reason, nothing written. In the app: "inside one of your photo folders" | [int] [e2e] |
+| Originals re-checked | Offline photos named; an edited original (extra byte) named as changed; an **in-place edit with the same size and date** is caught by the re-hash. **Control:** without the re-hash, that test fails | [int] |
+| Cancel (AC8) | Cancel after the first slide: no folder, no staging left, job "cancelled". **Control:** without staging cleanup, this test fails | [int] |
+| Full disk (AC8) | Export to a 2 MB disk image the test mounts: fails as `disk_full`, the volume is left empty, and a retry to another folder completes. **Control:** without staging cleanup, this test fails | [hw] [int] |
+| Crash (AC8) | A running export job with a half-written staging folder is failed at startup and its folder removed; a job naming a folder that isn't its own staging folder never deletes it | [int] |
+| Backup restores projects (AC11 full) | A carousel with a changed crop, backed up and restored into a clean profile, comes back identical | [int] |
+| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+
+Totals: 193 unit, integration and component tests; 30 E2E tests.
+
+### What the owner's review caught
+
+- **A misleading comparison of mine.** Enlarging a patch without smoothing made both sides look pixelated; comparisons now include an actual-size view, and enlarged views are labelled as such.
+- **Smeared colour in exports.** My checks measured brightness, contrast and crop position, which all matched; they didn't measure colour resolution. The owner's eye caught it, and the stripe test now covers it. An earlier measurement of mine was also wrong (a misaligned crop of the preview included the cream margin, so its contrast looked twice the export's); the aligned measurement is the one recorded above.
+
+### What testing caught
+
+- **Identical test photos.** The first export fixture made two byte-identical photos, which the catalog rightly treats as one picture; the "changed original" check then (correctly) used the untouched copy. Test photos are now distinct.
+- **JPEG colour shifts.** Cream 248,240,232 comes back as 248,239,232 after compression, so colour checks allow ±4.
+- **A miscounting end-to-end check.** Counting entries in the destination also counted the second export's hidden staging folder while it ran. The test now waits for the "Exported … (2)" message.

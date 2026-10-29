@@ -47,7 +47,7 @@ async function setup(options: { folder?: string; processImage?: Processor } = {}
   // Resolves with the end state of the current scan (anything but 'running').
   const scanEnd = async (): Promise<MainEvent['state']> => {
     for (;;) {
-      const done = events.find((e) => e.sourceId === sourceId && e.state !== 'running')
+      const done = events.find((e) => e.type === 'scan' && e.sourceId === sourceId && e.state !== 'running')
       if (done) {
         events.splice(0)
         return done.state

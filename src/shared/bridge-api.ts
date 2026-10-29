@@ -48,6 +48,9 @@ export interface NearmoraApi {
   reorderProject(input: CommandInput<'projects:reorder'>): Promise<IpcResult<CommandOutput<'projects:reorder'>>>
   setProjectCrop(input: CommandInput<'projects:setCrop'>): Promise<IpcResult<CommandOutput<'projects:setCrop'>>>
   deleteProject(input: CommandInput<'projects:delete'>): Promise<IpcResult<CommandOutput<'projects:delete'>>>
+  startExport(input: CommandInput<'export:start'>): Promise<IpcResult<CommandOutput<'export:start'>>>
+  cancelExport(input: CommandInput<'export:cancel'>): Promise<IpcResult<CommandOutput<'export:cancel'>>>
+  revealExport(input: CommandInput<'export:reveal'>): Promise<IpcResult<CommandOutput<'export:reveal'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */
   onEvent(listener: (event: MainEvent) => void): () => void
 }

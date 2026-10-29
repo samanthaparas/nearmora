@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react'
 import type { CommandOutput } from '@shared/ipc-contract'
 import { canvasCount, clampCrop, DEFAULT_CROP, MAX_ZOOM, placements, type Aspect, type Background, type Crop } from '@shared/layout'
+import { ExportPanel } from './ExportPanel'
 import { StudioCanvas } from './StudioCanvas'
 
 type Project = CommandOutput<'projects:get'>
@@ -131,8 +132,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             {unavailable.length} {unavailable.length === 1 ? 'photo is' : 'photos are'} offline
           </p>
           <p className="review__note">
-            {unavailable.map((i) => `${i.fileName ?? 'A photo'}${i.folderName ? ` (in “${i.folderName}”)` : ''}`).join(', ')}. You can keep editing; reconnect the
-            folder before exporting.
+            {unavailable.map((i) => `${i.fileName ?? 'A photo'}${i.folderName ? ` (in “${i.folderName}”)` : ''}`).join(', ')}. You can keep editing; export needs
+            them reconnected.
           </p>
         </div>
       ) : null}
@@ -248,6 +249,12 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
               </button>
             </div>
           </div>
+
+          <ExportPanel
+            projectId={projectId}
+            blocked={unavailable.length > 0}
+            summary={`JPEG, ${project.aspect === '1:1' ? '1080 × 1080' : '1080 × 1350'} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
+          />
 
           <button type="button" className="button button--quiet" onClick={() => setConfirmDelete(true)}>
             Delete project…

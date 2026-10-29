@@ -14,6 +14,8 @@ import { CatalogError, MigrationError } from './catalog/errors'
 import { createHandlers, registerIpc } from './ipc/register'
 import { createLibraryService } from './library/library-service'
 import { markInterruptedScansPaused } from './library/scan'
+import { recoverInterruptedExports } from './studio/export'
+import { createExportService } from './studio/export-service'
 import { createPreviewResolver } from './library/previews'
 import { thumbnailPathForAsset } from './library/thumbnails'
 import { MediaWorker } from './media/worker-client'
@@ -121,8 +123,10 @@ function startApp(): void {
       return
     }
 
-    // A scan cut short by quitting or a crash is offered for resuming, never shown as finished.
+    // A scan cut short by quitting or a crash is offered for resuming, never shown as finished; an export cut short
+    // has its half-made staging folder removed, so nothing unfinished looks finished.
     markInterruptedScansPaused(db)
+    recoverInterruptedExports(db)
 
     const worker = new MediaWorker()
     const library = createLibraryService({
@@ -134,9 +138,18 @@ function startApp(): void {
         for (const window of BrowserWindow.getAllWindows()) window.webContents.send(EVENT_CHANNEL, event)
       },
     })
+    const exports = createExportService({
+      db,
+      appDataDir: paths.appDataDir,
+      render: (request) => worker.render(request),
+      emit: (event) => {
+        for (const window of BrowserWindow.getAllWindows()) window.webContents.send(EVENT_CHANNEL, event)
+      },
+    })
     // Pause scans and stop the worker on quit. The catalog is left to close with the process; WAL keeps it consistent.
     app.on('before-quit', () => {
       library.pauseAll()
+      exports.cancelAll()
       worker.stop()
     })
 
@@ -145,7 +158,7 @@ function startApp(): void {
       thumbnail: (assetId) => thumbnailPathForAsset(db, paths.thumbnailsDir, assetId),
       preview: createPreviewResolver({ db, previewsDir: join(paths.appDataDir, 'previews'), makePreview: (request) => worker.preview(request) }),
     })
-    registerIpc(createHandlers({ db, library }), (url) => isTrustedRendererUrl(url, trustedOrigins))
+    registerIpc(createHandlers({ db, library, exports }), (url) => isTrustedRendererUrl(url, trustedOrigins))
 
     createMainWindow()
 

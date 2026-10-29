@@ -3,7 +3,7 @@
  * When a new capability is added, its handler goes here.
  */
 
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { commands, type CommandName } from '@shared/ipc-contract'
 import { channelFor } from '@shared/ipc-channels'
 import type { Catalog } from '../catalog/database'
@@ -32,15 +32,17 @@ import { saveReview, undoReview } from '../catalog/repositories/review'
 import { addToSet, nearbyPhotos, removeFromSet, ungroupSet } from '../catalog/repositories/set-edits'
 import { getSetDetail, listSets } from '../catalog/repositories/sets'
 import type { LibraryService } from '../library/library-service'
+import type { ExportService } from '../studio/export-service'
 import { createRouter, type Handlers } from './router'
 
 export interface HandlerContext {
   db: Catalog
   library: LibraryService
+  exports: ExportService
 }
 
 // One handler per command in ipc-contract.ts. The Handlers type makes a missing one a compile error.
-export function createHandlers({ db, library }: HandlerContext): Handlers {
+export function createHandlers({ db, library, exports }: HandlerContext): Handlers {
   return {
     'app:getInfo': () => ({ name: app.getName(), version: app.getVersion() }),
 
@@ -106,6 +108,25 @@ export function createHandlers({ db, library }: HandlerContext): Handlers {
     'projects:delete': ({ projectId }) => {
       deleteProject(db, projectId)
       return { deleted: true as const }
+    },
+    // The destination picker runs here in main; the path never reaches the UI.
+    'export:start': async ({ projectId }) => {
+      const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      const options: Electron.OpenDialogOptions = {
+        title: 'Choose where to save the exported files',
+        properties: ['openDirectory', 'createDirectory'],
+        buttonLabel: 'Export here',
+      }
+      const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+      const path = picked.filePaths[0]
+      if (picked.canceled || !path) return { status: 'cancelled' as const }
+      return exports.start(projectId, path)
+    },
+    'export:cancel': ({ jobId }) => ({ cancelled: exports.cancel(jobId) }),
+    'export:reveal': ({ jobId }) => {
+      const folder = exports.finishedFolder(jobId)
+      if (folder) shell.showItemInFolder(folder)
+      return { shown: folder !== undefined }
     },
     'albums:photos': ({ albumId, afterPosition, limit }) => queryAlbumPhotos(db, { albumId, afterPosition: afterPosition ?? null, limit }),
   }
