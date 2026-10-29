@@ -23,6 +23,7 @@ const NewAssetLocation = z
     orientation: z.number().int().min(1).max(8).nullable().default(null),
     capturedAt: z.number().int().nullable(),
     capturedAtSource: z.enum(['exif', 'file_mtime', 'unknown']),
+    dhash: z.custom<Buffer>((value) => Buffer.isBuffer(value) && value.length === 8, 'expected an 8-byte dHash').nullable().default(null),
     decodeState: z.enum(['ok', 'unsupported', 'corrupt', 'too_large']).default('ok'),
   })
   .refine((v) => (v.capturedAt === null) === (v.capturedAtSource === 'unknown'), 'capturedAt and its source disagree')
@@ -75,22 +76,35 @@ export function recordAssetLocation(db: Catalog, input: z.input<typeof NewAssetL
     const assetId = existing?.id ?? randomUUID()
     if (!existing) {
       db.prepare(
-        `INSERT INTO asset (id, content_sha256, media_type, width, height, orientation, captured_at, captured_at_source, decode_state)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(assetId, v.contentSha256, v.mediaType, v.width, v.height, v.orientation, v.capturedAt, v.capturedAtSource, v.decodeState)
+        `INSERT INTO asset (id, content_sha256, media_type, width, height, orientation, captured_at, captured_at_source, dhash, decode_state)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(assetId, v.contentSha256, v.mediaType, v.width, v.height, v.orientation, v.capturedAt, v.capturedAtSource, v.dhash, v.decodeState)
     }
 
-    // A path seen again (for example on rescan) updates its row instead of adding a second one.
-    db.prepare(
-      `INSERT INTO asset_location (id, asset_id, source_id, relative_path, size_bytes, mtime_ms, availability)
-       VALUES (?, ?, ?, ?, ?, ?, 'available')
-       ON CONFLICT (source_id, relative_path) DO UPDATE SET
-         asset_id = excluded.asset_id, size_bytes = excluded.size_bytes,
-         mtime_ms = excluded.mtime_ms, availability = 'available'`,
-    ).run(randomUUID(), assetId, v.sourceId, v.relativePath, v.sizeBytes, v.mtimeMs)
-
+    recordLocation(db, { assetId, sourceId: v.sourceId, relativePath: v.relativePath, sizeBytes: v.sizeBytes, mtimeMs: v.mtimeMs })
     return { assetId, assetCreated: !existing }
   })()
+}
+
+export function findAssetIdBySha(db: Catalog, contentSha256: Buffer): string | undefined {
+  return (db.prepare('SELECT id FROM asset WHERE content_sha256 = ?').get(contentSha256) as { id: string } | undefined)?.id
+}
+
+/**
+ * Records a path for a picture already in the catalog. A path seen again (for example on rescan)
+ * updates its row instead of adding a second one, which is what keeps rescans free of duplicates (AC2).
+ */
+export function recordLocation(
+  db: Catalog,
+  v: { assetId: string; sourceId: string; relativePath: string; sizeBytes: number; mtimeMs: number },
+): void {
+  db.prepare(
+    `INSERT INTO asset_location (id, asset_id, source_id, relative_path, size_bytes, mtime_ms, availability)
+     VALUES (?, ?, ?, ?, ?, ?, 'available')
+     ON CONFLICT (source_id, relative_path) DO UPDATE SET
+       asset_id = excluded.asset_id, size_bytes = excluded.size_bytes,
+       mtime_ms = excluded.mtime_ms, availability = 'available'`,
+  ).run(randomUUID(), v.assetId, v.sourceId, v.relativePath, v.sizeBytes, v.mtimeMs)
 }
 
 export function getAsset(db: Catalog, id: string): Asset {

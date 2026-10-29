@@ -1,9 +1,10 @@
 /**
  * The app shell: sidebar navigation plus the main content area.
- * For now it shows the empty Library screen; other sections say they aren't built yet.
+ * The Library screen is real; other sections say they aren't built yet.
  */
 
 import { useEffect, useState } from 'react'
+import { Library } from './library/Library'
 import './App.css'
 
 // The five main sections, in the order the blueprint specifies. Settings sits apart at the bottom.
@@ -96,36 +97,9 @@ export function App() {
       </aside>
 
       <main id="main" className="content" tabIndex={-1}>
-        {section === 'Library' ? <LibraryEmpty /> : <NotBuiltYet section={section} />}
+        {section === 'Library' ? <Library /> : <NotBuiltYet section={section} />}
       </main>
     </div>
-  )
-}
-
-// First-run Library screen. The disabled button is honest: folder import arrives in a later milestone.
-function LibraryEmpty() {
-  return (
-    <>
-      <header className="content__header">
-        <h1 className="content__title">Library</h1>
-        <p className="content__subtitle">A little closer to the moments you love.</p>
-      </header>
-
-      <section className="empty-state" aria-labelledby="empty-title">
-        <h2 id="empty-title" className="empty-state__title">
-          Choose a folder to get started.
-        </h2>
-        <p className="empty-state__body">
-          Your originals stay where they are. Nearmora only reads them. It never moves, edits or uploads them.
-        </p>
-        <button type="button" className="button button--primary" disabled aria-describedby="add-folder-note">
-          Add folder
-        </button>
-        <p id="add-folder-note" className="empty-state__note">
-          Adding folders isn&rsquo;t available in this development build yet.
-        </p>
-      </section>
-    </>
   )
 }
 

@@ -10,6 +10,12 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   main: {
     resolve: { alias: { '@shared': resolve('src/shared') } },
+    build: {
+      rollupOptions: {
+        // Two entry points: the main process, and the media worker it starts as a separate process.
+        input: { index: resolve('src/main/index.ts'), 'media-worker': resolve('src/main/media-worker.ts') },
+      },
+    },
   },
   preload: {
     resolve: { alias: { '@shared': resolve('src/shared') } },

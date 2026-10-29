@@ -1,14 +1,23 @@
 /**
  * Entry point of the main process: the part of Nearmora with full access to the computer.
- * It turns on the security guards, serves the UI and opens the window, in that order.
+ * It turns on the security guards, opens the catalog, serves the UI and opens the window, in that order.
  * Run with --self-test it instead checks the native libraries and exits (used by CI on packaged builds).
  */
 
+import { chmodSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, BrowserWindow } from 'electron'
-import { registerIpc } from './ipc/register'
+import { app, BrowserWindow, dialog } from 'electron'
+import { EVENT_CHANNEL } from '@shared/ipc-channels'
+import { replaceCatalogFile } from './catalog/backup'
+import { openCatalog, type Catalog } from './catalog/database'
+import { CatalogError, MigrationError } from './catalog/errors'
+import { createHandlers, registerIpc } from './ipc/register'
+import { createLibraryService } from './library/library-service'
+import { thumbnailPathForAsset } from './library/thumbnails'
+import { MediaWorker } from './media/worker-client'
 import { runSelfTest, SELF_TEST_FLAG, SELF_TEST_MARKER } from './self-test'
-import { registerAppSchemeAsPrivileged, serveRendererFromAppScheme } from './security/app-protocol'
+import { registerPrivilegedSchemes, serveRendererFromAppScheme } from './security/app-protocol'
+import { serveThumbnails } from './security/media-protocol'
 import { applyDevelopmentCsp, denyAllPermissions, hardenAllWebContents } from './security/harden'
 import { APP_ENTRY_URL, APP_ORIGIN, isTrustedRendererUrl } from './security/policy'
 
@@ -49,19 +58,86 @@ function createMainWindow(): BrowserWindow {
   return window
 }
 
-// Normal startup. The first three calls must happen before Electron is ready.
+// Where Nearmora keeps its own data: the catalog, its backups and the thumbnail cache. Never inside a photo folder.
+function appDataPaths() {
+  const appDataDir = app.getPath('userData')
+  // The catalog describes someone's photo collection, so only their user account may read it.
+  mkdirSync(appDataDir, { recursive: true, mode: 0o700 })
+  chmodSync(appDataDir, 0o700)
+  const thumbnailsDir = join(appDataDir, 'thumbnails')
+  mkdirSync(thumbnailsDir, { recursive: true })
+  return { appDataDir, thumbnailsDir, catalogFile: join(appDataDir, 'catalog.sqlite'), backupDir: join(appDataDir, 'backups') }
+}
+
+// Opens the catalog, or explains why it can't and returns undefined so the app quits without touching anything.
+async function openCatalogOrExplain(paths: ReturnType<typeof appDataPaths>): Promise<Catalog | undefined> {
+  try {
+    return await openCatalog(paths.catalogFile, { backupDir: paths.backupDir })
+  } catch (error: unknown) {
+    if (error instanceof MigrationError && error.backupPath) {
+      const { response } = await dialog.showMessageBox({
+        type: 'error',
+        message: 'Nearmora couldn’t update its catalog.',
+        detail:
+          'The update was undone, so your catalog should be as it was. Your photos were never touched. ' +
+          'A copy from before the update was also saved. Restore it only if Nearmora still won’t open.',
+        buttons: ['Quit', 'Restore saved copy and quit'],
+        defaultId: 0,
+        cancelId: 0,
+      })
+      if (response === 1) replaceCatalogFile(error.backupPath, paths.catalogFile)
+    } else if (error instanceof CatalogError && error.code === 'CATALOG_TOO_NEW') {
+      dialog.showErrorBox('This catalog needs a newer Nearmora', 'It was last used by a newer version of Nearmora. Nothing has been changed.')
+    } else {
+      console.error('[catalog] could not open', error)
+      dialog.showErrorBox('Nearmora couldn’t open its catalog', 'Your photos were not touched. Please try again.')
+    }
+    return undefined
+  }
+}
+
+// Normal startup. The calls before whenReady() must happen before Electron is ready.
 function startApp(): void {
+  // Tests point the app at a throwaway profile. Only honoured in unpackaged builds, so a shipped app can't be redirected.
+  const testProfile = !app.isPackaged ? process.env['NEARMORA_USER_DATA_DIR'] : undefined
+  if (testProfile) app.setPath('userData', testProfile)
+
   // Sandbox every renderer, even ones that forget to ask for it.
   app.enableSandbox()
-  registerAppSchemeAsPrivileged()
+  registerPrivilegedSchemes()
   hardenAllWebContents(trustedOrigins)
 
-  // Once Electron is ready: install the guards first, then open the window.
-  void app.whenReady().then(() => {
+  // Once Electron is ready: install the guards first, then open the catalog, then the window.
+  void app.whenReady().then(async () => {
     denyAllPermissions()
     if (devServerOrigin) applyDevelopmentCsp(devServerOrigin)
+
+    const paths = appDataPaths()
+    const db = await openCatalogOrExplain(paths)
+    if (!db) {
+      app.quit()
+      return
+    }
+
+    const worker = new MediaWorker()
+    const library = createLibraryService({
+      db,
+      appDataDir: paths.appDataDir,
+      thumbnailsDir: paths.thumbnailsDir,
+      processImage: (request) => worker.process(request),
+      emit: (event) => {
+        for (const window of BrowserWindow.getAllWindows()) window.webContents.send(EVENT_CHANNEL, event)
+      },
+    })
+    // Stop scans and the worker on quit. The catalog is left to close with the process; WAL keeps it consistent.
+    app.on('before-quit', () => {
+      library.cancelAll()
+      worker.stop()
+    })
+
     serveRendererFromAppScheme(join(__dirname, '../renderer'))
-    registerIpc((url) => isTrustedRendererUrl(url, trustedOrigins))
+    serveThumbnails((assetId) => thumbnailPathForAsset(db, paths.thumbnailsDir, assetId))
+    registerIpc(createHandlers({ db, library }), (url) => isTrustedRendererUrl(url, trustedOrigins))
 
     createMainWindow()
 
@@ -77,10 +153,11 @@ function startApp(): void {
   })
 }
 
-// Diagnostic mode: check SQLite and sharp, print one line of JSON, and exit without opening a window.
+// Diagnostic mode: check the native libraries, catalog and media worker, print one line of JSON, and exit without opening a window.
 function runSelfTestAndExit(): void {
   app.dock?.hide()
-  void runSelfTest().then((report) => {
+  // The media worker is an Electron utility process, which can only start once the app is ready.
+  void app.whenReady().then(runSelfTest).then((report) => {
     process.stdout.write(`${SELF_TEST_MARKER}${JSON.stringify(report)}\n`)
     app.exit(report.ok ? 0 : 1)
   })

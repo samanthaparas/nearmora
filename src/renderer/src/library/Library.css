@@ -1,0 +1,90 @@
+/*
+ * Styles for the Library screen: the folder toolbar, scan status lines and the thumbnail grid.
+ * Colors and spacing come from the design tokens so the screen stays consistent with the rest of the app.
+ */
+
+.library__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nm-space-2);
+  margin-bottom: var(--nm-space-2);
+}
+
+.library__notice {
+  margin: 0;
+  color: var(--nm-text);
+}
+
+.library__sources {
+  margin: 0 0 var(--nm-space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.library__source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nm-space-1) var(--nm-space-2);
+  padding: var(--nm-space-1) 0;
+  border-bottom: 1px solid var(--nm-border-subtle);
+}
+
+.library__source-line {
+  margin: 0;
+}
+
+.library__skipped {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--nm-text-muted);
+  font-size: var(--nm-text-small);
+}
+
+.library__empty {
+  color: var(--nm-text-muted);
+}
+
+/* Square cells that fill the width; thumbnails are cropped to fill, the full photo comes later in review. */
+.library__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--nm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.library__cell {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-border-subtle);
+}
+
+.library__thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.library__more {
+  margin-top: var(--nm-space-3);
+}
+
+/* Secondary and quiet buttons for actions that sit beside content rather than leading a screen. */
+.button--secondary {
+  border: 2px solid var(--nm-primary);
+  background: transparent;
+  color: var(--nm-text);
+}
+
+.button--quiet {
+  min-height: var(--nm-target-min);
+  border: 0;
+  background: transparent;
+  color: var(--nm-text);
+  text-decoration: underline;
+}

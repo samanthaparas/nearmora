@@ -7,13 +7,15 @@ export const APP_SCHEME = 'app'
 export const APP_HOST = 'nearmora'
 export const APP_ORIGIN = `${APP_SCHEME}://${APP_HOST}`
 export const APP_ENTRY_URL = `${APP_ORIGIN}/index.html`
+export const MEDIA_SCHEME = 'nm-media'
 
 const PRODUCTION_CSP = [
   "default-src 'none'",
   "script-src 'self'",
   "style-src 'self'",
   "font-src 'self'",
-  "img-src 'self'",
+  // Thumbnails come only from nm-media://, which serves cached thumbnails by picture id.
+  "img-src 'self' nm-media:",
   "connect-src 'none'",
   "object-src 'none'",
   "base-uri 'none'",
@@ -29,7 +31,7 @@ const DEVELOPMENT_CSP = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
-  "img-src 'self' data:",
+  "img-src 'self' data: nm-media:",
   "connect-src 'self' ws://localhost:*",
   "object-src 'none'",
   "base-uri 'none'",
@@ -39,6 +41,24 @@ const DEVELOPMENT_CSP = [
 
 export function contentSecurityPolicy(mode: 'production' | 'development'): string {
   return mode === 'production' ? PRODUCTION_CSP : DEVELOPMENT_CSP
+}
+
+const ASSET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+/**
+ * Reads a thumbnail URL (nm-media://thumb/<asset id>) and returns the asset id, or null for anything else.
+ * Only a bare id is accepted, so a URL can never smuggle in a path, query or extra segment.
+ */
+export function parseThumbnailUrl(url: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== `${MEDIA_SCHEME}:` || parsed.host !== 'thumb' || parsed.search || parsed.hash) return null
+  const id = parsed.pathname.slice(1)
+  return ASSET_ID.test(id) ? id : null
 }
 
 /**
