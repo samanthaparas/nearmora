@@ -37,6 +37,19 @@ const SourceSummary = z.object({
 })
 export type SourceSummary = z.infer<typeof SourceSummary>
 
+const AlbumSummary = z.object({ id, title: z.string(), photoCount: count, coverAssetId: id.nullable() })
+const albumTitle = z.string().trim().min(1).max(120)
+const LibraryItem = z.object({
+  id,
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+  capturedAt: z.number().int().nullable(),
+  /** Only reachable through a disconnected folder: the cached thumbnail shows, the original can't be opened. */
+  offline: z.boolean(),
+})
+/** Album edits return an undo id: passing it to albums:undo puts the album back as it was before that edit. */
+const UndoResult = z.object({ undoId: z.number().int().positive() })
+
 /**
  * Every command the renderer may send to the main process.
  *
@@ -112,16 +125,7 @@ export const commands = {
         .optional(),
     }),
     output: z.object({
-      items: z.array(
-        z.object({
-          id,
-          width: z.number().int().nullable(),
-          height: z.number().int().nullable(),
-          capturedAt: z.number().int().nullable(),
-          /** Only reachable through a disconnected folder: the cached thumbnail shows, the original can't be opened. */
-          offline: z.boolean(),
-        }),
-      ),
+      items: z.array(LibraryItem),
       total: count,
       nextCursor: z.object({ capturedAt: z.number().int().nullable(), id }).nullable(),
     }),
@@ -148,6 +152,43 @@ export const commands = {
       coverAssetId: id.nullable().optional(),
     }),
     output: z.object({ updated: z.literal(true) }),
+  },
+  // Albums (AC12): references to pictures only. No album command touches a photo file.
+  'albums:list': {
+    input: z.undefined(),
+    output: z.array(AlbumSummary),
+  },
+  'albums:create': {
+    input: z.object({ title: albumTitle }),
+    output: AlbumSummary,
+  },
+  'albums:rename': {
+    input: z.object({ albumId: id, title: albumTitle }),
+    output: UndoResult,
+  },
+  'albums:delete': {
+    input: z.object({ albumId: id }),
+    output: UndoResult,
+  },
+  'albums:addPhotos': {
+    input: z.object({ albumId: id, assetIds: z.array(id).min(1).max(500) }),
+    output: z.object({ added: count, undoId: z.number().int().positive() }),
+  },
+  'albums:removePhoto': {
+    input: z.object({ albumId: id, assetId: id }),
+    output: UndoResult,
+  },
+  'albums:move': {
+    input: z.object({ albumId: id, assetId: id, toIndex: z.number().int().nonnegative() }),
+    output: UndoResult,
+  },
+  'albums:undo': {
+    input: UndoResult,
+    output: z.object({ albumId: id }),
+  },
+  'albums:photos': {
+    input: z.object({ albumId: id, afterPosition: z.number().int().nullable().optional(), limit: z.number().int().min(1).max(500) }),
+    output: z.object({ items: z.array(LibraryItem), total: count, nextAfter: z.number().int().nullable() }),
   },
 } as const
 

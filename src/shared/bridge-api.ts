@@ -24,6 +24,15 @@ export interface NearmoraApi {
   queryLibrary(input: CommandInput<'library:query'>): Promise<IpcResult<CommandOutput<'library:query'>>>
   listMoments(): Promise<IpcResult<CommandOutput<'moments:list'>>>
   updateMoment(input: CommandInput<'moments:update'>): Promise<IpcResult<CommandOutput<'moments:update'>>>
+  listAlbums(): Promise<IpcResult<CommandOutput<'albums:list'>>>
+  createAlbum(input: CommandInput<'albums:create'>): Promise<IpcResult<CommandOutput<'albums:create'>>>
+  renameAlbum(input: CommandInput<'albums:rename'>): Promise<IpcResult<CommandOutput<'albums:rename'>>>
+  deleteAlbum(input: CommandInput<'albums:delete'>): Promise<IpcResult<CommandOutput<'albums:delete'>>>
+  addPhotosToAlbum(input: CommandInput<'albums:addPhotos'>): Promise<IpcResult<CommandOutput<'albums:addPhotos'>>>
+  removePhotoFromAlbum(input: CommandInput<'albums:removePhoto'>): Promise<IpcResult<CommandOutput<'albums:removePhoto'>>>
+  movePhotoInAlbum(input: CommandInput<'albums:move'>): Promise<IpcResult<CommandOutput<'albums:move'>>>
+  undoAlbumEdit(input: CommandInput<'albums:undo'>): Promise<IpcResult<CommandOutput<'albums:undo'>>>
+  albumPhotos(input: CommandInput<'albums:photos'>): Promise<IpcResult<CommandOutput<'albums:photos'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */
   onEvent(listener: (event: MainEvent) => void): () => void
 }

@@ -7,7 +7,16 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { commands, type CommandName } from '@shared/ipc-contract'
 import { channelFor } from '@shared/ipc-channels'
 import type { Catalog } from '../catalog/database'
-import { queryLibrary } from '../catalog/repositories/library'
+import {
+  addToAlbum,
+  deleteAlbumWithUndo,
+  moveInAlbum,
+  removeFromAlbum,
+  renameAlbumWithUndo,
+  undoAlbumEdit,
+} from '../catalog/repositories/album-edits'
+import { createAlbum, listAlbums } from '../catalog/repositories/albums'
+import { queryAlbumPhotos, queryLibrary } from '../catalog/repositories/library'
 import { listMoments, updateMoment } from '../catalog/repositories/moments'
 import type { LibraryService } from '../library/library-service'
 import { createRouter, type Handlers } from './router'
@@ -47,6 +56,18 @@ export function createHandlers({ db, library }: HandlerContext): Handlers {
       updateMoment(db, withoutUndefined(edit))
       return { updated: true as const }
     },
+    'albums:list': () => listAlbums(db).map(({ id, title, assetCount, coverAssetId }) => ({ id, title, photoCount: assetCount, coverAssetId })),
+    'albums:create': ({ title }) => {
+      const album = createAlbum(db, title)
+      return { id: album.id, title: album.title, photoCount: 0, coverAssetId: null }
+    },
+    'albums:rename': ({ albumId, title }) => renameAlbumWithUndo(db, albumId, title),
+    'albums:delete': ({ albumId }) => deleteAlbumWithUndo(db, albumId),
+    'albums:addPhotos': ({ albumId, assetIds }) => addToAlbum(db, albumId, assetIds),
+    'albums:removePhoto': ({ albumId, assetId }) => removeFromAlbum(db, albumId, assetId),
+    'albums:move': ({ albumId, assetId, toIndex }) => moveInAlbum(db, albumId, assetId, toIndex),
+    'albums:undo': ({ undoId }) => undoAlbumEdit(db, undoId),
+    'albums:photos': ({ albumId, afterPosition, limit }) => queryAlbumPhotos(db, { albumId, afterPosition: afterPosition ?? null, limit }),
   }
 }
 

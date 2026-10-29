@@ -60,7 +60,7 @@ Date: 2026-10-29 · Same machine.
 | Query plan | The Library's first page reads `idx_asset_captured` in order with no temporary sort (test, plus the timing below) | [int] |
 | Schema v3 | Applied by every catalog test; the index is checked by the query-plan test | [int] |
 | In the app | Three date moments for the generated folder; rename and choose cover, still there after a restart; search by folder name, then a no-results message and "Clear filters"; 1,200 photos with fewer than 200 cells in the page, scrolling until photo 1,200 appears | [e2e] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+| Passes on GitHub's macOS runner | Passed on PR #8, [run 40803639063](https://github.com/samanthaparas/nearmora/actions/runs/40803639063) (2026-10-29): 127 unit and integration tests (the private-pack test skipped as intended), 19 E2E tests including the 1,200-photo scroll, and all packaged checks with the app migrating to schema v3 | [ci] |
 
 Totals: 128 unit and integration tests, 19 E2E tests.
 

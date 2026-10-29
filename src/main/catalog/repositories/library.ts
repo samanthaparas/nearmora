@@ -112,3 +112,29 @@ export function queryLibrary(
   const nextCursor = items.length === request.limit && last ? { capturedAt: last.capturedAt, id: last.id } : null
   return { items, total, nextCursor }
 }
+
+/**
+ * An album's photos in the order the person arranged them, paged by position. Every member is listed, including
+ * ones only reachable offline, so positions match what reordering works with.
+ */
+export function queryAlbumPhotos(
+  db: Catalog,
+  request: { albumId: string; afterPosition?: number | null; limit: number },
+): { items: LibraryItem[]; total: number; nextAfter: number | null } {
+  const after = request.afterPosition ?? -1
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.width, a.height, a.captured_at, m.position,
+              NOT EXISTS (
+                SELECT 1 FROM asset_location l JOIN source s ON s.id = l.source_id
+                WHERE l.asset_id = a.id AND l.availability = 'available' AND s.status = 'active') AS offline
+       FROM album_asset m JOIN asset a ON a.id = m.asset_id
+       WHERE m.album_id = ? AND m.position > ?
+       ORDER BY m.position LIMIT ?`,
+    )
+    .all(request.albumId, after, request.limit) as Array<Record<string, unknown> & { position: number }>
+  const items = rows.map((row) => LibraryRow.parse(row))
+  const { total } = db.prepare('SELECT COUNT(*) AS total FROM album_asset WHERE album_id = ?').get(request.albumId) as { total: number }
+  const last = rows.at(-1)
+  return { items, total, nextAfter: rows.length === request.limit && last ? last.position : null }
+}

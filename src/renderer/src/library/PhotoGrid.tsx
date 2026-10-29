@@ -1,16 +1,24 @@
 /**
- * The Library's photo grid, virtualized: only the rows on screen (plus a few) exist in the page, however many
- * photos there are, and more are fetched page by page as you scroll. This keeps large libraries smooth (blueprint).
- * With `onPick`, each photo becomes a button (used to choose a moment's cover).
+ * The photo grid, virtualized: only the rows on screen (plus a few) exist in the page, however many photos there
+ * are, and more are fetched page by page as you scroll. It's shared by the Library, moments and albums: each passes
+ * its own way of fetching a page, and may wrap each photo in controls (pick a cover, select, rearrange).
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { CommandInput, CommandOutput } from '@shared/ipc-contract'
 
-type Photo = CommandOutput<'library:query'>['items'][number]
-type Cursor = CommandOutput<'library:query'>['nextCursor']
+export type Photo = CommandOutput<'library:query'>['items'][number]
 export type Filters = NonNullable<CommandInput<'library:query'>['filters']>
+
+/** One page of photos; `next` is whatever the source needs to continue (a cursor or a position), or null at the end. */
+export interface GridPage {
+  items: Photo[]
+  total: number
+  next: unknown
+}
+/** Fetches the page after `next` (null for the first page). Returns null if the request failed. */
+export type FetchPage = (next: unknown, limit: number) => Promise<GridPage | null>
 
 const PAGE_SIZE = 300
 const MIN_CELL = 160
@@ -19,22 +27,40 @@ const GAP = 8
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' })
 
 // Alt text: the photos have no captions, so describe what we know (the date, and whether it's offline).
-function altFor(photo: Photo): string {
+export function altFor(photo: Photo): string {
   const base = photo.capturedAt === null ? 'Photo' : `Photo from ${dateFormat.format(photo.capturedAt)}`
   return photo.offline ? `${base}, offline` : base
 }
 
-export function PhotoGrid({ filters, refreshToken, label, onPick, onTotal }: {
-  filters: Filters
-  /** Changes when the catalog may have changed (a scan event), so loaded pages are fetched again. */
+/** Page fetcher for the Library and moments: date order, with search and filters. */
+export function libraryFetcher(filters: Filters): FetchPage {
+  return async (next, limit) => {
+    const result = await window.nearmora.queryLibrary({ limit, cursor: next as CommandOutput<'library:query'>['nextCursor'], filters })
+    return result.ok ? { items: result.data.items, total: result.data.total, next: result.data.nextCursor } : null
+  }
+}
+
+/** Page fetcher for an album: the person's own order. */
+export function albumFetcher(albumId: string): FetchPage {
+  return async (next, limit) => {
+    const result = await window.nearmora.albumPhotos({ albumId, afterPosition: next as number | null, limit })
+    return result.ok ? { items: result.data.items, total: result.data.total, next: result.data.nextAfter } : null
+  }
+}
+
+export function PhotoGrid({ fetchPage, refreshToken, label, renderCell, onTotal }: {
+  /** A new function (new filters, another album) starts again from the top. */
+  fetchPage: FetchPage
+  /** Changes when the catalog may have changed, so the photos already loaded are fetched again in place. */
   refreshToken: number
   label: string
-  onPick?: (assetId: string) => void
+  /** Wraps a photo's image in controls; by default the image is shown as is. */
+  renderCell?: (photo: Photo, index: number, image: ReactNode) => ReactNode
   onTotal?: (total: number) => void
 }) {
   const [photos, setPhotos] = useState<Photo[]>([])
   const [total, setTotal] = useState(0)
-  const [cursor, setCursor] = useState<Cursor>(null)
+  const [next, setNext] = useState<unknown>(null)
   const [width, setWidth] = useState(0)
   const [scrollMargin, setScrollMargin] = useState(0)
   const listRef = useRef<HTMLUListElement>(null)
@@ -50,26 +76,26 @@ export function PhotoGrid({ filters, refreshToken, label, onPick, onTotal }: {
     async (count: number) => {
       loading.current = true
       const collected: Photo[] = []
-      let next: Cursor = null
+      let after: unknown = null
       let latestTotal = 0
       do {
-        const result = await window.nearmora.queryLibrary({ limit: PAGE_SIZE, cursor: next, filters })
-        if (!result.ok) break
-        collected.push(...result.data.items)
-        next = result.data.nextCursor
-        latestTotal = result.data.total
-      } while (next && collected.length < count)
+        const page = await fetchPage(after, PAGE_SIZE)
+        if (!page) break
+        collected.push(...page.items)
+        after = page.next
+        latestTotal = page.total
+      } while (after !== null && collected.length < count)
       loadedCount.current = collected.length
       setPhotos(collected)
-      setCursor(next)
+      setNext(after)
       setTotal(latestTotal)
       onTotalRef.current?.(latestTotal)
       loading.current = false
     },
-    [filters],
+    [fetchPage],
   )
 
-  // New filters start from the top; a refresh keeps what was already loaded, so the view doesn't jump.
+  // A new source starts from the top; a refresh keeps what was already loaded, so the view doesn't jump.
   useEffect(() => {
     void loadUpTo(PAGE_SIZE)
   }, [loadUpTo])
@@ -78,22 +104,22 @@ export function PhotoGrid({ filters, refreshToken, label, onPick, onTotal }: {
   }, [refreshToken, loadUpTo])
 
   const loadMore = useCallback(async () => {
-    if (loading.current || !cursor) return
+    if (loading.current || next === null) return
     loading.current = true
-    const result = await window.nearmora.queryLibrary({ limit: PAGE_SIZE, cursor, filters })
-    if (result.ok) {
+    const page = await fetchPage(next, PAGE_SIZE)
+    if (page) {
       setPhotos((current) => {
-        const merged = [...current, ...result.data.items]
+        const merged = [...current, ...page.items]
         loadedCount.current = merged.length
         return merged
       })
-      setCursor(result.data.nextCursor)
-      setTotal(result.data.total)
+      setNext(page.next)
+      setTotal(page.total)
     }
     loading.current = false
-  }, [cursor, filters])
+  }, [next, fetchPage])
 
-  // Column count follows the available width, like the CSS auto-fill grid it replaces.
+  // Column count follows the available width, like a CSS auto-fill grid.
   useLayoutEffect(() => {
     const list = listRef.current
     if (!list) return
@@ -151,13 +177,7 @@ export function PhotoGrid({ filters, refreshToken, label, onPick, onTotal }: {
               aria-posinset={position + 1}
               style={{ width: cell, height: cell, transform: `translate(${column * (cell + GAP)}px, ${row.start - scrollMargin}px)` }}
             >
-              {onPick ? (
-                <button type="button" className="library__pick" onClick={() => onPick(photo.id)} aria-label={`Use as cover: ${altFor(photo)}`}>
-                  {image}
-                </button>
-              ) : (
-                image
-              )}
+              {renderCell ? renderCell(photo, position, image) : image}
               {/* Text, not just colour, so the state is clear to everyone. The alt text says it too. */}
               {photo.offline ? (
                 <span className="library__badge" aria-hidden="true">

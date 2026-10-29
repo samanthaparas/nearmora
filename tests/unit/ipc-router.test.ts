@@ -23,6 +23,15 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'library:query': () => ({ items: [], total: 0, nextCursor: null }),
     'moments:list': () => [],
     'moments:update': () => ({ updated: true }),
+    'albums:list': () => [],
+    'albums:create': () => ({ id: '3f2b8c1e-4d5a-4b6c-9d7e-8f9a0b1c2d3e', title: 'A', photoCount: 0, coverAssetId: null }),
+    'albums:rename': () => ({ undoId: 1 }),
+    'albums:delete': () => ({ undoId: 1 }),
+    'albums:addPhotos': () => ({ added: 0, undoId: 1 }),
+    'albums:removePhoto': () => ({ undoId: 1 }),
+    'albums:move': () => ({ undoId: 1 }),
+    'albums:undo': () => ({ albumId: '3f2b8c1e-4d5a-4b6c-9d7e-8f9a0b1c2d3e' }),
+    'albums:photos': () => ({ items: [], total: 0, nextAfter: null }),
     ...overrides,
   }
   const logError = vi.fn()

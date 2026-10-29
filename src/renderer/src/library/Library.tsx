@@ -1,13 +1,14 @@
 /**
- * The Library screen: add a photo folder, follow its scan, browse "Your moments", search and filter,
- * and scroll every photo in a virtualized grid. Thumbnails load from nm-media:// by picture id; this screen
- * never sees a file path.
+ * The Library screen: add a photo folder, follow its scan, browse "Your moments" and Albums, search and filter,
+ * select photos to add to an album, and scroll every photo in a virtualized grid. Thumbnails load from
+ * nm-media:// by picture id; this screen never sees a file path.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { AddToAlbumPanel, AlbumCards, AlbumView, UndoNotice, type Album, type AlbumUndo } from './Albums'
 import { LibraryFilters } from './LibraryFilters'
 import { MomentCards, MomentHeader, type Moment } from './Moments'
-import { PhotoGrid, type Filters } from './PhotoGrid'
+import { PhotoGrid, altFor, libraryFetcher, type Filters, type Photo } from './PhotoGrid'
 import { SourceStatus } from './SourceStatus'
 import { useSources } from './use-sources'
 import './Library.css'
@@ -29,8 +30,14 @@ export function Library() {
   const [notice, setNotice] = useState<string | null>(null)
   const [filters, setFilters] = useState<Filters>({})
   const [moments, setMoments] = useState<Moment[]>([])
+  const [albums, setAlbums] = useState<Album[]>([])
   const [openMomentId, setOpenMomentId] = useState<string | null>(null)
+  const [openAlbumId, setOpenAlbumId] = useState<string | null>(null)
   const [choosingCover, setChoosingCover] = useState(false)
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [addingToAlbum, setAddingToAlbum] = useState(false)
+  const [albumUndo, setAlbumUndo] = useState<AlbumUndo | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
   const [total, setTotal] = useState<number | null>(null)
 
@@ -39,19 +46,28 @@ export function Library() {
       if (result.ok) setMoments(result.data)
     })
   }, [])
-  // After each sources refresh (scan progress, reconnect, removal), reload moments and the grid's loaded pages.
+  const loadAlbums = useCallback(() => {
+    void window.nearmora.listAlbums().then((result) => {
+      if (result.ok) setAlbums(result.data)
+    })
+  }, [])
+  // After each sources refresh (scan progress, reconnect, removal), reload moments, albums and the grid.
   const onSourcesChanged = useCallback(() => {
     loadMoments()
+    loadAlbums()
     setRefreshToken((n) => n + 1)
-  }, [loadMoments])
+  }, [loadMoments, loadAlbums])
   const { sources, progress, loadError, refresh } = useSources(onSourcesChanged)
 
   useEffect(() => {
     loadMoments()
-  }, [loadMoments])
+    loadAlbums()
+  }, [loadMoments, loadAlbums])
 
   const openMoment = moments.find((m) => m.id === openMomentId) ?? null
-  const gridFilters: Filters = openMoment ? { ...filters, momentId: openMoment.id } : filters
+  const openAlbum = albums.find((a) => a.id === openAlbumId) ?? null
+  const gridFilters = useMemo<Filters>(() => (openMoment ? { ...filters, momentId: openMoment.id } : filters), [filters, openMoment])
+  const fetchPage = useMemo(() => libraryFetcher(gridFilters), [gridFilters])
   const filtering = Object.keys(filters).length > 0
 
   async function addFolder() {
@@ -67,6 +83,61 @@ export function Library() {
       loadMoments()
     }
   }
+
+  function stopSelecting() {
+    setSelecting(false)
+    setSelected(new Set())
+    setAddingToAlbum(false)
+  }
+
+  async function addSelectedTo(album: Album) {
+    const result = await window.nearmora.addPhotosToAlbum({ albumId: album.id, assetIds: [...selected] })
+    if (!result.ok) {
+      setNotice('Those photos couldn’t be added. Nothing was changed.')
+      return
+    }
+    const { added, undoId } = result.data
+    const skipped = selected.size - added
+    setAlbumUndo({
+      message: `Added ${added} ${added === 1 ? 'photo' : 'photos'} to “${album.title}”.${skipped > 0 ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already in it.` : ''}`,
+      undoId,
+    })
+    stopSelecting()
+    loadAlbums()
+  }
+
+  // In select mode each photo is a toggle button; aria-pressed tells assistive tech whether it's selected.
+  const renderSelectable = (photo: Photo, _index: number, image: ReactNode) => {
+    const isSelected = selected.has(photo.id)
+    return (
+      <button
+        type="button"
+        className="library__pick"
+        aria-pressed={isSelected}
+        aria-label={`Select: ${altFor(photo)}`}
+        onClick={() =>
+          setSelected((current) => {
+            const nextSet = new Set(current)
+            if (nextSet.has(photo.id)) nextSet.delete(photo.id)
+            else nextSet.add(photo.id)
+            return nextSet
+          })
+        }
+      >
+        {image}
+        {isSelected ? (
+          <span className="library__selected" aria-hidden="true">
+            ✓ Selected
+          </span>
+        ) : null}
+      </button>
+    )
+  }
+  const renderCover = (photo: Photo, _index: number, image: ReactNode) => (
+    <button type="button" className="library__pick" onClick={() => void chooseCover(photo.id)} aria-label={`Use as cover: ${altFor(photo)}`}>
+      {image}
+    </button>
+  )
 
   if (sources === null) {
     return <LibraryHeader>{loadError ? <p role="alert">The Library couldn’t be loaded.</p> : null}</LibraryHeader>
@@ -117,43 +188,102 @@ export function Library() {
         ))}
       </ul>
 
-      {openMoment ? (
-        <MomentHeader
-          key={openMoment.id}
-          moment={openMoment}
-          choosingCover={choosingCover}
-          onBack={() => {
-            setOpenMomentId(null)
-            setChoosingCover(false)
-          }}
-          onChooseCover={setChoosingCover}
-          onChanged={loadMoments}
+      <UndoNotice
+        undo={albumUndo}
+        onUndone={() => {
+          setAlbumUndo(null)
+          loadAlbums()
+          setRefreshToken((n) => n + 1)
+        }}
+      />
+
+      {openAlbum ? (
+        <AlbumView
+          key={openAlbum.id}
+          album={openAlbum}
+          refreshToken={refreshToken}
+          onBack={() => setOpenAlbumId(null)}
+          onChanged={loadAlbums}
+          onUndoable={setAlbumUndo}
         />
       ) : (
-        <MomentCards moments={moments} onOpen={(moment) => setOpenMomentId(moment.id)} />
-      )}
-
-      <LibraryFilters sources={sources} onChange={setFilters} />
-
-      {total === 0 ? (
-        <div className="library__empty">
-          {filtering ? (
-            <p>No photos match these filters. Try a different search or clear the filters.</p>
-          ) : scanning ? (
-            <p>Photos appear here as they’re found.</p>
+        <>
+          {openMoment ? (
+            <MomentHeader
+              key={openMoment.id}
+              moment={openMoment}
+              choosingCover={choosingCover}
+              onBack={() => {
+                setOpenMomentId(null)
+                setChoosingCover(false)
+              }}
+              onChooseCover={setChoosingCover}
+              onChanged={loadMoments}
+            />
           ) : (
-            <p>No photos found yet. Folders with JPEG or PNG photos appear here once scanned.</p>
+            <>
+              <MomentCards moments={moments} onOpen={(moment) => setOpenMomentId(moment.id)} />
+              <AlbumCards
+                albums={albums}
+                onOpen={(album) => setOpenAlbumId(album.id)}
+                onCreated={() => loadAlbums()}
+              />
+            </>
           )}
-        </div>
-      ) : null}
-      <PhotoGrid
-        key={openMoment?.id ?? 'all'}
-        filters={gridFilters}
-        refreshToken={refreshToken}
-        label={openMoment ? 'Photos in this moment' : 'Photos'}
-        onTotal={setTotal}
-        {...(choosingCover ? { onPick: (assetId: string) => void chooseCover(assetId) } : {})}
-      />
+
+          <LibraryFilters sources={sources} onChange={setFilters} />
+
+          <div className="library__toolbar">
+            {selecting ? (
+              <>
+                <p className="library__notice">
+                  {selected.size} {selected.size === 1 ? 'photo' : 'photos'} selected
+                </p>
+                <button type="button" className="button button--secondary" disabled={selected.size === 0} onClick={() => setAddingToAlbum(true)}>
+                  Add to album…
+                </button>
+                <button type="button" className="button button--quiet" onClick={stopSelecting}>
+                  Done selecting
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="button button--quiet"
+                onClick={() => {
+                  setChoosingCover(false)
+                  setSelecting(true)
+                }}
+              >
+                Select photos
+              </button>
+            )}
+          </div>
+          {addingToAlbum ? (
+            <AddToAlbumPanel albums={albums} count={selected.size} onChoose={(album) => void addSelectedTo(album)} onCancel={() => setAddingToAlbum(false)} />
+          ) : null}
+
+          {total === 0 ? (
+            <div className="library__empty">
+              {filtering ? (
+                <p>No photos match these filters. Try a different search or clear the filters.</p>
+              ) : scanning ? (
+                <p>Photos appear here as they’re found.</p>
+              ) : (
+                <p>No photos found yet. Folders with JPEG or PNG photos appear here once scanned.</p>
+              )}
+            </div>
+          ) : null}
+          <PhotoGrid
+            key={openMoment?.id ?? 'all'}
+            fetchPage={fetchPage}
+            refreshToken={refreshToken}
+            label={openMoment ? 'Photos in this moment' : 'Photos'}
+            onTotal={setTotal}
+            {...(selecting ? { renderCell: renderSelectable } : choosingCover ? { renderCell: renderCover } : {})}
+          />
+        </>
+      )}
     </LibraryHeader>
   )
 }
