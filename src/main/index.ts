@@ -13,6 +13,7 @@ import { openCatalog, type Catalog } from './catalog/database'
 import { CatalogError, MigrationError } from './catalog/errors'
 import { createHandlers, registerIpc } from './ipc/register'
 import { createLibraryService } from './library/library-service'
+import { markInterruptedScansPaused } from './library/scan'
 import { thumbnailPathForAsset } from './library/thumbnails'
 import { MediaWorker } from './media/worker-client'
 import { runSelfTest, SELF_TEST_FLAG, SELF_TEST_MARKER } from './self-test'
@@ -119,6 +120,9 @@ function startApp(): void {
       return
     }
 
+    // A scan cut short by quitting or a crash is offered for resuming, never shown as finished.
+    markInterruptedScansPaused(db)
+
     const worker = new MediaWorker()
     const library = createLibraryService({
       db,
@@ -129,9 +133,9 @@ function startApp(): void {
         for (const window of BrowserWindow.getAllWindows()) window.webContents.send(EVENT_CHANNEL, event)
       },
     })
-    // Stop scans and the worker on quit. The catalog is left to close with the process; WAL keeps it consistent.
+    // Pause scans and stop the worker on quit. The catalog is left to close with the process; WAL keeps it consistent.
     app.on('before-quit', () => {
-      library.cancelAll()
+      library.pauseAll()
       worker.stop()
     })
 

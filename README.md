@@ -8,7 +8,7 @@ Nearmora is a local-first macOS desktop app for finding your favorite photos, ch
 
 ## Status
 
-R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database) and R3a (indexing slice) are done. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scan pause/resume, date moments, search and large-library scrolling come in R3b. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) and R3b part 1 (scan control and offline folders) are done. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Date moments, search and large-library scrolling come in R3b part 2. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
 
 ## Commands
 
@@ -23,6 +23,7 @@ R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database) and R3
 | `npm run lint` | Checks code for likely mistakes (ESLint, including type-aware rules) |
 | `npm run package:mac` | Builds an unsigned `Nearmora.app` into `release/` |
 | `npm run test:packaged` | Checks the packaged app: native libraries, catalog migrations, security fuses, launch, and shipped files |
+| `npm run measure:scan` | Times scans through the real app and worker: the private fixture pack (if present) and 1,000 generated photos |
 | `npm run query-plans` | Measures the key catalog queries on 10,000 synthetic pictures, with and without their indexes |
 
 ## Project map
@@ -34,7 +35,7 @@ src/
     self-test.ts     --self-test mode: proves SQLite, sharp, the catalog and the media worker work in a packaged build
     media-worker.ts  Entry point of the separate process that decodes photos
     media/           Reading photos safely: file walking, type detection, thumbnails and dHash
-    library/         Adding folders, scanning them, and the thumbnail cache
+    library/         Adding, scanning, reconnecting and removing folders, and the thumbnail cache
     catalog/         The SQLite catalog: opening, migrations, backup/restore
       migrations/      Numbered schema changes (.sql), applied in order
       repositories/    Reading and writing sources, pictures, albums, sets and review choices
@@ -43,7 +44,7 @@ src/
   preload/         Builds window.nearmora, the UI's only bridge to the main process
   renderer/        The UI (React). Sandboxed: no Node.js, no file access
     src/styles/      Design tokens (colors, fonts, spacing) and base styles
-    src/library/     The Library screen: add folder, scan status and thumbnail grid
+    src/library/     The Library and Sources screens: folders, scan status and actions, thumbnail grid
   shared/          Types and schemas used by more than one process
 tests/unit/        Fast tests of individual functions (Vitest)
 tests/integration/ Catalog and scanning tests against real files and SQLite (Vitest)

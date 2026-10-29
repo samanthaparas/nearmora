@@ -4,11 +4,12 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream, existsSync } from 'node:fs'
+import { accessSync, constants, createReadStream, existsSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { z } from 'zod'
 import { ScanCounts } from '@shared/ipc-contract'
 import type { Catalog } from '../catalog/database'
+import { CatalogError } from '../catalog/errors'
 import { findAssetIdBySha, recordAssetLocation, recordLocation } from '../catalog/repositories/assets'
 import { getSource, setSourceStatus } from '../catalog/repositories/sources'
 import { detectMediaType, MAX_FILE_BYTES, SIGNATURE_BYTES } from '../media/limits'
@@ -16,7 +17,10 @@ import type { ProcessImageRequest, ProcessImageResult } from '../media/process-i
 import { walkFiles, type FoundFile } from '../media/walk'
 import { thumbnailPathForSha } from './thumbnails'
 
-export type ScanOutcome = 'done' | 'cancelled' | 'failed'
+export type ScanOutcome = 'done' | 'paused' | 'cancelled' | 'failed'
+
+/** Abort with this reason to pause: the scan stops after the current photo and can be resumed later. */
+export const PAUSE = 'pause'
 
 export interface ScanDeps {
   db: Catalog
@@ -27,6 +31,7 @@ export interface ScanDeps {
 }
 
 export interface ScanOptions {
+  /** Aborting stops the scan after the photos in flight. Abort with PAUSE to pause rather than cancel. */
   signal?: AbortSignal
   onProgress?: (counts: ScanCounts) => void
 }
@@ -68,26 +73,31 @@ export async function scanSource(deps: ScanDeps, sourceId: string, options: Scan
   const { db, thumbnailsDir } = deps
   const maxFileBytes = deps.maxFileBytes ?? MAX_FILE_BYTES
   const source = getSource(db, sourceId)
+  // A folder that went offline must be verified as the same folder before scanning again (see reconnect.ts).
+  if (source.status === 'disconnected') throw new CatalogError('CONFLICT', 'Reconnect this folder before scanning it')
   const counts: ScanCounts = { found: 0, indexed: 0, unchanged: 0, unsupported: 0, corrupt: 0, tooLarge: 0, unreadable: 0 }
   const seen = new Set<string>()
 
   const jobId = randomUUID()
   const now = Date.now()
-  db.prepare(`INSERT INTO job (id, kind, status, created_at, updated_at) VALUES (?, 'scan', 'running', ?, ?)`).run(jobId, now, now)
+  db.prepare(`INSERT INTO job (id, kind, status, source_id, created_at, updated_at) VALUES (?, 'scan', 'running', ?, ?, ?)`).run(
+    jobId,
+    sourceId,
+    now,
+    now,
+  )
+  // The job row keeps the counts, so progress and skipped-file explanations survive a quit or crash.
+  const saveCheckpoint = (status: ScanOutcome | 'running') =>
+    db.prepare('UPDATE job SET status = ?, checkpoint = ?, updated_at = ? WHERE id = ?').run(status, JSON.stringify({ sourceId, counts }), Date.now(), jobId)
   const finish = (outcome: ScanOutcome) => {
-    // The job row keeps the counts, so the UI can explain skipped files after a restart.
-    db.prepare('UPDATE job SET status = ?, checkpoint = ?, updated_at = ? WHERE id = ?').run(
-      outcome,
-      JSON.stringify({ sourceId, counts }),
-      Date.now(),
-      jobId,
-    )
+    saveCheckpoint(outcome)
     return { outcome, counts: { ...counts } }
   }
 
-  // A missing root usually means an unplugged drive: mark it, don't treat its photos as deleted.
-  if (!existsSync(source.rootPath)) {
-    setSourceStatus(db, sourceId, 'disconnected')
+  // Can we reach and read the folder? A missing one is usually an unplugged drive; mark it, never treat its photos as deleted.
+  const access = rootAccess(source.rootPath)
+  if (access !== 'ok') {
+    setSourceStatus(db, sourceId, access)
     return finish('failed')
   }
   if (source.status !== 'active') setSourceStatus(db, sourceId, 'active')
@@ -102,6 +112,7 @@ export async function scanSource(deps: ScanDeps, sourceId: string, options: Scan
     if (!options.onProgress) return
     if (!force && Date.now() - lastProgress < 200) return
     lastProgress = Date.now()
+    saveCheckpoint('running')
     options.onProgress({ ...counts })
   }
 
@@ -188,7 +199,15 @@ export async function scanSource(deps: ScanDeps, sourceId: string, options: Scan
     return finish('failed')
   }
   report(true)
-  if (options.signal?.aborted) return finish('cancelled')
+  if (options.signal?.aborted) return finish(options.signal.reason === PAUSE ? 'paused' : 'cancelled')
+
+  // The drive vanished during the scan: files it "didn't see" aren't gone, so mark the folder and report failure,
+  // never a false "done" (AC5).
+  const accessAfter = rootAccess(source.rootPath)
+  if (accessAfter !== 'ok') {
+    setSourceStatus(db, sourceId, accessAfter)
+    return finish('failed')
+  }
 
   // A full scan saw every file that exists now; paths it didn't see are marked missing, never deleted.
   const markMissing = db.prepare(`UPDATE asset_location SET availability = 'missing' WHERE source_id = ? AND relative_path = ?`)
@@ -200,14 +219,40 @@ export async function scanSource(deps: ScanDeps, sourceId: string, options: Scan
   return finish('done')
 }
 
-/** The most recent finished scan's counts for a source, for explaining skipped files. */
-export function lastScanCounts(db: Catalog, sourceId: string): ScanCounts | null {
-  const rows = db
-    .prepare(`SELECT checkpoint FROM job WHERE kind = 'scan' AND status IN ('done', 'cancelled', 'failed') ORDER BY updated_at DESC`)
-    .all() as Array<{ checkpoint: string | null }>
-  for (const { checkpoint } of rows) {
-    const parsed = z.object({ sourceId: z.string(), counts: ScanCounts }).safeParse(JSON.parse(checkpoint ?? 'null'))
-    if (parsed.success && parsed.data.sourceId === sourceId) return parsed.data.counts
+// Distinguishes "not there" (unplugged, moved) from "there but not readable" (macOS privacy or file permissions).
+export function rootAccess(root: string): 'ok' | 'disconnected' | 'permission_denied' {
+  if (!existsSync(root)) return 'disconnected'
+  try {
+    accessSync(root, constants.R_OK | constants.X_OK)
+    return 'ok'
+  } catch {
+    return 'permission_denied'
   }
-  return null
+}
+
+export interface LastScan {
+  state: ScanOutcome
+  counts: ScanCounts
+}
+
+/** The latest scan that isn't running now, for explaining skipped files and offering to resume a paused one. */
+export function lastScan(db: Catalog, sourceId: string): LastScan | null {
+  const row = db
+    .prepare(
+      `SELECT status, checkpoint FROM job
+       WHERE kind = 'scan' AND source_id = ? AND status IN ('done', 'paused', 'cancelled', 'failed')
+       ORDER BY updated_at DESC LIMIT 1`,
+    )
+    .get(sourceId) as { status: ScanOutcome; checkpoint: string | null } | undefined
+  if (!row) return null
+  const parsed = z.object({ counts: ScanCounts }).safeParse(JSON.parse(row.checkpoint ?? 'null'))
+  return parsed.success ? { state: row.status, counts: parsed.data.counts } : null
+}
+
+/**
+ * Run at startup: a scan still marked running belongs to a previous session that quit or crashed mid-scan.
+ * It becomes paused, so the Library offers to resume it instead of pretending it finished.
+ */
+export function markInterruptedScansPaused(db: Catalog): number {
+  return db.prepare(`UPDATE job SET status = 'paused', updated_at = ? WHERE kind = 'scan' AND status = 'running'`).run(Date.now()).changes
 }

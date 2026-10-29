@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "package:mac": "electron-vite build && electron-builder --mac --dir",
     "test:packaged": "node scripts/smoke-packaged.mjs",
-    "query-plans": "node scripts/query-plans.mjs"
+    "query-plans": "node scripts/query-plans.mjs",
+    "measure:scan": "electron-vite build && NEARMORA_MEASURE=1 playwright test e2e/measure-scan.spec.ts --reporter=list"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",

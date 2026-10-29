@@ -87,6 +87,31 @@ export function removeSource(db: Catalog, id: string): { locationsRemoved: numbe
   })()
 }
 
+export interface RemovalImpact {
+  /** File locations the catalog will forget. */
+  photoFiles: number
+  /** Pictures found only in this folder: they leave the Library (their records and choices are kept). */
+  picturesOnlyHere: number
+  /** Of those, how many are favorites. */
+  favoritesOnlyHere: number
+  /** Albums that contain at least one of those pictures. */
+  albumsAffected: number
+}
+
+/** What removing a source would change, shown before the person confirms. Reads only. */
+export function sourceRemovalImpact(db: Catalog, id: string): RemovalImpact {
+  getSource(db, id)
+  // "Only here" = every location of the picture is in this source.
+  const onlyHere = `SELECT asset_id FROM asset_location GROUP BY asset_id HAVING SUM(source_id <> ?) = 0 AND SUM(source_id = ?) > 0`
+  const n = (sql: string, ...params: unknown[]) => (db.prepare(sql).get(...params) as { n: number }).n
+  return {
+    photoFiles: n('SELECT COUNT(*) AS n FROM asset_location WHERE source_id = ?', id),
+    picturesOnlyHere: n(`SELECT COUNT(*) AS n FROM (${onlyHere})`, id, id),
+    favoritesOnlyHere: n(`SELECT COUNT(*) AS n FROM favorite WHERE asset_id IN (${onlyHere})`, id, id),
+    albumsAffected: n(`SELECT COUNT(DISTINCT album_id) AS n FROM album_asset WHERE asset_id IN (${onlyHere})`, id, id),
+  }
+}
+
 /** After a restore, explains which photo folders are reachable on this computer. Only checks that each path exists. */
 export function checkSourceReachability(db: Catalog): Array<{ source: Source; reachable: boolean }> {
   return listSources(db).map((source) => ({ source, reachable: existsSync(source.rootPath) }))

@@ -5,6 +5,7 @@
 
 // `?raw` makes Vite bundle the file's text into the app, so no .sql files need to ship separately.
 import init from './0001_init.sql?raw'
+import jobSource from './0002_job_source.sql?raw'
 
 export interface Migration {
   version: number
@@ -12,4 +13,7 @@ export interface Migration {
   sql: string
 }
 
-export const MIGRATIONS: readonly Migration[] = [{ version: 1, name: 'init', sql: init }]
+export const MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: 'init', sql: init },
+  { version: 2, name: 'job-source', sql: jobSource },
+]

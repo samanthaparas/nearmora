@@ -56,7 +56,19 @@ test('bridge exposes only the named API, frozen', async () => {
     ipcRenderer: typeof (window as unknown as Record<string, unknown>)['ipcRenderer'],
   }))
   expect(shape).toEqual({
-    keys: ['getAppInfo', 'addSource', 'listSources', 'rescanSource', 'cancelScan', 'queryLibrary', 'onEvent'],
+    keys: [
+      'getAppInfo',
+      'addSource',
+      'listSources',
+      'rescanSource',
+      'reconnectSource',
+      'sourceRemovalImpact',
+      'removeSource',
+      'pauseScan',
+      'cancelScan',
+      'queryLibrary',
+      'onEvent',
+    ],
     frozen: true,
     ipcRenderer: 'undefined',
   })
