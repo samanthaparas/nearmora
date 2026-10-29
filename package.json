@@ -19,7 +19,8 @@
     "test:e2e": "electron-vite build && playwright test",
     "lint": "eslint .",
     "package:mac": "electron-vite build && electron-builder --mac --dir",
-    "test:packaged": "node scripts/smoke-packaged.mjs"
+    "test:packaged": "node scripts/smoke-packaged.mjs",
+    "query-plans": "node scripts/query-plans.mjs"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
