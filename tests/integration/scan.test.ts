@@ -69,7 +69,7 @@ describe('scanning a folder', () => {
 
     await scanSource(deps, sourceId)
     await scanSource(deps, sourceId) // and a rescan
-    await sleep(300)
+    await sleep(1000) // file events arrive late on a busy machine; give any write time to be reported
 
     expect(watcher.stop()).toEqual([])
     expect(fingerprintFolder(folder.root)).toEqual(before)
@@ -80,8 +80,8 @@ describe('scanning a folder', () => {
     await sleep(300)
     const watcher = watchForWrites(folder.root)
     writeFileSync(join(folder.root, 'new.txt'), 'written')
-    await sleep(300)
-    expect(watcher.stop().length).toBeGreaterThan(0)
+    expect(await watcher.firstEvent(5000)).toBe(true)
+    watcher.stop()
   })
 })
 

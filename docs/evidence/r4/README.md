@@ -55,7 +55,7 @@ Date: 2026-10-29 · Same machine.
 | Narrow window | At 800 px the photos become A/B tabs; switching shows one and hides the other | [e2e] |
 | Favorite toggle | `aria-pressed` and the visible text both change ("☆ Favorite" / "★ Favorite") | [auto] |
 | Owner's false-match review (AC3) | 2026-10-29: the owner reviewed a contact sheet of the 9 sets found in the pack (kept local, since the photos are CC BY-SA). **Sets 1–8 (the eight real bursts) are correct; set 9 (the 5 generated app-screen images) is a false match.** That's 8 of 9 sets right, consistent with the 89% pair precision measured in part 1 | [human] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+| Passes on GitHub's macOS runner | Passed on PR #11, [run 40810289057](https://github.com/samanthaparas/nearmora/actions/runs/40810289057) (2026-10-29): 164 unit, integration and component tests (the 2 private-pack tests skipped as intended), 26 E2E tests including going offline mid-review, all packaged checks | [ci] |
 
 Totals: 166 unit, integration and component tests; 26 E2E tests.
 

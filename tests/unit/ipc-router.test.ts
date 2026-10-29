@@ -40,6 +40,21 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'sets:addMember': () => ({ status: 'done', revision: 1 }),
     'sets:ungroup': () => ({ status: 'done', revision: 1 }),
     'sets:nearby': () => [],
+    'projects:list': () => [],
+    'projects:get': () => {
+      throw new Error('not used')
+    },
+    'projects:create': () => {
+      throw new Error('not used')
+    },
+    'projects:update': () => {
+      throw new Error('not used')
+    },
+    'projects:reorder': () => {
+      throw new Error('not used')
+    },
+    'projects:setCrop': () => ({ saved: true }),
+    'projects:delete': () => ({ deleted: true }),
     ...overrides,
   }
   const logError = vi.fn()

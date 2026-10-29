@@ -52,6 +52,42 @@ const revision = z.number().int().nonnegative()
 /** The set changed since the screen loaded it (for example, a scan regrouped it). Nothing was written. */
 const Stale = z.object({ status: z.literal('stale') })
 
+const projectKind = z.enum(['collage_2', 'collage_4', 'carousel'])
+const aspect = z.enum(['1:1', '4:5'])
+const background = z.enum(['cream', 'white'])
+const crop = z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1), zoom: z.number().min(1).max(4) })
+const ProjectSummary = z.object({
+  id,
+  title: z.string(),
+  kind: projectKind,
+  aspect,
+  background,
+  photoCount: count,
+  coverAssetId: id.nullable(),
+  updatedAt: z.number().int(),
+})
+const ProjectDetail = z.object({
+  id,
+  title: z.string(),
+  kind: projectKind,
+  aspect,
+  background,
+  layoutVersion: z.number().int(),
+  updatedAt: z.number().int(),
+  items: z.array(
+    z.object({
+      position: count,
+      assetId: id,
+      crop,
+      width: z.number().int().nullable(),
+      height: z.number().int().nullable(),
+      available: z.boolean(),
+      fileName: z.string().nullable(),
+      folderName: z.string().nullable(),
+    }),
+  ),
+})
+
 /** Album edits return an undo id: passing it to albums:undo puts the album back as it was before that edit. */
 const UndoResult = z.object({ undoId: z.number().int().positive() })
 
@@ -253,6 +289,20 @@ export const commands = {
     input: z.object({ setId: id }),
     output: z.array(z.object({ assetId: id, capturedAt: z.number().int().nullable(), offline: z.boolean() })),
   },
+  // Memory Studio (AC6). Every edit is saved at once; projects reference pictures only.
+  'projects:list': { input: z.undefined(), output: z.array(ProjectSummary) },
+  'projects:get': { input: z.object({ projectId: id }), output: ProjectDetail },
+  'projects:create': {
+    input: z.object({ kind: projectKind, aspect, background, assetIds: z.array(id).min(2).max(10) }),
+    output: ProjectDetail,
+  },
+  'projects:update': {
+    input: z.object({ projectId: id, title: z.string().trim().min(1).max(120).optional(), aspect: aspect.optional(), background: background.optional() }),
+    output: ProjectDetail,
+  },
+  'projects:reorder': { input: z.object({ projectId: id, assetIds: z.array(id).min(2).max(10) }), output: ProjectDetail },
+  'projects:setCrop': { input: z.object({ projectId: id, position: count, crop }), output: z.object({ saved: z.literal(true) }) },
+  'projects:delete': { input: z.object({ projectId: id }), output: z.object({ deleted: z.literal(true) }) },
   'albums:photos': {
     input: z.object({ albumId: id, afterPosition: z.number().int().nullable().optional(), limit: z.number().int().min(1).max(500) }),
     output: z.object({ items: z.array(LibraryItem), total: count, nextAfter: z.number().int().nullable() }),

@@ -42,7 +42,7 @@ describe.skipIf(!existsSync(PHOTOS))('real fixture pack', () => {
     const started = performance.now()
     const { outcome, counts } = await scanSource({ db, thumbnailsDir, processImage }, added.source.id)
     const seconds = (performance.now() - started) / 1000
-    await sleep(300)
+    await sleep(1000) // file events arrive late on a busy machine; give any write time to be reported
 
     // Safety first: no writes seen, and every file's bytes and modification time are unchanged.
     expect(watcher.stop()).toEqual([])

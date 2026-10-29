@@ -32,10 +32,16 @@ export function fingerprintFolder(root: string): Record<string, FileFingerprint>
 }
 
 /** Records every change event under `root` until `stop()` is called. */
-export function watchForWrites(root: string): { stop: () => string[] } {
+export function watchForWrites(root: string): { stop: () => string[]; firstEvent: (timeoutMs: number) => Promise<boolean> } {
   const events: string[] = []
   const watcher: FSWatcher = watch(root, { recursive: true }, (type, name) => events.push(`${type}:${String(name)}`))
   return {
+    // macOS reports file events with some delay, longer when the machine is busy; wait for one rather than guess.
+    firstEvent: async (timeoutMs) => {
+      const deadline = Date.now() + timeoutMs
+      while (events.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25))
+      return events.length > 0
+    },
     stop: () => {
       watcher.close()
       return events

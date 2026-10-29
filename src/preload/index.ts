@@ -40,6 +40,13 @@ const api: NearmoraApi = {
   addToSet: (input) => ipcRenderer.invoke(channelFor('sets:addMember'), input),
   ungroupSet: (input) => ipcRenderer.invoke(channelFor('sets:ungroup'), input),
   nearbyPhotos: (input) => ipcRenderer.invoke(channelFor('sets:nearby'), input),
+  listProjects: () => ipcRenderer.invoke(channelFor('projects:list')),
+  getProject: (input) => ipcRenderer.invoke(channelFor('projects:get'), input),
+  createProject: (input) => ipcRenderer.invoke(channelFor('projects:create'), input),
+  updateProject: (input) => ipcRenderer.invoke(channelFor('projects:update'), input),
+  reorderProject: (input) => ipcRenderer.invoke(channelFor('projects:reorder'), input),
+  setProjectCrop: (input) => ipcRenderer.invoke(channelFor('projects:setCrop'), input),
+  deleteProject: (input) => ipcRenderer.invoke(channelFor('projects:delete'), input),
   // The listener gets only the event data, never Electron's event object (which carries `sender`).
   onEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: MainEvent) => listener(payload)
