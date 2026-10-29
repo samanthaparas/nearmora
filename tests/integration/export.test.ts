@@ -4,7 +4,6 @@
  * overwrites, fresh folders, cancel, a full disk and a crash leaving nothing finished-looking behind.
  */
 
-import { execFileSync } from 'node:child_process'
 import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import exifr from 'exifr'
@@ -20,6 +19,7 @@ import { addSourceFolder } from '../../src/main/library/source-folders'
 import { processImage } from '../../src/main/media/process-image'
 import { renderCanvas, type RenderRequest } from '../../src/main/media/render-export'
 import { prepareExport, recoverInterruptedExports, runExport, safeName, type ExportPlan } from '../../src/main/studio/export'
+import { createDiskImage } from '../support/disk-image'
 import { fingerprintFolder, guardFolder } from '../support/originals-guard'
 import { openTestCatalog, tempDir, tempProfile } from './helpers'
 
@@ -289,12 +289,9 @@ describe.skipIf(process.platform !== 'darwin')('a full disk (AC8)', () => {
     await sharp({ create: { width: 2000, height: 2000, channels: 3, background: '#808080', noise: { type: 'gaussian', mean: 128, sigma: 60 } } })
       .jpeg({ quality: 95 })
       .toFile(noisy)
-    const work = tempDir()
-    const image = join(work, 'small.dmg')
-    const mount = join(work, 'mnt')
-    mkdirSync(mount)
-    execFileSync('hdiutil', ['create', '-size', '2m', '-fs', 'HFS+', '-volname', 'NearmoraFull', image], { stdio: 'ignore' })
-    execFileSync('hdiutil', ['attach', image, '-nobrowse', '-mountpoint', mount], { stdio: 'ignore' })
+    const disk = createDiskImage(tempDir(), 2, 'NearmoraFull')
+    const { mount } = disk
+    disk.attach()
     try {
       const plan = await ready(db, project.id, mount, profile.dir)
       // Swap in the noisy photo so each slide is large; the plan is otherwise the real one.
@@ -306,7 +303,7 @@ describe.skipIf(process.platform !== 'darwin')('a full disk (AC8)', () => {
       const retry = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
       expect(retry.status).toBe('done')
     } finally {
-      execFileSync('hdiutil', ['detach', mount, '-force'], { stdio: 'ignore' })
+      await disk.eject()
     }
   }, 120_000)
 })

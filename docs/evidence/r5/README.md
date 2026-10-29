@@ -70,4 +70,5 @@ Totals: 193 unit, integration and component tests; 30 E2E tests.
 
 - **Identical test photos.** The first export fixture made two byte-identical photos, which the catalog rightly treats as one picture; the "changed original" check then (correctly) used the untouched copy. Test photos are now distinct.
 - **JPEG colour shifts.** Cream 248,240,232 comes back as 248,239,232 after compression, so colour checks allow ±4.
+- **A disk image GitHub's Mac couldn't eject** (run 40816408369). The full-disk test's cleanup failed with "resource busy" (status 16), which also hid whether its checks had passed. The image library keeps recently used files open, and a fresh volume can be briefly indexed. A shared helper now releases sharp's file cache and retries the eject; the unplug test uses it too.
 - **A miscounting end-to-end check.** Counting entries in the destination also counted the second export's hidden staging folder while it ran. The test now waits for the "Exported … (2)" message.
