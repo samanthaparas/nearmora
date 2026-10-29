@@ -319,6 +319,19 @@ export const commands = {
   'export:cancel': { input: z.object({ jobId: id }), output: z.object({ cancelled: z.boolean() }) },
   // Opens Finder at a finished export's folder. Only folders this app just exported can be shown.
   'export:reveal': { input: z.object({ jobId: id }), output: z.object({ shown: z.boolean() }) },
+  // Settings (AC9): what's stored, and clearing the caches that can be rebuilt.
+  'settings:storage': {
+    input: z.undefined(),
+    output: z.object({
+      catalogBytes: count,
+      thumbnails: z.object({ files: count, bytes: count }),
+      previews: z.object({ files: count, bytes: count }),
+    }),
+  },
+  'settings:clearCache': {
+    input: z.object({ cache: z.enum(['previews', 'thumbnails']) }),
+    output: z.object({ removed: count, rescanning: count }),
+  },
   'albums:photos': {
     input: z.object({ albumId: id, afterPosition: z.number().int().nullable().optional(), limit: z.number().int().min(1).max(500) }),
     output: z.object({ items: z.array(LibraryItem), total: count, nextAfter: z.number().int().nullable() }),

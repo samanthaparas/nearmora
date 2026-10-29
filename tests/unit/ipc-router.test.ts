@@ -58,6 +58,8 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'export:start': () => ({ status: 'cancelled' }),
     'export:cancel': () => ({ cancelled: false }),
     'export:reveal': () => ({ shown: false }),
+    'settings:storage': () => ({ catalogBytes: 0, thumbnails: { files: 0, bytes: 0 }, previews: { files: 0, bytes: 0 } }),
+    'settings:clearCache': () => ({ removed: 0, rescanning: 0 }),
     ...overrides,
   }
   const logError = vi.fn()

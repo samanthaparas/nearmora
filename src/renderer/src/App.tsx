@@ -1,6 +1,6 @@
 /**
  * The app shell: sidebar navigation plus the main content area.
- * Library, Best Moments, Favorites, Memory Studio and Sources are real; Settings isn't built yet.
+ * Every section is real: Library, Best Moments, Favorites, Memory Studio, Sources and Settings.
  */
 
 import { useEffect, useState } from 'react'
@@ -9,6 +9,7 @@ import { Sources } from './library/Sources'
 import { BestMoments } from './best-moments/BestMoments'
 import { Favorites } from './studio/Favorites'
 import { MemoryStudio } from './studio/MemoryStudio'
+import { Settings } from './settings/Settings'
 import { navigate } from './navigation-guard'
 import './App.css'
 
@@ -125,19 +126,9 @@ export function App() {
         ) : section === 'Memory Studio' ? (
           <MemoryStudio key={studioProjectId ?? 'list'} initialProjectId={studioProjectId} onGoToFavorites={() => setSection('Favorites')} />
         ) : (
-          <NotBuiltYet section={section} />
+          <Settings />
         )}
       </main>
     </div>
-  )
-}
-
-// Placeholder for sections that don't exist yet, so nothing pretends to work.
-function NotBuiltYet({ section }: { section: Section }) {
-  return (
-    <header className="content__header">
-      <h1 className="content__title">{section}</h1>
-      <p className="content__subtitle">This part of Nearmora isn&rsquo;t built yet.</p>
-    </header>
   )
 }

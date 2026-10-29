@@ -96,6 +96,8 @@ test('bridge exposes only the named API, frozen', async () => {
       'startExport',
       'cancelExport',
       'revealExport',
+      'storageUsage',
+      'clearCache',
       'onEvent',
     ],
     frozen: true,

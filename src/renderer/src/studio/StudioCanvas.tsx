@@ -85,5 +85,6 @@ export function StudioCanvas({ kind, aspect, background, items, canvasIndex, dis
     }
   }, [kind, aspect, background, items, canvasIndex, displayWidth, displayHeight, scale, size, highlight])
 
-  return <canvas ref={ref} className="studio__canvas" role="img" aria-label={label} style={{ width: displayWidth, height: displayHeight }} />
+  // Shrinks to fit narrow windows and 200% zoom (no sideways scrolling); the canvas keeps its shape from its pixel size.
+  return <canvas ref={ref} className="studio__canvas" role="img" aria-label={label} style={{ width: displayWidth, maxWidth: '100%', height: 'auto' }} />
 }

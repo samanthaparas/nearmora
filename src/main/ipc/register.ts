@@ -32,6 +32,7 @@ import { saveReview, undoReview } from '../catalog/repositories/review'
 import { addToSet, nearbyPhotos, removeFromSet, ungroupSet } from '../catalog/repositories/set-edits'
 import { getSetDetail, listSets } from '../catalog/repositories/sets'
 import type { LibraryService } from '../library/library-service'
+import { clearCacheFolder, storageUsage } from '../library/storage'
 import type { ExportService } from '../studio/export-service'
 import { createRouter, type Handlers } from './router'
 
@@ -39,10 +40,11 @@ export interface HandlerContext {
   db: Catalog
   library: LibraryService
   exports: ExportService
+  paths: { catalogFile: string; thumbnailsDir: string; previewsDir: string }
 }
 
 // One handler per command in ipc-contract.ts. The Handlers type makes a missing one a compile error.
-export function createHandlers({ db, library, exports }: HandlerContext): Handlers {
+export function createHandlers({ db, library, exports, paths }: HandlerContext): Handlers {
   return {
     'app:getInfo': () => ({ name: app.getName(), version: app.getVersion() }),
 
@@ -127,6 +129,16 @@ export function createHandlers({ db, library, exports }: HandlerContext): Handle
       const folder = exports.finishedFolder(jobId)
       if (folder) shell.showItemInFolder(folder)
       return { shown: folder !== undefined }
+    },
+    'settings:storage': () => storageUsage(paths),
+    // Thumbnails are rebuilt by rescanning, so connected folders are rescanned straight away.
+    'settings:clearCache': ({ cache }) => {
+      const removed = clearCacheFolder(cache === 'previews' ? paths.previewsDir : paths.thumbnailsDir)
+      let rescanning = 0
+      if (cache === 'thumbnails') {
+        for (const source of library.listSources()) if (source.status === 'active' && library.startScan(source.id)) rescanning++
+      }
+      return { removed, rescanning }
     },
     'albums:photos': ({ albumId, afterPosition, limit }) => queryAlbumPhotos(db, { albumId, afterPosition: afterPosition ?? null, limit }),
   }

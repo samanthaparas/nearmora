@@ -87,6 +87,15 @@ export function SetReview({ setId, onLeave, onNext, onChanged }: {
     return () => setNavigationGuard(null)
   }, [dirty])
 
+  // Quitting or closing the window with unsaved picks: tell the browser it's not safe to unload, and main asks
+  // the person (see guardUnsavedQuit in main). Removed as soon as the picks are saved or discarded.
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
   const leave = (proceed: () => void) => {
     if (dirty) setPendingLeave(() => proceed)
     else proceed()

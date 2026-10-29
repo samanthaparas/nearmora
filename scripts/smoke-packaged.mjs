@@ -4,7 +4,7 @@
  * bundle, the security fuses are set, the app starts, and no source code was shipped.
  */
 
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { FuseState, FuseV1Options, getCurrentFuseWire } from '@electron/fuses'
@@ -21,10 +21,16 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures.push(name)
 }
 
-// Runs the packaged binary and collects its output, killing it after `timeoutMs`.
-function run(args, timeoutMs) {
+// A macOS sandbox profile that denies every network operation (AC9: the app must work with networking off).
+const NO_NETWORK = '(version 1)(allow default)(deny network*)'
+
+// Runs the packaged binary and collects its output, killing it after `timeoutMs`. With `offline`, it runs inside
+// the no-network sandbox.
+function run(args, timeoutMs, { offline = false } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(BINARY, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = offline
+      ? spawn('sandbox-exec', ['-p', NO_NETWORK, BINARY, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+      : spawn(BINARY, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     let output = ''
     child.stdout.on('data', (d) => (output += d))
     child.stderr.on('data', (d) => (output += d))
@@ -88,6 +94,15 @@ check('ELECTRON_RUN_AS_NODE is ignored', !asNode.includes('RAN_AS_NODE'))
 // 4. The app starts normally and stays running (no crash on launch).
 const launch = await run([], 6_000)
 check('app launches and keeps running', launch.timedOut, launch.timedOut ? '' : `exited with ${launch.code}`)
+
+// 4b. With all networking denied by the operating system, the self-test (database, image library, media worker
+//     process, catalog) still passes (AC9). Control first: the same sandbox really does stop a process from opening
+//     even a local socket. The full window can't be launched this way: Chromium refuses to start its own sandbox
+//     inside another one, so the UI workflow's network check lives in the E2E suite instead.
+const control = spawnSync('sandbox-exec', ['-p', NO_NETWORK, '/usr/bin/perl', '-MIO::Socket::INET', '-e', 'IO::Socket::INET->new(Listen=>1,LocalAddr=>"127.0.0.1:0") or exit 3'])
+check('no-network sandbox blocks sockets (control)', control.status === 3, `exit ${control.status}`)
+const offlineSelfTest = await run(['--self-test'], 30_000, { offline: true })
+check('self-test passes with networking denied', offlineSelfTest.code === 0, `code ${offlineSelfTest.code}`)
 
 // 5. Only compiled output was shipped: no TypeScript source, tests or docs.
 const archive = join(RESOURCES, 'app.asar')
