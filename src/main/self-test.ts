@@ -1,14 +1,18 @@
 /**
  * A built-in diagnostic, run with `--self-test`, that proves the native libraries load and work inside this exact build.
  * It's how CI checks a packaged app, since packaged apps (correctly) block test tools from attaching.
- * It touches no user files and no network: in-memory databases and a generated image only.
+ * It touches no user files and no network: in-memory databases, and generated images in a temporary folder it deletes.
  */
 
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import sharp from 'sharp'
 import { IN_MEMORY, openCatalog } from './catalog/database'
 import { MIGRATIONS } from './catalog/migrations'
 import { latestVersion, readSchemaVersion } from './catalog/migrate'
+import { MediaWorker } from './media/worker-client'
 
 export const SELF_TEST_FLAG = '--self-test'
 /** Prefix on the single output line, so the smoke test can find it among Electron's own logging. */
@@ -20,6 +24,7 @@ export interface SelfTestReport {
   sqlite: { ok: boolean; version?: string; error?: string }
   sharp: { ok: boolean; libvips?: string; error?: string }
   catalog: { ok: boolean; schemaVersion?: number; error?: string }
+  mediaWorker: { ok: boolean; error?: string }
 }
 
 // Exercises the SQLite features later milestones depend on: foreign keys, transactions and joins.
@@ -69,6 +74,24 @@ async function checkCatalog(): Promise<SelfTestReport['catalog']> {
   }
 }
 
+// Starts the real media worker process from this build and has it make a thumbnail,
+// proving the worker file, sharp and exifr all load inside the package.
+async function checkMediaWorker(): Promise<SelfTestReport['mediaWorker']> {
+  const dir = mkdtempSync(join(tmpdir(), 'nearmora-self-test-'))
+  const worker = new MediaWorker()
+  try {
+    const source = join(dir, 'generated.jpg')
+    const thumbnail = join(dir, 'thumb.webp')
+    await sharp({ create: { width: 64, height: 48, channels: 3, background: '#5b414b' } }).jpeg().toFile(source)
+    const result = await worker.process({ sourcePath: source, thumbnailPath: thumbnail })
+    const ok = result.ok && result.width === 64 && existsSync(thumbnail)
+    return ok ? { ok } : { ok, error: 'worker did not produce a thumbnail' }
+  } finally {
+    worker.stop()
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 // Exercises the sharp features later milestones depend on: decode, resize and re-encode.
 async function checkSharp(): Promise<SelfTestReport['sharp']> {
   const width = 64
@@ -111,11 +134,19 @@ export async function runSelfTest(): Promise<SelfTestReport> {
     catalogResult = { ok: false, error: describeError(error) }
   }
 
+  let workerResult: SelfTestReport['mediaWorker']
+  try {
+    workerResult = await checkMediaWorker()
+  } catch (error: unknown) {
+    workerResult = { ok: false, error: describeError(error) }
+  }
+
   return {
-    ok: sqliteResult.ok && sharpResult.ok && catalogResult.ok,
+    ok: sqliteResult.ok && sharpResult.ok && catalogResult.ok && workerResult.ok,
     electron: process.versions.electron,
     sqlite: sqliteResult,
     sharp: sharpResult,
     catalog: catalogResult,
+    mediaWorker: workerResult,
   }
 }

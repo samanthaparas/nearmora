@@ -5,18 +5,21 @@
 
 import { pathToFileURL } from 'node:url'
 import { net, protocol } from 'electron'
+import { mediaSchemePrivileges } from './media-protocol'
 import { APP_HOST, APP_SCHEME, contentSecurityPolicy } from './policy'
 import { contentTypeFor, resolveRendererFile } from './renderer-files'
 
 /**
- * Must run before `app` is ready. A "standard" + "secure" scheme behaves like
- * https for the browser engine: it gets a real origin for 'self' in the CSP.
- * We serve the built UI from app://nearmora instead of file://, which would let
- * a page read any local file the user can.
+ * Must run before `app` is ready, and only once: a second call replaces the first.
+ * A "standard" + "secure" scheme behaves like https for the browser engine: it gets
+ * a real origin for 'self' in the CSP. We serve the built UI from app://nearmora
+ * instead of file://, which would let a page read any local file the user can.
+ * nm-media:// (thumbnails) is registered here too for the same reason.
  */
-export function registerAppSchemeAsPrivileged(): void {
+export function registerPrivilegedSchemes(): void {
   protocol.registerSchemesAsPrivileged([
     { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+    mediaSchemePrivileges,
   ])
 }
 

@@ -8,5 +8,5 @@
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "types": ["node"]
   },
-  "include": ["e2e/**/*", "playwright.config.ts", "src/renderer/src/env.d.ts", "src/shared/**/*"]
+  "include": ["e2e/**/*", "playwright.config.ts", "src/renderer/src/env.d.ts", "src/shared/**/*", "tests/support/**/*"]
 }

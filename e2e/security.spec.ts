@@ -3,21 +3,15 @@
  * They prove the protections work in Electron itself, not just in isolated functions.
  */
 
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
+import { launchApp } from './launch'
 
 let app: ElectronApplication
 let page: Page
 
 // Launch the app once and share it across tests. Starting Electron is the slow part.
 test.beforeAll(async () => {
-  // Launch the built main process. ELECTRON_RENDERER_URL is removed so the
-  // app loads from app://nearmora exactly as a built app does.
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined && entry[0] !== 'ELECTRON_RENDERER_URL',
-    ),
-  )
-  app = await electron.launch({ args: ['.'], env })
+  ;({ app } = await launchApp())
   page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
 })
@@ -61,7 +55,11 @@ test('bridge exposes only the named API, frozen', async () => {
     frozen: Object.isFrozen(window.nearmora),
     ipcRenderer: typeof (window as unknown as Record<string, unknown>)['ipcRenderer'],
   }))
-  expect(shape).toEqual({ keys: ['getAppInfo'], frozen: true, ipcRenderer: 'undefined' })
+  expect(shape).toEqual({
+    keys: ['getAppInfo', 'addSource', 'listSources', 'rescanSource', 'cancelScan', 'queryLibrary', 'onEvent'],
+    frozen: true,
+    ipcRenderer: 'undefined',
+  })
 })
 
 test('bridge call round-trips through the validated IPC router', async () => {
@@ -120,4 +118,17 @@ test('the app protocol refuses path traversal', async () => {
     return res?.status ?? 'blocked'
   })
   expect([404, 'blocked']).toContain(status)
+})
+
+test('thumbnails are served only by picture id, never by path', async () => {
+  const statuses = await page.evaluate(async () => {
+    const status = (url: string) => fetch(url).then((r) => r.status, () => 'blocked')
+    return {
+      unknownId: await status('nm-media://thumb/3f2b8c1e-4d5a-4b6c-9d7e-8f9a0b1c2d3e'),
+      path: await status('nm-media://thumb/%2Fetc%2Fpasswd'),
+      original: await status('nm-media://original/3f2b8c1e-4d5a-4b6c-9d7e-8f9a0b1c2d3e'),
+    }
+  })
+  // connect-src 'none' already blocks fetch() from the page; if it didn't, the scheme itself answers 404.
+  for (const status of Object.values(statuses)) expect([404, 'blocked']).toContain(status)
 })

@@ -5,6 +5,36 @@
 
 import { z } from 'zod'
 
+const id = z.uuid()
+const count = z.number().int().nonnegative()
+
+/** What a scan found, by outcome. Shown to explain why some files aren't in the Library (AC2). */
+export const ScanCounts = z.object({
+  found: count,
+  indexed: count,
+  unchanged: count,
+  unsupported: count,
+  corrupt: count,
+  tooLarge: count,
+  unreadable: count,
+})
+export type ScanCounts = z.infer<typeof ScanCounts>
+
+// Sources are described by name and status; the UI never receives or sends a file path.
+const SourceSummary = z.object({
+  id,
+  displayName: z.string(),
+  status: z.enum(['active', 'disconnected', 'permission_denied', 'removed']),
+  lastScanAt: z.number().int().nullable(),
+  lastScan: ScanCounts.nullable(),
+  /** Distinct pictures available in this folder; identical copies count once. */
+  pictureCount: count,
+  /** Files that are byte-identical copies of a picture already counted. */
+  duplicateCount: count,
+  scanning: z.boolean(),
+})
+export type SourceSummary = z.infer<typeof SourceSummary>
+
 /**
  * Every command the renderer may send to the main process.
  *
@@ -23,6 +53,34 @@ export const commands = {
       version: z.string(),
     }),
   },
+  // Main opens the folder picker itself, so the UI never supplies a path (roadmap §6.5).
+  'sources:add': {
+    input: z.undefined(),
+    output: z.discriminatedUnion('status', [
+      z.object({ status: z.literal('added'), source: SourceSummary }),
+      z.object({ status: z.literal('cancelled') }),
+      z.object({ status: z.literal('refused'), reason: z.enum(['unavailable', 'overlap', 'app_data']) }),
+    ]),
+  },
+  'sources:list': {
+    input: z.undefined(),
+    output: z.array(SourceSummary),
+  },
+  'sources:rescan': {
+    input: z.object({ sourceId: id }),
+    output: z.object({ started: z.boolean() }),
+  },
+  'scan:cancel': {
+    input: z.object({ sourceId: id }),
+    output: z.object({ cancelled: z.boolean() }),
+  },
+  'library:query': {
+    input: z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(500) }),
+    output: z.object({
+      items: z.array(z.object({ id, width: z.number().int().nullable(), height: z.number().int().nullable(), capturedAt: z.number().int().nullable() })),
+      total: count,
+    }),
+  },
 } as const
 
 export type Commands = typeof commands
@@ -32,6 +90,14 @@ export type CommandOutput<C extends CommandName> = z.output<Commands[C]['output'
 
 /** Error codes are deliberately coarse: no messages, paths or stack traces cross the bridge. */
 export type IpcErrorCode = 'UNTRUSTED_SENDER' | 'UNKNOWN_COMMAND' | 'INVALID_INPUT' | 'INTERNAL'
+
+/** Messages main pushes to the UI on one channel. Only scan progress for now. */
+export type MainEvent = {
+  type: 'scan'
+  sourceId: string
+  state: 'running' | 'done' | 'cancelled' | 'failed'
+  counts: ScanCounts
+}
 
 /** A discriminated union: check `ok` and TypeScript narrows to `data` or `error`. */
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcErrorCode } }

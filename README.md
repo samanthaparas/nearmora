@@ -8,7 +8,7 @@ Nearmora is a local-first macOS desktop app for finding your favorite photos, ch
 
 ## Status
 
-R1a (secure app shell), R1b (CI and packaging) and R2 (the catalog database) are done. The window opens with the Library screen, the security boundary is tested, and every pull request is checked automatically. The catalog can store sources, pictures, favorites, review choices and albums, migrate safely, and back up and restore, but the app doesn't use it yet: photo import comes in R3. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database) and R3a (indexing slice) are done. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scan pause/resume, date moments, search and large-library scrolling come in R3b. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
 
 ## Commands
 
@@ -18,8 +18,8 @@ R1a (secure app shell), R1b (CI and packaging) and R2 (the catalog database) are
 | `npm run dev` | Opens the app with live reload while you edit |
 | `npm run build` | Builds the app into `out/` |
 | `npm run typecheck` | Checks every TypeScript file without running anything |
-| `npm test` | Runs the unit tests and the catalog integration tests (real SQLite files in a temporary folder) |
-| `npm run test:e2e` | Builds the app, then launches it and runs the security tests inside it |
+| `npm test` | Runs the unit tests and the integration tests (real SQLite files and generated photos in a temporary folder; the private fixture pack too, if it's present) |
+| `npm run test:e2e` | Builds the app, then launches it with a throwaway profile and runs the security and Library tests inside it |
 | `npm run lint` | Checks code for likely mistakes (ESLint, including type-aware rules) |
 | `npm run package:mac` | Builds an unsigned `Nearmora.app` into `release/` |
 | `npm run test:packaged` | Checks the packaged app: native libraries, catalog migrations, security fuses, launch, and shipped files |
@@ -30,22 +30,28 @@ R1a (secure app shell), R1b (CI and packaging) and R2 (the catalog database) are
 ```text
 src/
   main/            Main process: the only code with access to the computer
-    index.ts         Starts the app: security guards first, then the window
-    self-test.ts     --self-test mode: proves SQLite, sharp and the catalog work in a packaged build
+    index.ts         Starts the app: security guards, then the catalog, then the window
+    self-test.ts     --self-test mode: proves SQLite, sharp, the catalog and the media worker work in a packaged build
+    media-worker.ts  Entry point of the separate process that decodes photos
+    media/           Reading photos safely: file walking, type detection, thumbnails and dHash
+    library/         Adding folders, scanning them, and the thumbnail cache
     catalog/         The SQLite catalog: opening, migrations, backup/restore
       migrations/      Numbered schema changes (.sql), applied in order
       repositories/    Reading and writing sources, pictures, albums, sets and review choices
     ipc/             The checkpoint for every request the UI makes
-    security/        CSP, app:// file serving, navigation and permission guards
+    security/        CSP, app:// and nm-media:// serving, navigation and permission guards
   preload/         Builds window.nearmora, the UI's only bridge to the main process
   renderer/        The UI (React). Sandboxed: no Node.js, no file access
     src/styles/      Design tokens (colors, fonts, spacing) and base styles
+    src/library/     The Library screen: add folder, scan status and thumbnail grid
   shared/          Types and schemas used by more than one process
 tests/unit/        Fast tests of individual functions (Vitest)
-tests/integration/ Catalog tests against real SQLite files (Vitest)
+tests/integration/ Catalog and scanning tests against real files and SQLite (Vitest)
+tests/support/     Shared test helpers: generated test photos and the originals-unchanged checks
 scripts/           Helper scripts: the packaged-app smoke test and query-plan measurements
 .github/workflows/ CI: the checks GitHub runs on every pull request
 e2e/               Tests that launch the real app (Playwright)
+fixtures/private/  The owner's approved test photos. Git-ignored, never committed
 docs/
   planning/        Blueprint, roadmap, requirements and concept images
   decisions/       Short records of why key technical choices were made (ADRs)
@@ -60,6 +66,7 @@ Every source file starts with a short comment explaining its purpose. These file
 | `package.json` | The project's name, its scripts (the commands above) and its dependencies, each pinned to an exact version. `dependencies` holds only what ships inside the app; `allowScripts` lists which packages may run install scripts (npm 11 blocks them by default) |
 | `package-lock.json` | Generated by npm. It records the exact version of every package, including dependencies of dependencies, so every install is identical. Never edit it by hand |
 | `electron-builder.yml` | How the app is packaged into a .app, and which security fuses are switched off (comments inside) |
+| `src/main/catalog/migrations/*.sql` | Schema changes, applied in order. Each starts with a comment explaining it |
 | `docs/evidence/**/*.png` | Screenshots kept as proof of what a milestone looked like when it was checked |
 
 ## Docs
@@ -77,8 +84,6 @@ The concept images in `docs/planning/` are design references only. The photos in
 
 In use: Electron · React · TypeScript · Vite · Zod · ESLint · Vitest · Playwright · electron-builder · GitHub Actions
 
-In use (catalog, not yet wired into the app): SQLite (better-sqlite3)
-
-Installed, not yet used by features: sharp
+In use: SQLite (better-sqlite3) · sharp · exifr (reads the date a photo was taken)
 
 Planned: React Testing Library
