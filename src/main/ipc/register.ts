@@ -19,6 +19,15 @@ import {
 import { createAlbum, listAlbums } from '../catalog/repositories/albums'
 import { queryAlbumPhotos, queryLibrary } from '../catalog/repositories/library'
 import { listMoments, updateMoment } from '../catalog/repositories/moments'
+import {
+  createProject,
+  deleteProject,
+  getProject,
+  listProjects,
+  reorderProject,
+  setItemCrop,
+  updateProject,
+} from '../catalog/repositories/projects'
 import { saveReview, undoReview } from '../catalog/repositories/review'
 import { addToSet, nearbyPhotos, removeFromSet, ungroupSet } from '../catalog/repositories/set-edits'
 import { getSetDetail, listSets } from '../catalog/repositories/sets'
@@ -79,6 +88,25 @@ export function createHandlers({ db, library }: HandlerContext): Handlers {
     'sets:addMember': (input) => unlessStale(() => ({ status: 'done' as const, ...addToSet(db, input) })),
     'sets:ungroup': (input) => unlessStale(() => ({ status: 'done' as const, ...ungroupSet(db, input) })),
     'sets:nearby': ({ setId }) => nearbyPhotos(db, setId),
+    'projects:list': () => listProjects(db),
+    'projects:get': ({ projectId }) => getProject(db, projectId),
+    'projects:create': (input) => createProject(db, input),
+    'projects:update': (input) => {
+      updateProject(db, withoutUndefined(input))
+      return getProject(db, input.projectId)
+    },
+    'projects:reorder': (input) => {
+      reorderProject(db, input)
+      return getProject(db, input.projectId)
+    },
+    'projects:setCrop': (input) => {
+      setItemCrop(db, input)
+      return { saved: true as const }
+    },
+    'projects:delete': ({ projectId }) => {
+      deleteProject(db, projectId)
+      return { deleted: true as const }
+    },
     'albums:photos': ({ albumId, afterPosition, limit }) => queryAlbumPhotos(db, { albumId, afterPosition: afterPosition ?? null, limit }),
   }
 }

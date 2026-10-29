@@ -41,6 +41,13 @@ export interface NearmoraApi {
   addToSet(input: CommandInput<'sets:addMember'>): Promise<IpcResult<CommandOutput<'sets:addMember'>>>
   ungroupSet(input: CommandInput<'sets:ungroup'>): Promise<IpcResult<CommandOutput<'sets:ungroup'>>>
   nearbyPhotos(input: CommandInput<'sets:nearby'>): Promise<IpcResult<CommandOutput<'sets:nearby'>>>
+  listProjects(): Promise<IpcResult<CommandOutput<'projects:list'>>>
+  getProject(input: CommandInput<'projects:get'>): Promise<IpcResult<CommandOutput<'projects:get'>>>
+  createProject(input: CommandInput<'projects:create'>): Promise<IpcResult<CommandOutput<'projects:create'>>>
+  updateProject(input: CommandInput<'projects:update'>): Promise<IpcResult<CommandOutput<'projects:update'>>>
+  reorderProject(input: CommandInput<'projects:reorder'>): Promise<IpcResult<CommandOutput<'projects:reorder'>>>
+  setProjectCrop(input: CommandInput<'projects:setCrop'>): Promise<IpcResult<CommandOutput<'projects:setCrop'>>>
+  deleteProject(input: CommandInput<'projects:delete'>): Promise<IpcResult<CommandOutput<'projects:delete'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */
   onEvent(listener: (event: MainEvent) => void): () => void
 }

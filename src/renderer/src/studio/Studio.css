@@ -1,0 +1,73 @@
+/*
+ * Styles for Favorites and Memory Studio: the action bar, the editor's preview and controls side by side,
+ * the carousel's row of slides, and the photo list. Colours and spacing come from the design tokens.
+ */
+
+.studio__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nm-space-1) var(--nm-space-2);
+  margin-bottom: var(--nm-space-3);
+}
+
+.studio__layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--nm-space-4);
+}
+
+.studio__previews {
+  flex: 0 1 auto;
+}
+
+.studio__slides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nm-space-2);
+  max-width: 720px;
+}
+
+.studio__canvas {
+  display: block;
+  border-radius: var(--nm-radius-control);
+  box-shadow: 0 0 0 1px var(--nm-border-subtle);
+}
+
+.studio__controls {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: var(--nm-space-2);
+}
+
+.studio__choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nm-space-2);
+  margin: 0;
+  padding: var(--nm-space-1) var(--nm-space-2);
+  border: 1px solid var(--nm-border-subtle);
+  border-radius: var(--nm-radius-control);
+}
+
+.studio__choice legend {
+  font-size: var(--nm-text-small);
+  font-weight: 600;
+}
+
+.studio__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio__adjust {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nm-space-1);
+}

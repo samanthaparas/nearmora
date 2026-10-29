@@ -1,12 +1,14 @@
 /**
  * The app shell: sidebar navigation plus the main content area.
- * Library, Best Moments and Sources are real; other sections say they aren't built yet.
+ * Library, Best Moments, Favorites, Memory Studio and Sources are real; Settings isn't built yet.
  */
 
 import { useEffect, useState } from 'react'
 import { Library } from './library/Library'
 import { Sources } from './library/Sources'
 import { BestMoments } from './best-moments/BestMoments'
+import { Favorites } from './studio/Favorites'
+import { MemoryStudio } from './studio/MemoryStudio'
 import { navigate } from './navigation-guard'
 import './App.css'
 
@@ -58,6 +60,8 @@ function describeVersion(info: AppInfoState): string {
 
 export function App() {
   const [section, setSection] = useState<Section>('Library')
+  // A project to open when arriving in Memory Studio from Favorites.
+  const [studioProjectId, setStudioProjectId] = useState<string | null>(null)
   const info = useAppInfo()
 
   return (
@@ -78,7 +82,12 @@ export function App() {
               type="button"
               className="sidebar__item"
               aria-current={section === name ? 'page' : undefined}
-              onClick={() => navigate(() => setSection(name))}
+              onClick={() =>
+                navigate(() => {
+                  setStudioProjectId(null)
+                  setSection(name)
+                })
+              }
             >
               {name}
             </button>
@@ -100,7 +109,24 @@ export function App() {
       </aside>
 
       <main id="main" className="content" tabIndex={-1}>
-        {section === 'Library' ? <Library /> : section === 'Sources' ? <Sources /> : section === 'Best Moments' ? <BestMoments /> : <NotBuiltYet section={section} />}
+        {section === 'Library' ? (
+          <Library />
+        ) : section === 'Sources' ? (
+          <Sources />
+        ) : section === 'Best Moments' ? (
+          <BestMoments />
+        ) : section === 'Favorites' ? (
+          <Favorites
+            onOpenProject={(projectId) => {
+              setStudioProjectId(projectId)
+              setSection('Memory Studio')
+            }}
+          />
+        ) : section === 'Memory Studio' ? (
+          <MemoryStudio key={studioProjectId ?? 'list'} initialProjectId={studioProjectId} onGoToFavorites={() => setSection('Favorites')} />
+        ) : (
+          <NotBuiltYet section={section} />
+        )}
       </main>
     </div>
   )
