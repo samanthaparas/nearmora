@@ -37,7 +37,7 @@ File dates are often copy dates, so under B "taken within 2 minutes" weakens to 
 
 Measured on the pack, v2 gives 9 sets, 100% recall (all 8 bursts complete) and 89% precision. The one set outside the answer key is the 5 generated app-screen images (dHashes 0–6 bits apart) in one folder. That matches option B on this pack, as expected, since every burst sits in a single folder. The cases where C and B differ (look-alike, file-dated photos in different folders) are covered by a unit test instead.
 
-The owner's review of sets in part 2 decides whether look-alike images like those app screens count as false matches.
+In part 2 the owner reviewed all 9 sets: the 8 bursts are correct and the app-screen set is a **false match** (R4 evidence). dHash's 9×8 view can't tell same-layout, text-heavy screens apart; ways to address this are listed in the evidence note, to be measured before any change.
 
 ## Consequences
 

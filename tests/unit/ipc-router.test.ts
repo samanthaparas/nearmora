@@ -32,6 +32,14 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'albums:move': () => ({ undoId: 1 }),
     'albums:undo': () => ({ albumId: '3f2b8c1e-4d5a-4b6c-9d7e-8f9a0b1c2d3e' }),
     'albums:photos': () => ({ items: [], total: 0, nextAfter: null }),
+    'sets:list': () => [],
+    'sets:get': () => ({ id: '3f2b8c1e-4d5a-4b6c-9d7e-8f9a0b1c2d3e', reason: 'visual', algorithmVersion: 'v', reviewStatus: 'unreviewed', revision: 0, members: [] }),
+    'review:save': () => ({ status: 'saved', revision: 1, undoId: 1 }),
+    'review:undo': () => ({ status: 'undone', revision: 2 }),
+    'sets:removeMember': () => ({ status: 'done', revision: 1, dissolved: false }),
+    'sets:addMember': () => ({ status: 'done', revision: 1 }),
+    'sets:ungroup': () => ({ status: 'done', revision: 1 }),
+    'sets:nearby': () => [],
     ...overrides,
   }
   const logError = vi.fn()

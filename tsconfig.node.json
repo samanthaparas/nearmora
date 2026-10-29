@@ -14,5 +14,7 @@
     "src/preload/**/*",
     "src/shared/**/*",
     "tests/**/*"
-  ]
+  ],
+  // Component tests render React in a simulated browser, so they're type-checked with the UI's settings instead.
+  "exclude": ["tests/component/**/*"]
 }

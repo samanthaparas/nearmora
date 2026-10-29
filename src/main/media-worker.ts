@@ -3,19 +3,17 @@
  * If a damaged file hangs or crashes the decoder, only this process dies; the main process kills and restarts it.
  */
 
-import { processImage, type ProcessImageRequest } from './media/process-image'
+import { makePreview, processImage, type PreviewRequest, type ProcessImageRequest } from './media/process-image'
 
-interface WorkerMessage {
-  id: number
-  request: ProcessImageRequest
-}
+type WorkerMessage = { id: number; kind: 'process'; request: ProcessImageRequest } | { id: number; kind: 'preview'; request: PreviewRequest }
 
 // `process.parentPort` exists only inside an Electron utility process.
 const port = process.parentPort
 port.on('message', (event: { data: WorkerMessage }) => {
-  const { id, request } = event.data
-  void processImage(request).then(
-    (result) => port.postMessage({ id, result }),
-    () => port.postMessage({ id, result: { ok: false, reason: 'corrupt' } }),
+  const message = event.data
+  const work = message.kind === 'preview' ? makePreview(message.request) : processImage(message.request)
+  void work.then(
+    (result) => port.postMessage({ id: message.id, result }),
+    () => port.postMessage({ id: message.id, result: { ok: false, reason: 'corrupt' } }),
   )
 })

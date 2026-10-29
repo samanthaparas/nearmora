@@ -81,3 +81,108 @@ export function listSetsToReview(db: Catalog): Array<{ id: string; reviewStatus:
     .all() as Array<{ id: string; review_status: string }>
   return rows.map((row) => ({ id: row.id, reviewStatus: ReviewStatus.parse(row.review_status) }))
 }
+
+// A set is shown while at least two of its photos are still in it; fewer means the person split it up.
+const SHOWN = `(s.user_override IS NULL OR s.user_override <> 'removed')`
+
+const SetSummaryRow = z
+  .object({
+    id: z.string(),
+    reason: z.enum(['exact', 'visual', 'manual']),
+    review_status: ReviewStatus,
+    revision: z.number().int(),
+    photo_count: z.number().int(),
+    favorite_count: z.number().int(),
+    cover_asset_id: z.string(),
+    first_captured_at: z.number().int().nullable(),
+  })
+  .transform((row) => ({
+    id: row.id,
+    reason: row.reason,
+    reviewStatus: row.review_status,
+    revision: row.revision,
+    photoCount: row.photo_count,
+    favoriteCount: row.favorite_count,
+    coverAssetId: row.cover_asset_id,
+    firstCapturedAt: row.first_captured_at,
+  }))
+export type SetSummary = z.output<typeof SetSummaryRow>
+
+/** Every set still worth showing: waiting ones first (undecided, then decide-later), then reviewed; newest first within each. */
+export function listSets(db: Catalog): SetSummary[] {
+  return db
+    .prepare(
+      `SELECT x.id, x.reason, x.review_status, x.revision,
+              COUNT(*) AS photo_count,
+              SUM(EXISTS (SELECT 1 FROM favorite f WHERE f.asset_id = s.asset_id)) AS favorite_count,
+              (SELECT s2.asset_id FROM set_asset s2 WHERE s2.set_id = x.id AND (s2.user_override IS NULL OR s2.user_override <> 'removed')
+               ORDER BY s2.position LIMIT 1) AS cover_asset_id,
+              MIN(a.captured_at) AS first_captured_at
+       FROM similarity_set x
+       JOIN set_asset s ON s.set_id = x.id AND ${SHOWN}
+       JOIN asset a ON a.id = s.asset_id
+       GROUP BY x.id
+       HAVING COUNT(*) >= 2
+       ORDER BY CASE x.review_status WHEN 'unreviewed' THEN 0 WHEN 'deferred' THEN 1 ELSE 2 END, first_captured_at DESC, x.id`,
+    )
+    .all()
+    .map((row) => SetSummaryRow.parse(row))
+}
+
+const DetailMemberRow = z
+  .object({
+    asset_id: z.string(),
+    favorite: z.union([z.literal(0), z.literal(1)]),
+    width: z.number().int().nullable(),
+    height: z.number().int().nullable(),
+    captured_at: z.number().int().nullable(),
+    offline: z.union([z.literal(0), z.literal(1)]),
+    user_override: z.enum(['added', 'removed']).nullable(),
+  })
+  .transform((row) => ({
+    assetId: row.asset_id,
+    favorite: row.favorite === 1,
+    width: row.width,
+    height: row.height,
+    capturedAt: row.captured_at,
+    offline: row.offline === 1,
+    addedByYou: row.user_override === 'added',
+  }))
+export type SetMember = z.output<typeof DetailMemberRow>
+
+export interface SetDetail {
+  id: string
+  reason: 'exact' | 'visual' | 'manual'
+  algorithmVersion: string
+  reviewStatus: ReviewStatus
+  revision: number
+  members: SetMember[]
+}
+
+/** One set for the review screen: its photos in order, each with favorite state and whether it's offline. */
+export function getSetDetail(db: Catalog, setId: string): SetDetail {
+  const set = db.prepare('SELECT id, reason, algorithm_version, review_status, revision FROM similarity_set WHERE id = ?').get(setId) as
+    | { id: string; reason: SetDetail['reason']; algorithm_version: string; review_status: string; revision: number }
+    | undefined
+  if (!set) throw new CatalogError('NOT_FOUND', 'Set not found')
+  const members = db
+    .prepare(
+      `SELECT s.asset_id, EXISTS (SELECT 1 FROM favorite f WHERE f.asset_id = s.asset_id) AS favorite,
+              a.width, a.height, a.captured_at, s.user_override,
+              NOT EXISTS (SELECT 1 FROM asset_location l JOIN source src ON src.id = l.source_id
+                          WHERE l.asset_id = a.id AND l.availability = 'available' AND src.status = 'active') AS offline
+       FROM set_asset s JOIN asset a ON a.id = s.asset_id
+       WHERE s.set_id = ? AND ${SHOWN}
+       ORDER BY s.position`,
+    )
+    .all(setId)
+    .map((row) => DetailMemberRow.parse(row))
+  return {
+    id: set.id,
+    reason: set.reason,
+    algorithmVersion: set.algorithm_version,
+    reviewStatus: ReviewStatus.parse(set.review_status),
+    revision: set.revision,
+    members,
+  }
+}

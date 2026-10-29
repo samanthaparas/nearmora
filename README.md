@@ -8,7 +8,7 @@ Nearmora is a local-first macOS desktop app for finding your favorite photos, ch
 
 ## Status
 
-R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done, and R4 part 1 (finding similar photos) is in. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. Behind the scenes, similar shots are grouped into sets for Best Moments (a dHash fingerprint plus a 2-minute window); the review screen comes in R4 part 2. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done, and R4 (Best Moments) is in, pending the owner's false-match review. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. Best Moments groups photos that look alike and were taken moments apart, so you can compare two side by side (with zoom), pick zero, one or several favorites, save with undo or decide later, and fix sets that grouped the wrong photos. Leaving with unsaved picks always asks first. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
 
 ## Commands
 
@@ -18,7 +18,7 @@ R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (
 | `npm run dev` | Opens the app with live reload while you edit |
 | `npm run build` | Builds the app into `out/` |
 | `npm run typecheck` | Checks every TypeScript file without running anything |
-| `npm test` | Runs the unit tests and the integration tests (real SQLite files and generated photos in a temporary folder; the private fixture pack too, if it's present) |
+| `npm test` | Runs the unit, integration and component tests (real SQLite files and generated photos in a temporary folder; the private fixture pack too, if it's present) |
 | `npm run test:e2e` | Builds the app, then launches it with a throwaway profile and runs the security and Library tests inside it |
 | `npm run lint` | Checks code for likely mistakes (ESLint, including type-aware rules) |
 | `npm run package:mac` | Builds an unsigned `Nearmora.app` into `release/` |
@@ -45,10 +45,12 @@ src/
   renderer/        The UI (React). Sandboxed: no Node.js, no file access
     src/styles/      Design tokens (colors, fonts, spacing) and base styles
     src/library/     The Library and Sources screens: folders and scans, moments, albums, search and filters, virtualized grid
+    src/best-moments/ The Best Moments screen: queue, compare view, choosing favorites, corrections, unsaved-changes dialog
   shared/          Types and schemas used by more than one process
 tests/unit/        Fast tests of individual functions (Vitest)
 tests/integration/ Catalog and scanning tests against real files and SQLite (Vitest)
-tests/support/     Shared test helpers: generated test photos and the originals-unchanged checks
+tests/support/     Shared test helpers: generated test photos, the originals-unchanged checks, grouping scores
+tests/component/   UI component tests in a simulated browser (React Testing Library)
 scripts/           Helper scripts: the packaged-app smoke test and query-plan measurements
 .github/workflows/ CI: the checks GitHub runs on every pull request
 e2e/               Tests that launch the real app (Playwright)
@@ -83,8 +85,7 @@ The concept images in `docs/planning/` are design references only. The photos in
 
 ## Stack
 
-In use: Electron · React · TypeScript · Vite · Zod · ESLint · Vitest · Playwright · electron-builder · GitHub Actions
+In use: Electron · React · TypeScript · Vite · Zod · ESLint · Vitest · React Testing Library · Playwright · electron-builder · GitHub Actions
 
 In use: SQLite (better-sqlite3) · sharp · exifr (reads the date a photo was taken)
 
-Planned: React Testing Library

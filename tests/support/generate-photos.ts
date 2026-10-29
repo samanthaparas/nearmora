@@ -56,3 +56,36 @@ export async function generatePhotoFolder(root: string): Promise<GeneratedFolder
 
   return { root, expected: { found: 10, indexed: 6, distinctPhotos: 5, unsupported: 2, corrupt: 2 } }
 }
+
+/**
+ * A burst: `count` near-identical shots (the same scene with tiny brightness changes), taken a second apart with
+ * EXIF dates, plus one different photo taken a minute later. Best Moments should group the burst and leave the
+ * other photo out.
+ */
+export async function generateBurstFolder(root: string, count = 3): Promise<{ root: string; burstFiles: string[]; otherFile: string }> {
+  mkdirSync(root, { recursive: true })
+  const scene = await sharp({ create: { width: 320, height: 240, channels: 3, background: '#b8bda6' } })
+    .composite([
+      { input: await sharp({ create: { width: 120, height: 160, channels: 3, background: '#5b414b' } }).png().toBuffer(), left: 40, top: 40 },
+      { input: await sharp({ create: { width: 90, height: 60, channels: 3, background: '#e8b7b0' } }).png().toBuffer(), left: 200, top: 140 },
+    ])
+    .png()
+    .toBuffer()
+  const burstFiles: string[] = []
+  for (let i = 0; i < count; i++) {
+    const name = `burst-${i + 1}.jpg`
+    await sharp(scene)
+      .modulate({ brightness: 1 + i * 0.02 })
+      .jpeg()
+      .withExif({ IFD2: { DateTimeOriginal: `2024:07:20 10:00:0${i}` } })
+      .toFile(join(root, name))
+    burstFiles.push(name)
+  }
+  await sharp(scene)
+    .flop()
+    .negate({ alpha: false })
+    .jpeg()
+    .withExif({ IFD2: { DateTimeOriginal: '2024:07:20 10:01:00' } })
+    .toFile(join(root, 'other.jpg'))
+  return { root, burstFiles, otherFile: 'other.jpg' }
+}

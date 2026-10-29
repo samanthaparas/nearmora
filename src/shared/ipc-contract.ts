@@ -47,6 +47,11 @@ const LibraryItem = z.object({
   /** Only reachable through a disconnected folder: the cached thumbnail shows, the original can't be opened. */
   offline: z.boolean(),
 })
+const reviewStatus = z.enum(['unreviewed', 'deferred', 'reviewed'])
+const revision = z.number().int().nonnegative()
+/** The set changed since the screen loaded it (for example, a scan regrouped it). Nothing was written. */
+const Stale = z.object({ status: z.literal('stale') })
+
 /** Album edits return an undo id: passing it to albums:undo puts the album back as it was before that edit. */
 const UndoResult = z.object({ undoId: z.number().int().positive() })
 
@@ -185,6 +190,68 @@ export const commands = {
   'albums:undo': {
     input: UndoResult,
     output: z.object({ albumId: id }),
+  },
+  // Best Moments (AC3, AC4, AC13). Every change names the revision the screen showed, so stale screens can't overwrite.
+  'sets:list': {
+    input: z.undefined(),
+    output: z.array(
+      z.object({
+        id,
+        reason: z.enum(['exact', 'visual', 'manual']),
+        reviewStatus,
+        revision,
+        photoCount: count,
+        favoriteCount: count,
+        coverAssetId: id,
+        firstCapturedAt: z.number().int().nullable(),
+      }),
+    ),
+  },
+  'sets:get': {
+    input: z.object({ setId: id }),
+    output: z.object({
+      id,
+      reason: z.enum(['exact', 'visual', 'manual']),
+      algorithmVersion: z.string(),
+      reviewStatus,
+      revision,
+      members: z.array(
+        z.object({
+          assetId: id,
+          favorite: z.boolean(),
+          width: z.number().int().nullable(),
+          height: z.number().int().nullable(),
+          capturedAt: z.number().int().nullable(),
+          offline: z.boolean(),
+          addedByYou: z.boolean(),
+        }),
+      ),
+    }),
+  },
+  // Saves favorites and status together. Zero, one or several favorites are all valid.
+  'review:save': {
+    input: z.object({ setId: id, favorites: z.array(id).max(500), status: reviewStatus, expectedRevision: revision }),
+    output: z.discriminatedUnion('status', [z.object({ status: z.literal('saved'), revision, undoId: z.number().int().positive() }), Stale]),
+  },
+  'review:undo': {
+    input: z.object({ undoId: z.number().int().positive() }),
+    output: z.discriminatedUnion('status', [z.object({ status: z.literal('undone'), revision }), Stale]),
+  },
+  'sets:removeMember': {
+    input: z.object({ setId: id, assetId: id, expectedRevision: revision }),
+    output: z.discriminatedUnion('status', [z.object({ status: z.literal('done'), revision, dissolved: z.boolean() }), Stale]),
+  },
+  'sets:addMember': {
+    input: z.object({ setId: id, assetId: id, expectedRevision: revision }),
+    output: z.discriminatedUnion('status', [z.object({ status: z.literal('done'), revision }), Stale]),
+  },
+  'sets:ungroup': {
+    input: z.object({ setId: id, expectedRevision: revision }),
+    output: z.discriminatedUnion('status', [z.object({ status: z.literal('done'), revision }), Stale]),
+  },
+  'sets:nearby': {
+    input: z.object({ setId: id }),
+    output: z.array(z.object({ assetId: id, capturedAt: z.number().int().nullable(), offline: z.boolean() })),
   },
   'albums:photos': {
     input: z.object({ albumId: id, afterPosition: z.number().int().nullable().optional(), limit: z.number().int().min(1).max(500) }),

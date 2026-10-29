@@ -33,6 +33,14 @@ export interface NearmoraApi {
   movePhotoInAlbum(input: CommandInput<'albums:move'>): Promise<IpcResult<CommandOutput<'albums:move'>>>
   undoAlbumEdit(input: CommandInput<'albums:undo'>): Promise<IpcResult<CommandOutput<'albums:undo'>>>
   albumPhotos(input: CommandInput<'albums:photos'>): Promise<IpcResult<CommandOutput<'albums:photos'>>>
+  listSets(): Promise<IpcResult<CommandOutput<'sets:list'>>>
+  getSet(input: CommandInput<'sets:get'>): Promise<IpcResult<CommandOutput<'sets:get'>>>
+  saveReview(input: CommandInput<'review:save'>): Promise<IpcResult<CommandOutput<'review:save'>>>
+  undoReview(input: CommandInput<'review:undo'>): Promise<IpcResult<CommandOutput<'review:undo'>>>
+  removeFromSet(input: CommandInput<'sets:removeMember'>): Promise<IpcResult<CommandOutput<'sets:removeMember'>>>
+  addToSet(input: CommandInput<'sets:addMember'>): Promise<IpcResult<CommandOutput<'sets:addMember'>>>
+  ungroupSet(input: CommandInput<'sets:ungroup'>): Promise<IpcResult<CommandOutput<'sets:ungroup'>>>
+  nearbyPhotos(input: CommandInput<'sets:nearby'>): Promise<IpcResult<CommandOutput<'sets:nearby'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */
   onEvent(listener: (event: MainEvent) => void): () => void
 }

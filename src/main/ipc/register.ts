@@ -7,6 +7,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { commands, type CommandName } from '@shared/ipc-contract'
 import { channelFor } from '@shared/ipc-channels'
 import type { Catalog } from '../catalog/database'
+import { CatalogError } from '../catalog/errors'
 import {
   addToAlbum,
   deleteAlbumWithUndo,
@@ -18,6 +19,9 @@ import {
 import { createAlbum, listAlbums } from '../catalog/repositories/albums'
 import { queryAlbumPhotos, queryLibrary } from '../catalog/repositories/library'
 import { listMoments, updateMoment } from '../catalog/repositories/moments'
+import { saveReview, undoReview } from '../catalog/repositories/review'
+import { addToSet, nearbyPhotos, removeFromSet, ungroupSet } from '../catalog/repositories/set-edits'
+import { getSetDetail, listSets } from '../catalog/repositories/sets'
 import type { LibraryService } from '../library/library-service'
 import { createRouter, type Handlers } from './router'
 
@@ -67,7 +71,25 @@ export function createHandlers({ db, library }: HandlerContext): Handlers {
     'albums:removePhoto': ({ albumId, assetId }) => removeFromAlbum(db, albumId, assetId),
     'albums:move': ({ albumId, assetId, toIndex }) => moveInAlbum(db, albumId, assetId, toIndex),
     'albums:undo': ({ undoId }) => undoAlbumEdit(db, undoId),
+    'sets:list': () => listSets(db),
+    'sets:get': ({ setId }) => getSetDetail(db, setId),
+    'review:save': (input) => unlessStale(() => ({ status: 'saved' as const, ...saveReview(db, input) })),
+    'review:undo': ({ undoId }) => unlessStale(() => ({ status: 'undone' as const, ...undoReview(db, undoId) })),
+    'sets:removeMember': (input) => unlessStale(() => ({ status: 'done' as const, ...removeFromSet(db, input) })),
+    'sets:addMember': (input) => unlessStale(() => ({ status: 'done' as const, ...addToSet(db, input) })),
+    'sets:ungroup': (input) => unlessStale(() => ({ status: 'done' as const, ...ungroupSet(db, input) })),
+    'sets:nearby': ({ setId }) => nearbyPhotos(db, setId),
     'albums:photos': ({ albumId, afterPosition, limit }) => queryAlbumPhotos(db, { albumId, afterPosition: afterPosition ?? null, limit }),
+  }
+}
+
+// A stale revision is an expected outcome the UI handles (reload and keep the draft), not an error.
+function unlessStale<T>(run: () => T): T | { status: 'stale' } {
+  try {
+    return run()
+  } catch (error: unknown) {
+    if (error instanceof CatalogError && error.code === 'STALE_REVISION') return { status: 'stale' }
+    throw error
   }
 }
 
