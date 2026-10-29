@@ -1,11 +1,14 @@
 /**
  * A built-in diagnostic, run with `--self-test`, that proves the native libraries load and work inside this exact build.
  * It's how CI checks a packaged app, since packaged apps (correctly) block test tools from attaching.
- * It touches no user files and no network: an in-memory database and a generated image only.
+ * It touches no user files and no network: in-memory databases and a generated image only.
  */
 
 import Database from 'better-sqlite3'
 import sharp from 'sharp'
+import { IN_MEMORY, openCatalog } from './catalog/database'
+import { MIGRATIONS } from './catalog/migrations'
+import { latestVersion, readSchemaVersion } from './catalog/migrate'
 
 export const SELF_TEST_FLAG = '--self-test'
 /** Prefix on the single output line, so the smoke test can find it among Electron's own logging. */
@@ -16,6 +19,7 @@ export interface SelfTestReport {
   electron: string | undefined
   sqlite: { ok: boolean; version?: string; error?: string }
   sharp: { ok: boolean; libvips?: string; error?: string }
+  catalog: { ok: boolean; schemaVersion?: number; error?: string }
 }
 
 // Exercises the SQLite features later milestones depend on: foreign keys, transactions and joins.
@@ -48,6 +52,18 @@ function checkSqlite(): SelfTestReport['sqlite'] {
     const { version } = db.prepare('SELECT sqlite_version() AS version').get() as { version: string }
     const ok = row?.name === 'fixture' && row.count === 2 && fkEnforced
     return ok ? { ok, version } : { ok, version, error: 'unexpected query result' }
+  } finally {
+    db.close()
+  }
+}
+
+// Runs the real migrations on an in-memory catalog, proving the bundled schema ships and applies in this build.
+async function checkCatalog(): Promise<SelfTestReport['catalog']> {
+  const db = await openCatalog(IN_MEMORY)
+  try {
+    const schemaVersion = readSchemaVersion(db)
+    const ok = schemaVersion === latestVersion(MIGRATIONS) && schemaVersion > 0
+    return ok ? { ok, schemaVersion } : { ok, schemaVersion, error: 'catalog not at the latest schema' }
   } finally {
     db.close()
   }
@@ -88,10 +104,18 @@ export async function runSelfTest(): Promise<SelfTestReport> {
     sharpResult = { ok: false, error: describeError(error) }
   }
 
+  let catalogResult: SelfTestReport['catalog']
+  try {
+    catalogResult = await checkCatalog()
+  } catch (error: unknown) {
+    catalogResult = { ok: false, error: describeError(error) }
+  }
+
   return {
-    ok: sqliteResult.ok && sharpResult.ok,
+    ok: sqliteResult.ok && sharpResult.ok && catalogResult.ok,
     electron: process.versions.electron,
     sqlite: sqliteResult,
     sharp: sharpResult,
+    catalog: catalogResult,
   }
 }

@@ -51,6 +51,7 @@ const report = line ? JSON.parse(line.slice(MARKER.length)) : undefined
 check('self-test exits 0', selfTest.code === 0, `code ${selfTest.code}`)
 check('SQLite works in the package', report?.sqlite?.ok === true, report?.sqlite?.version ?? report?.sqlite?.error)
 check('sharp works in the package', report?.sharp?.ok === true, report?.sharp?.libvips ?? report?.sharp?.error)
+check('catalog migrations apply in the package', report?.catalog?.ok === true, report?.catalog?.schemaVersion ? `schema v${report.catalog.schemaVersion}` : report?.catalog?.error)
 
 // 2. Security fuses are set as electron-builder.yml asks.
 const wire = await getCurrentFuseWire(BINARY)
