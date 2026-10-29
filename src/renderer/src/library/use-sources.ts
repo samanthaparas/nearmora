@@ -41,6 +41,7 @@ export function useSources(onChange?: () => void): SourcesState {
     void refresh()
     let lastRefresh = 0
     const unsubscribe = window.nearmora.onEvent((event: MainEvent) => {
+      if (event.type !== 'scan') return
       setProgress((current) => ({ ...current, [event.sourceId]: event.counts }))
       const now = Date.now()
       if (event.state !== 'running' || now - lastRefresh > 1000) {

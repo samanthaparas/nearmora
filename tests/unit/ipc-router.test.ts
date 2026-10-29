@@ -55,6 +55,9 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     },
     'projects:setCrop': () => ({ saved: true }),
     'projects:delete': () => ({ deleted: true }),
+    'export:start': () => ({ status: 'cancelled' }),
+    'export:cancel': () => ({ cancelled: false }),
+    'export:reveal': () => ({ shown: false }),
     ...overrides,
   }
   const logError = vi.fn()

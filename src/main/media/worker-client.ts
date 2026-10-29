@@ -6,11 +6,14 @@
 import { join } from 'node:path'
 import { utilityProcess, type UtilityProcess } from 'electron'
 import type { PreviewRequest, ProcessImageRequest, ProcessImageResult } from './process-image'
+import type { RenderRequest, RenderResult } from './render-export'
 
 const TIMEOUT_MS = 30_000
+/** Rendering an export decodes up to four full-size originals, so it gets longer. */
+const RENDER_TIMEOUT_MS = 120_000
 
 interface Pending {
-  resolve: (result: ProcessImageResult | { ok: boolean }) => void
+  resolve: (result: ProcessImageResult | RenderResult | { ok: boolean }) => void
   timer: NodeJS.Timeout
 }
 
@@ -23,7 +26,7 @@ export class MediaWorker {
   private ensureChild(): UtilityProcess {
     if (this.child) return this.child
     const child = utilityProcess.fork(join(__dirname, 'media-worker.js'), [], { serviceName: 'Nearmora Media Worker' })
-    child.on('message', (message: { id: number; result: ProcessImageResult | { ok: boolean } }) => {
+    child.on('message', (message: { id: number; result: ProcessImageResult | RenderResult | { ok: boolean } }) => {
       const entry = this.pending.get(message.id)
       if (!entry) return
       clearTimeout(entry.timer)
@@ -56,7 +59,21 @@ export class MediaWorker {
     return this.send('preview', request)
   }
 
-  private send(kind: 'process' | 'preview', request: ProcessImageRequest | PreviewRequest): Promise<ProcessImageResult | { ok: boolean }> {
+  /** Renders one export file. Resolves { ok: false, reason: 'failed' } if the worker crashes or times out. */
+  render(request: RenderRequest): Promise<RenderResult> {
+    return this.send('render', request, RENDER_TIMEOUT_MS).then((result): RenderResult => {
+      if (result.ok) return { ok: true }
+      // A timeout or crash arrives as the generic 'corrupt'; only the renderer's own reasons are passed through.
+      const reason = 'reason' in result ? result.reason : 'failed'
+      return { ok: false, reason: reason === 'disk_full' || reason === 'unreadable' ? reason : 'failed' }
+    })
+  }
+
+  private send(
+    kind: 'process' | 'preview' | 'render',
+    request: ProcessImageRequest | PreviewRequest | RenderRequest,
+    timeoutMs = TIMEOUT_MS,
+  ): Promise<ProcessImageResult | RenderResult | { ok: boolean }> {
     const child = this.ensureChild()
     const id = this.nextId++
     return new Promise((resolve) => {
@@ -65,7 +82,7 @@ export class MediaWorker {
         this.pending.delete(id)
         resolve({ ok: false, reason: 'corrupt' })
         child.kill()
-      }, TIMEOUT_MS)
+      }, timeoutMs)
       this.pending.set(id, { resolve, timer })
       child.postMessage({ id, kind, request })
     })

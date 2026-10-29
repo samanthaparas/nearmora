@@ -47,6 +47,9 @@ const api: NearmoraApi = {
   reorderProject: (input) => ipcRenderer.invoke(channelFor('projects:reorder'), input),
   setProjectCrop: (input) => ipcRenderer.invoke(channelFor('projects:setCrop'), input),
   deleteProject: (input) => ipcRenderer.invoke(channelFor('projects:delete'), input),
+  startExport: (input) => ipcRenderer.invoke(channelFor('export:start'), input),
+  cancelExport: (input) => ipcRenderer.invoke(channelFor('export:cancel'), input),
+  revealExport: (input) => ipcRenderer.invoke(channelFor('export:reveal'), input),
   // The listener gets only the event data, never Electron's event object (which carries `sender`).
   onEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: MainEvent) => listener(payload)

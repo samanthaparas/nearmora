@@ -303,6 +303,22 @@ export const commands = {
   'projects:reorder': { input: z.object({ projectId: id, assetIds: z.array(id).min(2).max(10) }), output: ProjectDetail },
   'projects:setCrop': { input: z.object({ projectId: id, position: count, crop }), output: z.object({ saved: z.literal(true) }) },
   'projects:delete': { input: z.object({ projectId: id }), output: z.object({ deleted: z.literal(true) }) },
+  // Export (AC7, AC8). Main opens the destination picker; nothing is written until every check passes.
+  'export:start': {
+    input: z.object({ projectId: id }),
+    output: z.discriminatedUnion('status', [
+      z.object({ status: z.literal('started'), jobId: id, fileCount: count }),
+      z.object({ status: z.literal('cancelled') }),
+      z.object({
+        status: z.literal('refused'),
+        reason: z.enum(['unavailable', 'changed', 'inside_source', 'app_data', 'unwritable']),
+        files: z.array(z.string()).optional(),
+      }),
+    ]),
+  },
+  'export:cancel': { input: z.object({ jobId: id }), output: z.object({ cancelled: z.boolean() }) },
+  // Opens Finder at a finished export's folder. Only folders this app just exported can be shown.
+  'export:reveal': { input: z.object({ jobId: id }), output: z.object({ shown: z.boolean() }) },
   'albums:photos': {
     input: z.object({ albumId: id, afterPosition: z.number().int().nullable().optional(), limit: z.number().int().min(1).max(500) }),
     output: z.object({ items: z.array(LibraryItem), total: count, nextAfter: z.number().int().nullable() }),
@@ -317,13 +333,25 @@ export type CommandOutput<C extends CommandName> = z.output<Commands[C]['output'
 /** Error codes are deliberately coarse: no messages, paths or stack traces cross the bridge. */
 export type IpcErrorCode = 'UNTRUSTED_SENDER' | 'UNKNOWN_COMMAND' | 'INVALID_INPUT' | 'INTERNAL'
 
-/** Messages main pushes to the UI on one channel. Only scan progress for now. */
-export type MainEvent = {
-  type: 'scan'
-  sourceId: string
-  state: 'running' | 'done' | 'paused' | 'cancelled' | 'failed'
-  counts: ScanCounts
-}
+/** Messages main pushes to the UI on one channel: scan progress and export progress. */
+export type MainEvent =
+  | {
+      type: 'scan'
+      sourceId: string
+      state: 'running' | 'done' | 'paused' | 'cancelled' | 'failed'
+      counts: ScanCounts
+    }
+  | {
+      type: 'export'
+      jobId: string
+      projectId: string
+      state: 'running' | 'done' | 'cancelled' | 'failed'
+      done: number
+      total: number
+      /** The finished folder's name (not its path), when done. */
+      folderName?: string
+      reason?: 'disk_full' | 'unreadable' | 'failed' | 'verify_failed'
+    }
 
 /** A discriminated union: check `ok` and TypeScript narrows to `data` or `error`. */
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: IpcErrorCode } }

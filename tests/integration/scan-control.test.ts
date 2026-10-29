@@ -4,7 +4,6 @@
  * reconnecting only the same folder, and removing a folder after reviewing the impact.
  */
 
-import { execFileSync } from 'node:child_process'
 import { chmodSync, cpSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
@@ -19,6 +18,7 @@ import { getSource } from '../../src/main/catalog/repositories/sources'
 import { createLibraryService } from '../../src/main/library/library-service'
 import { lastScan, markInterruptedScansPaused } from '../../src/main/library/scan'
 import { processImage, type ProcessImageRequest } from '../../src/main/media/process-image'
+import { createDiskImage } from '../support/disk-image'
 import { generatePhotoFolder } from '../support/generate-photos'
 import { fingerprintFolder } from '../support/originals-guard'
 import { openTestCatalog, tempDir, tempProfile } from './helpers'
@@ -47,7 +47,7 @@ async function setup(options: { folder?: string; processImage?: Processor } = {}
   // Resolves with the end state of the current scan (anything but 'running').
   const scanEnd = async (): Promise<MainEvent['state']> => {
     for (;;) {
-      const done = events.find((e) => e.sourceId === sourceId && e.state !== 'running')
+      const done = events.find((e) => e.type === 'scan' && e.sourceId === sourceId && e.state !== 'running')
       if (done) {
         events.splice(0)
         return done.state
@@ -150,13 +150,8 @@ describe('disconnected folders', () => {
 // Unplugging a real volume mid-scan. Uses a small disk image the test creates, mounts and force-ejects itself.
 describe.skipIf(process.platform !== 'darwin')('unplugging a drive mid-scan (AC5)', () => {
   it('ends as failed and disconnected, never "done", marks nothing missing, and recovers after reconnecting', async () => {
-    const work = tempDir()
-    const image = join(work, 'drive.dmg')
-    const mount = join(work, 'mnt')
-    mkdirSync(mount)
-    execFileSync('hdiutil', ['create', '-size', '16m', '-fs', 'HFS+', '-volname', 'NearmoraTest', image], { stdio: 'ignore' })
-    const attach = () => execFileSync('hdiutil', ['attach', image, '-nobrowse', '-mountpoint', mount], { stdio: 'ignore' })
-    const eject = () => execFileSync('hdiutil', ['detach', mount, '-force'], { stdio: 'ignore' })
+    const disk = createDiskImage(tempDir(), 16, 'NearmoraTest')
+    const { mount, attach } = disk
     attach()
     try {
       const folder = await generatePhotoFolder(join(mount, 'Photos'))
@@ -171,7 +166,7 @@ describe.skipIf(process.platform !== 'darwin')('unplugging a drive mid-scan (AC5
       env.setProcessor(async (request) => {
         if (!ejected) {
           ejected = true
-          eject()
+          await disk.eject()
         }
         return processImage(request)
       })
@@ -190,7 +185,7 @@ describe.skipIf(process.platform !== 'darwin')('unplugging a drive mid-scan (AC5
       expect(fingerprintFolder(folder.root)).toEqual(before)
     } finally {
       try {
-        eject()
+        await disk.eject()
       } catch {
         // already ejected
       }
