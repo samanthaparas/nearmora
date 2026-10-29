@@ -19,7 +19,7 @@ Labels: [auto] automated · [int] real SQLite files on disk · [pkg] packaged ap
 | Migrations ship inside the packaged app | `--self-test` applies them to an in-memory catalog: schema v1 | [pkg] |
 | Key query plans use their indexes | `tests/integration/query-plans.test.ts` fails if an index stops being used | [int] |
 | Tests can actually fail | Control runs: with foreign keys turned off, 6 tests failed; with the review-save transaction removed, the partial-failure test failed | [int] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+| Passes on GitHub's macOS runner | Passed on PR #4, [run 40792199559](https://github.com/samanthaparas/nearmora/actions/runs/40792199559) (2026-10-29): every step succeeded, 75 unit and integration tests, 11 E2E tests and all packaged checks, including the catalog migrations | [ci] |
 
 Totals: 33 unit tests and 42 integration tests pass, plus 11 E2E tests and 18 packaged checks.
 
