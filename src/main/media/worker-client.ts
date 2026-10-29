@@ -5,12 +5,12 @@
 
 import { join } from 'node:path'
 import { utilityProcess, type UtilityProcess } from 'electron'
-import type { ProcessImageRequest, ProcessImageResult } from './process-image'
+import type { PreviewRequest, ProcessImageRequest, ProcessImageResult } from './process-image'
 
 const TIMEOUT_MS = 30_000
 
 interface Pending {
-  resolve: (result: ProcessImageResult) => void
+  resolve: (result: ProcessImageResult | { ok: boolean }) => void
   timer: NodeJS.Timeout
 }
 
@@ -23,7 +23,7 @@ export class MediaWorker {
   private ensureChild(): UtilityProcess {
     if (this.child) return this.child
     const child = utilityProcess.fork(join(__dirname, 'media-worker.js'), [], { serviceName: 'Nearmora Media Worker' })
-    child.on('message', (message: { id: number; result: ProcessImageResult }) => {
+    child.on('message', (message: { id: number; result: ProcessImageResult | { ok: boolean } }) => {
       const entry = this.pending.get(message.id)
       if (!entry) return
       clearTimeout(entry.timer)
@@ -48,6 +48,15 @@ export class MediaWorker {
   }
 
   process(request: ProcessImageRequest): Promise<ProcessImageResult> {
+    return this.send('process', request) as Promise<ProcessImageResult>
+  }
+
+  /** Makes a larger preview for comparing photos. Resolves { ok: false } on any failure, including a timeout. */
+  preview(request: PreviewRequest): Promise<{ ok: boolean }> {
+    return this.send('preview', request)
+  }
+
+  private send(kind: 'process' | 'preview', request: ProcessImageRequest | PreviewRequest): Promise<ProcessImageResult | { ok: boolean }> {
     const child = this.ensureChild()
     const id = this.nextId++
     return new Promise((resolve) => {
@@ -58,7 +67,7 @@ export class MediaWorker {
         child.kill()
       }, TIMEOUT_MS)
       this.pending.set(id, { resolve, timer })
-      child.postMessage({ id, request })
+      child.postMessage({ id, kind, request })
     })
   }
 

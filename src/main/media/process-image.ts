@@ -87,3 +87,32 @@ export async function processImage({ sourcePath, thumbnailPath }: ProcessImageRe
     return { ok: false, reason: 'corrupt' }
   }
 }
+
+export const PREVIEW_SIZE = 2048
+
+export interface PreviewRequest {
+  /** The original photo. Opened read-only. */
+  sourcePath: string
+  /** Where to write the preview, inside the app's cache folder. */
+  previewPath: string
+}
+
+/**
+ * A larger, upright copy for comparing photos side by side (thumbnails are too small to judge sharpness).
+ * Made on first request and cached; like thumbnails, written to a temporary name and then renamed.
+ */
+export async function makePreview({ sourcePath, previewPath }: PreviewRequest): Promise<{ ok: boolean }> {
+  const partial = `${previewPath}.partial`
+  try {
+    await open(sourcePath)
+      .rotate()
+      .resize(PREVIEW_SIZE, PREVIEW_SIZE, { fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toFile(partial)
+    renameSync(partial, previewPath)
+    return { ok: true }
+  } catch {
+    rmSync(partial, { force: true })
+    return { ok: false }
+  }
+}

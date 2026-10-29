@@ -14,11 +14,12 @@ import { CatalogError, MigrationError } from './catalog/errors'
 import { createHandlers, registerIpc } from './ipc/register'
 import { createLibraryService } from './library/library-service'
 import { markInterruptedScansPaused } from './library/scan'
+import { createPreviewResolver } from './library/previews'
 import { thumbnailPathForAsset } from './library/thumbnails'
 import { MediaWorker } from './media/worker-client'
 import { runSelfTest, SELF_TEST_FLAG, SELF_TEST_MARKER } from './self-test'
 import { registerPrivilegedSchemes, serveRendererFromAppScheme } from './security/app-protocol'
-import { serveThumbnails } from './security/media-protocol'
+import { serveMedia } from './security/media-protocol'
 import { applyDevelopmentCsp, denyAllPermissions, hardenAllWebContents } from './security/harden'
 import { APP_ENTRY_URL, APP_ORIGIN, isTrustedRendererUrl } from './security/policy'
 
@@ -140,7 +141,10 @@ function startApp(): void {
     })
 
     serveRendererFromAppScheme(join(__dirname, '../renderer'))
-    serveThumbnails((assetId) => thumbnailPathForAsset(db, paths.thumbnailsDir, assetId))
+    serveMedia({
+      thumbnail: (assetId) => thumbnailPathForAsset(db, paths.thumbnailsDir, assetId),
+      preview: createPreviewResolver({ db, previewsDir: join(paths.appDataDir, 'previews'), makePreview: (request) => worker.preview(request) }),
+    })
     registerIpc(createHandlers({ db, library }), (url) => isTrustedRendererUrl(url, trustedOrigins))
 
     createMainWindow()

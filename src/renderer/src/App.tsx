@@ -1,11 +1,13 @@
 /**
  * The app shell: sidebar navigation plus the main content area.
- * The Library and Sources screens are real; other sections say they aren't built yet.
+ * Library, Best Moments and Sources are real; other sections say they aren't built yet.
  */
 
 import { useEffect, useState } from 'react'
 import { Library } from './library/Library'
 import { Sources } from './library/Sources'
+import { BestMoments } from './best-moments/BestMoments'
+import { navigate } from './navigation-guard'
 import './App.css'
 
 // The five main sections, in the order the blueprint specifies. Settings sits apart at the bottom.
@@ -76,7 +78,7 @@ export function App() {
               type="button"
               className="sidebar__item"
               aria-current={section === name ? 'page' : undefined}
-              onClick={() => setSection(name)}
+              onClick={() => navigate(() => setSection(name))}
             >
               {name}
             </button>
@@ -88,7 +90,7 @@ export function App() {
             type="button"
             className="sidebar__item"
             aria-current={section === 'Settings' ? 'page' : undefined}
-            onClick={() => setSection('Settings')}
+            onClick={() => navigate(() => setSection('Settings'))}
           >
             Settings
           </button>
@@ -98,7 +100,7 @@ export function App() {
       </aside>
 
       <main id="main" className="content" tabIndex={-1}>
-        {section === 'Library' ? <Library /> : section === 'Sources' ? <Sources /> : <NotBuiltYet section={section} />}
+        {section === 'Library' ? <Library /> : section === 'Sources' ? <Sources /> : section === 'Best Moments' ? <BestMoments /> : <NotBuiltYet section={section} />}
       </main>
     </div>
   )

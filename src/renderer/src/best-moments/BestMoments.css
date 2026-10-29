@@ -1,0 +1,146 @@
+/*
+ * Styles for Best Moments: the side-by-side compare view, the strip of the set's photos, the review actions,
+ * and the unsaved-changes dialog. Colours and spacing come from the design tokens.
+ */
+
+.moments__list--wrap {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+.compare__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nm-space-1) var(--nm-space-3);
+  margin-bottom: var(--nm-space-1);
+}
+
+/* Two photos side by side; each frame clips its zoomed image. */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--nm-space-2);
+}
+
+.compare--narrow {
+  grid-template-columns: 1fr;
+}
+
+.compare__panel {
+  margin: 0;
+}
+
+.compare__frame {
+  position: relative;
+  height: min(60vh, 560px);
+  overflow: hidden;
+  border-radius: var(--nm-radius-card);
+  background: var(--nm-border-subtle);
+  touch-action: none;
+}
+
+.compare__image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: center;
+  user-select: none;
+}
+
+.compare__caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nm-space-1);
+  margin-top: var(--nm-space-1);
+}
+
+/* The set's photos: small buttons in a scrolling row; the pressed ones are on show as A or B. */
+.strip {
+  display: flex;
+  gap: var(--nm-space-1);
+  margin: var(--nm-space-2) 0;
+  padding: 0 0 var(--nm-space-1);
+  overflow-x: auto;
+  list-style: none;
+}
+
+.strip__item {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-border-subtle);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.strip__item[aria-pressed='true'] {
+  border-color: var(--nm-plum);
+}
+
+.strip__item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.strip__label {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--nm-cream);
+  color: var(--nm-plum);
+  font-size: var(--nm-text-small);
+  font-weight: 600;
+}
+
+.strip__label:empty {
+  display: none;
+}
+
+.review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nm-space-2);
+  margin-bottom: var(--nm-space-2);
+}
+
+.review__note {
+  color: var(--nm-text-muted);
+  font-size: var(--nm-text-small);
+}
+
+.review__corrections {
+  margin-bottom: var(--nm-space-2);
+}
+
+/* The unsaved-changes dialog: a dimmed page behind a raised card. */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--nm-plum) 40%, transparent);
+  z-index: 10;
+}
+
+.dialog {
+  max-width: 30rem;
+  padding: var(--nm-space-4);
+  border-radius: var(--nm-radius-card);
+  background: var(--nm-surface-raised);
+  color: var(--nm-text);
+}
+
+.dialog__title {
+  margin: 0 0 var(--nm-space-1);
+  font-size: var(--nm-text-h2);
+}

@@ -32,6 +32,14 @@ const api: NearmoraApi = {
   movePhotoInAlbum: (input) => ipcRenderer.invoke(channelFor('albums:move'), input),
   undoAlbumEdit: (input) => ipcRenderer.invoke(channelFor('albums:undo'), input),
   albumPhotos: (input) => ipcRenderer.invoke(channelFor('albums:photos'), input),
+  listSets: () => ipcRenderer.invoke(channelFor('sets:list')),
+  getSet: (input) => ipcRenderer.invoke(channelFor('sets:get'), input),
+  saveReview: (input) => ipcRenderer.invoke(channelFor('review:save'), input),
+  undoReview: (input) => ipcRenderer.invoke(channelFor('review:undo'), input),
+  removeFromSet: (input) => ipcRenderer.invoke(channelFor('sets:removeMember'), input),
+  addToSet: (input) => ipcRenderer.invoke(channelFor('sets:addMember'), input),
+  ungroupSet: (input) => ipcRenderer.invoke(channelFor('sets:ungroup'), input),
+  nearbyPhotos: (input) => ipcRenderer.invoke(channelFor('sets:nearby'), input),
   // The listener gets only the event data, never Electron's event object (which carries `sender`).
   onEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: MainEvent) => listener(payload)

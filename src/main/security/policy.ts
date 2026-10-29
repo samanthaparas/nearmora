@@ -46,19 +46,26 @@ export function contentSecurityPolicy(mode: 'production' | 'development'): strin
 const ASSET_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
- * Reads a thumbnail URL (nm-media://thumb/<asset id>) and returns the asset id, or null for anything else.
- * Only a bare id is accepted, so a URL can never smuggle in a path, query or extra segment.
+ * Reads a media URL (nm-media://thumb/<asset id> or nm-media://preview/<asset id>) and returns its kind and asset id,
+ * or null for anything else. Only a bare id is accepted, so a URL can never smuggle in a path, query or extra segment.
  */
-export function parseThumbnailUrl(url: string): string | null {
+export function parseMediaUrl(url: string): { kind: 'thumb' | 'preview'; assetId: string } | null {
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
     return null
   }
-  if (parsed.protocol !== `${MEDIA_SCHEME}:` || parsed.host !== 'thumb' || parsed.search || parsed.hash) return null
+  if (parsed.protocol !== `${MEDIA_SCHEME}:` || parsed.search || parsed.hash) return null
+  if (parsed.host !== 'thumb' && parsed.host !== 'preview') return null
   const id = parsed.pathname.slice(1)
-  return ASSET_ID.test(id) ? id : null
+  return ASSET_ID.test(id) ? { kind: parsed.host, assetId: id } : null
+}
+
+/** Thumbnail URLs only; see parseMediaUrl. */
+export function parseThumbnailUrl(url: string): string | null {
+  const media = parseMediaUrl(url)
+  return media?.kind === 'thumb' ? media.assetId : null
 }
 
 /**

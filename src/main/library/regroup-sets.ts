@@ -21,6 +21,8 @@ export interface RegroupSummary {
   removed: number
   /** Kept sets that gained photos since they were reviewed, and so need another look. */
   reopened: number
+  /** Sets the person split up (fewer than two photos left in them): kept hidden, so the split sticks. */
+  dissolved: number
 }
 
 export function regroupSimilaritySets(db: Catalog, params: SimilarityParams = SIMILARITY_CURRENT): RegroupSummary {
@@ -37,7 +39,8 @@ export function regroupSimilaritySets(db: Catalog, params: SimilarityParams = SI
       .all() as OldMember[]
     const membersOf = new Map<string, OldMember[]>()
     for (const m of members) membersOf.set(m.set_id, [...(membersOf.get(m.set_id) ?? []), m])
-    const setOfAsset = new Map(members.filter((m) => m.user_override !== 'removed').map((m) => [m.asset_id, m.set_id]))
+    // Photos the person removed still count for matching, so a group they split up finds its old set (and its overrides).
+    const setOfAsset = new Map(members.map((m) => [m.asset_id, m.set_id]))
 
     // Overlap between each new group and the old sets its photos were in; then greedy one-to-one matching.
     const candidates: Array<{ group: number; setId: string; overlap: number }> = []
@@ -62,7 +65,7 @@ export function regroupSimilaritySets(db: Catalog, params: SimilarityParams = SI
     const clearMembers = db.prepare('DELETE FROM set_asset WHERE set_id = ?')
     const insertMember = db.prepare('INSERT INTO set_asset (set_id, asset_id, position, user_override) VALUES (?, ?, ?, ?)')
     const deleteSet = db.prepare('DELETE FROM similarity_set WHERE id = ?')
-    const summary: RegroupSummary = { sets: 0, created: 0, kept: 0, removed: 0, reopened: 0 }
+    const summary: RegroupSummary = { sets: 0, created: 0, kept: 0, removed: 0, reopened: 0, dissolved: 0 }
 
     groups.forEach((group, index) => {
       const setId = matchFor.get(index)
@@ -81,11 +84,6 @@ export function regroupSimilaritySets(db: Catalog, params: SimilarityParams = SI
       const added = old.filter((m) => m.user_override === 'added').map((m) => m.asset_id)
       const previous = new Set(old.filter((m) => m.user_override !== 'removed').map((m) => m.asset_id))
       const shown = [...new Set([...group.filter((id) => !removed.has(id)), ...added])]
-      if (shown.length < 2) {
-        deleteSet.run(setId)
-        summary.removed++
-        return
-      }
 
       const changed = shown.length !== previous.size || shown.some((id) => !previous.has(id))
       const gainedPhotos = shown.some((id) => !previous.has(id))
@@ -104,6 +102,11 @@ export function regroupSimilaritySets(db: Catalog, params: SimilarityParams = SI
           `UPDATE similarity_set SET revision = revision + 1${reopen ? ", review_status = 'unreviewed'" : ''} WHERE id = ?`,
         ).run(setId)
         if (reopen) summary.reopened++
+      }
+      // Fewer than two photos left after the person's corrections: the set stays dissolved (hidden, not deleted).
+      if (shown.length < 2) {
+        summary.dissolved++
+        return
       }
       summary.kept++
       summary.sets++
