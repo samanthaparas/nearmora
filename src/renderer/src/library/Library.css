@@ -307,3 +307,19 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Settings: a simple term-and-description list. */
+.settings__list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--nm-space-1) var(--nm-space-3);
+  margin: 0 0 var(--nm-space-2);
+}
+
+.settings__list dt {
+  font-weight: 600;
+}
+
+.settings__list dd {
+  margin: 0;
+}

@@ -56,6 +56,20 @@ function createMainWindow(): BrowserWindow {
     },
   })
 
+  // A page with unsaved work (Best Moments picks) blocks unloading; ask before quitting or closing anyway.
+  // "Keep reviewing" is the default and the Escape choice, so nothing is lost by habit.
+  window.webContents.on('will-prevent-unload', (event) => {
+    const choice = dialog.showMessageBoxSync(window, {
+      type: 'question',
+      message: 'Quit without saving your choices?',
+      detail: 'You picked favorites in Best Moments but haven’t saved them.',
+      buttons: ['Keep reviewing', 'Quit without saving'],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    if (choice === 1) event.preventDefault() // preventDefault here means "ignore the page's objection and close"
+  })
+
   // Show the window only once it has painted, so the user never sees a blank flash.
   window.once('ready-to-show', () => window.show())
   void window.loadURL(devServerUrl ?? APP_ENTRY_URL)
@@ -153,12 +167,13 @@ function startApp(): void {
       worker.stop()
     })
 
+    const previewsDir = join(paths.appDataDir, 'previews')
     serveRendererFromAppScheme(join(__dirname, '../renderer'))
     serveMedia({
       thumbnail: (assetId) => thumbnailPathForAsset(db, paths.thumbnailsDir, assetId),
-      preview: createPreviewResolver({ db, previewsDir: join(paths.appDataDir, 'previews'), makePreview: (request) => worker.preview(request) }),
+      preview: createPreviewResolver({ db, previewsDir, makePreview: (request) => worker.preview(request) }),
     })
-    registerIpc(createHandlers({ db, library, exports }), (url) => isTrustedRendererUrl(url, trustedOrigins))
+    registerIpc(createHandlers({ db, library, exports, paths: { catalogFile: paths.catalogFile, thumbnailsDir: paths.thumbnailsDir, previewsDir } }), (url) => isTrustedRendererUrl(url, trustedOrigins))
 
     createMainWindow()
 

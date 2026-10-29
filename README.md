@@ -8,7 +8,7 @@ Nearmora is a local-first macOS desktop app for finding your favorite photos, ch
 
 ## Status
 
-R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done, R4 (Best Moments) and R5 (Memory Studio and export) are done: every feature milestone of the MVP. Next is R6, beta hardening. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. Best Moments groups photos that look alike and were taken moments apart, so you can compare two side by side (with zoom), pick zero, one or several favorites, save with undo or decide later, and fix sets that grouped the wrong photos. Leaving with unsaved picks always asks first. Favorites gathers your picks, and Memory Studio turns 2 or 4 of them into a collage, or 2–10 into a carousel: reorder, crop and zoom by mouse or keyboard, with every change saved. Export writes 1080-pixel JPEGs (full-resolution colour, no location or camera data) into a fresh folder you choose: checked first, never overwriting, and never leaving a half-finished set behind. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done, R4 (Best Moments) and R5 (Memory Studio and export) are done: every feature milestone of the MVP. R6 part 1 (beta hardening) is in: a quit prompt for unsaved picks, a Settings screen with cache controls, automated network-off and accessibility checks, and measured performance. Signing and notarization (R6 part 2) need an Apple Developer account. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. Best Moments groups photos that look alike and were taken moments apart, so you can compare two side by side (with zoom), pick zero, one or several favorites, save with undo or decide later, and fix sets that grouped the wrong photos. Leaving with unsaved picks always asks first. Favorites gathers your picks, and Memory Studio turns 2 or 4 of them into a collage, or 2–10 into a carousel: reorder, crop and zoom by mouse or keyboard, with every change saved. Export writes 1080-pixel JPEGs (full-resolution colour, no location or camera data) into a fresh folder you choose: checked first, never overwriting, and never leaving a half-finished set behind. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
 
 ## Commands
 
@@ -22,7 +22,8 @@ R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (
 | `npm run test:e2e` | Builds the app, then launches it with a throwaway profile and runs the security and Library tests inside it |
 | `npm run lint` | Checks code for likely mistakes (ESLint, including type-aware rules) |
 | `npm run package:mac` | Builds an unsigned `Nearmora.app` into `release/` |
-| `npm run test:packaged` | Checks the packaged app: native libraries, catalog migrations, security fuses, launch, and shipped files |
+| `npm run test:packaged` | Checks the packaged app: native libraries, catalog migrations, the media worker, security fuses, launch, shipped files, and the self-test with networking denied |
+| `npm run measure:perf` | Measures the blueprint's performance budgets on 10,000 generated photos (writes several GB of temporary files, then deletes them) |
 | `npm run measure:scan` | Times scans through the real app and worker: the private fixture pack (if present) and 1,000 generated photos |
 | `npm run query-plans` | Measures the key catalog queries on 10,000 synthetic pictures, with and without their indexes, and compares moment grouping in SQL and JavaScript |
 
@@ -35,7 +36,7 @@ src/
     self-test.ts     --self-test mode: proves SQLite, sharp, the catalog and the media worker work in a packaged build
     media-worker.ts  Entry point of the separate process that decodes photos
     media/           Reading photos safely: file walking, type detection, thumbnails and dHash
-    library/         Adding, scanning, reconnecting and removing folders, date moments, similar-photo sets, thumbnail cache
+    library/         Adding, scanning, reconnecting and removing folders, date moments, similar-photo sets, thumbnail cache, storage
     studio/          Export: checks, staged rendering, verification, finalizing and crash recovery
     catalog/         The SQLite catalog: opening, migrations, backup/restore
       migrations/      Numbered schema changes (.sql), applied in order
@@ -48,6 +49,7 @@ src/
     src/library/     The Library and Sources screens: folders and scans, moments, albums, search and filters, virtualized grid
     src/best-moments/ The Best Moments screen: queue, compare view, choosing favorites, corrections, unsaved-changes dialog
     src/studio/      Favorites and Memory Studio: projects, the canvas preview, order and crop controls, export panel
+    src/settings/    Settings: storage sizes, cache clearing, privacy statement
   shared/          Types and schemas used by more than one process, and the Studio layout math (preview and export)
 tests/unit/        Fast tests of individual functions (Vitest)
 tests/integration/ Catalog and scanning tests against real files and SQLite (Vitest)

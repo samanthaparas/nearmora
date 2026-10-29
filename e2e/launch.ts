@@ -12,7 +12,7 @@ export function tempFolder(prefix: string): string {
   return mkdtempSync(join(tmpdir(), `nearmora-e2e-${prefix}-`))
 }
 
-export async function launchApp(profileDir = tempFolder('profile')): Promise<{ app: ElectronApplication; profileDir: string }> {
+export async function launchApp(profileDir = tempFolder('profile'), extraArgs: string[] = []): Promise<{ app: ElectronApplication; profileDir: string }> {
   // ELECTRON_RENDERER_URL is removed so the app loads from app://nearmora exactly as a built app does.
   const env = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -20,6 +20,6 @@ export async function launchApp(profileDir = tempFolder('profile')): Promise<{ a
     ),
   )
   env['NEARMORA_USER_DATA_DIR'] = profileDir
-  const app = await electron.launch({ args: ['.'], env })
+  const app = await electron.launch({ args: ['.', ...extraArgs], env })
   return { app, profileDir }
 }

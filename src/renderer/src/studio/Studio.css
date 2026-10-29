@@ -20,6 +20,8 @@
 
 .studio__previews {
   flex: 0 1 auto;
+  min-width: 0; /* lets the preview shrink below its natural width inside the flex row */
+  max-width: 100%;
 }
 
 .studio__slides {

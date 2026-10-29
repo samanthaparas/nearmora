@@ -57,7 +57,7 @@ Date: 2026-10-29 · Same machine.
 | Full disk (AC8) | Export to a 2 MB disk image the test mounts: fails as `disk_full`, the volume is left empty, and a retry to another folder completes. **Control:** without staging cleanup, this test fails | [hw] [int] |
 | Crash (AC8) | A running export job with a half-written staging folder is failed at startup and its folder removed; a job naming a folder that isn't its own staging folder never deletes it | [int] |
 | Backup restores projects (AC11 full) | A carousel with a changed crop, backed up and restored into a clean profile, comes back identical | [int] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+| Passes on GitHub's macOS runner | Failed first on PR #13 (run 40816408369: the disk image couldn't be ejected, see below), then passed after the fix, [run 40817228679](https://github.com/samanthaparas/nearmora/actions/runs/40817228679) (2026-10-29): 191 unit, integration and component tests (2 private-pack tests skipped as intended) including the full-disk test, 30 E2E tests, all packaged checks | [ci] |
 
 Totals: 193 unit, integration and component tests; 30 E2E tests.
 
