@@ -8,7 +8,7 @@ Nearmora is a local-first macOS desktop app for finding your favorite photos, ch
 
 ## Status
 
-R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done, and R4 part 1 (finding similar photos) is in. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. Behind the scenes, similar shots are grouped into sets for Best Moments (a dHash fingerprint plus a 2-minute window); the review screen comes in R4 part 2. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
 
 ## Commands
 
@@ -35,7 +35,7 @@ src/
     self-test.ts     --self-test mode: proves SQLite, sharp, the catalog and the media worker work in a packaged build
     media-worker.ts  Entry point of the separate process that decodes photos
     media/           Reading photos safely: file walking, type detection, thumbnails and dHash
-    library/         Adding, scanning, reconnecting and removing folders, date moments, and the thumbnail cache
+    library/         Adding, scanning, reconnecting and removing folders, date moments, similar-photo sets, thumbnail cache
     catalog/         The SQLite catalog: opening, migrations, backup/restore
       migrations/      Numbered schema changes (.sql), applied in order
       repositories/    Reading and writing sources, pictures, albums, sets and review choices
