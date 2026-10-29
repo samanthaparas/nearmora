@@ -23,7 +23,12 @@ Totals: 179 unit, integration and component tests; 29 E2E tests.
 
 ### What testing caught
 
-- **A flaky R3a control test.** One full run failed the check that the file watcher notices a write; it passed 6 times alone and 3 times in the full suite. Under parallel load, macOS reported the write later than the fixed 300 ms the test waited. The control now waits for the event (up to 5 s), and the tests that expect **no** writes wait a full second after scanning, so a late report can't slip past them.
+- **A flaky R3a test, and a weakness in the no-write checks.** The check that the file watcher notices a write failed once locally, then on GitHub (run 40811798384). The first guess (macOS reports writes late under load) led to longer waits, which weren't enough.
+  - **The real causes, found by logging the events:** a new macOS watcher starts asynchronously and never reports a write made before it's running; and one write can be reported twice, with the second report late.
+  - **Why it mattered:** a "no writes" check could pass while missing a write.
+  - **The fix:** the tests now bracket the work with two differently named hidden sentinel files in the test's own folder. Each is rewritten until the watcher reports it, which proves the watcher is live. File reports arrive in order, so every write made before the closing sentinel is reported by the time it is. No fixed waits remain.
+  - **Result:** 10 runs of the scan suites and 4 full runs, all green.
+  - **The private-pack test** can't use sentinels (nothing is written into the owner's fixture folder), so its watcher is best-effort and its fingerprint check is the proof.
 
 - **A shape option looked unclicked in the test.** The radio button for shape shows the saved state, so it only becomes checked once main confirms the change. Playwright's `check()` expects an instant change, so the test now clicks and waits. Real use was unaffected.
 

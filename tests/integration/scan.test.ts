@@ -5,7 +5,6 @@
 
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { describe, expect, it } from 'vitest'
 import type { Catalog } from '../../src/main/catalog/database'
 import { queryLibrary } from '../../src/main/catalog/repositories/library'
@@ -14,7 +13,7 @@ import { scanSource, type ScanDeps } from '../../src/main/library/scan'
 import { addSourceFolder } from '../../src/main/library/source-folders'
 import { processImage } from '../../src/main/media/process-image'
 import { generatePhotoFolder } from '../support/generate-photos'
-import { fingerprintFolder, watchForWrites } from '../support/originals-guard'
+import { fingerprintFolder, guardFolder } from '../support/originals-guard'
 import { openTestCatalog, tempDir, tempProfile } from './helpers'
 
 async function setup() {
@@ -64,25 +63,21 @@ describe('scanning a folder', () => {
   it('leaves every original byte-for-byte unchanged, with the same modification times, and writes nothing in the folder (AC1)', async () => {
     const { deps, folder, sourceId } = await setup()
     const before = fingerprintFolder(folder.root)
-    await sleep(300) // let file-creation events from generating the folder settle before watching
-    const watcher = watchForWrites(folder.root)
+    const guard = await guardFolder(folder.root)
 
     await scanSource(deps, sourceId)
     await scanSource(deps, sourceId) // and a rescan
-    await sleep(1000) // file events arrive late on a busy machine; give any write time to be reported
 
-    expect(watcher.stop()).toEqual([])
+    expect(await guard.finish()).toEqual([])
     expect(fingerprintFolder(folder.root)).toEqual(before)
-  })
+  }, 60_000)
 
-  it('the write watcher really does notice a write (control for the test above)', async () => {
+  it('the write guard really does notice a write (control for the test above)', async () => {
     const { folder } = await setup()
-    await sleep(300)
-    const watcher = watchForWrites(folder.root)
+    const guard = await guardFolder(folder.root)
     writeFileSync(join(folder.root, 'new.txt'), 'written')
-    expect(await watcher.firstEvent(5000)).toBe(true)
-    watcher.stop()
-  })
+    expect((await guard.finish()).some((event) => event.endsWith('new.txt'))).toBe(true)
+  }, 60_000)
 })
 
 describe('rescans, cancelling and missing files (AC2)', () => {

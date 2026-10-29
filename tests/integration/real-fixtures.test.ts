@@ -37,6 +37,8 @@ describe.skipIf(!existsSync(PHOTOS))('real fixture pack', () => {
     if (!added.ok) throw new Error(added.reason)
 
     const before = fingerprintFolder(PHOTOS)
+    // No sentinel files here: nothing is ever written into the owner's fixture folder, not even by tests. So this
+    // watcher is best-effort (one started moments before a write can miss it); the fingerprint check is the proof.
     await sleep(300)
     const watcher = watchForWrites(PHOTOS)
     const started = performance.now()
