@@ -240,3 +240,70 @@
   color: var(--nm-text);
   text-decoration: underline;
 }
+
+/* An album without photos yet: an empty, decorative tile in place of the cover. */
+.moments__cover--empty {
+  display: block;
+}
+
+/* The "last change … Undo" line. Empty when there's nothing to undo, but kept in place for the live region. */
+.library__undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--nm-space-2);
+  min-height: var(--nm-space-2);
+  margin-bottom: var(--nm-space-2);
+}
+
+/* Selected photos say so in words, on a cream label, with a plum outline around the whole photo. */
+.library__pick[aria-pressed='true'] {
+  outline: 4px solid var(--nm-plum);
+  outline-offset: -4px;
+}
+
+.library__selected {
+  position: absolute;
+  top: var(--nm-space-1);
+  left: var(--nm-space-1);
+  padding: 2px var(--nm-space-1);
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-cream);
+  color: var(--nm-plum);
+  font-size: var(--nm-text-small);
+  font-weight: 600;
+}
+
+/* Arrange mode: a bar of three buttons along the bottom of each photo. */
+.library__arrange {
+  width: 100%;
+  height: 100%;
+}
+
+.library__arrange-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--nm-cream) 92%, transparent);
+}
+
+.library__arrange-bar button {
+  min-width: var(--nm-target-min);
+  min-height: var(--nm-target-min);
+  border: 1px solid var(--nm-plum);
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-surface-raised);
+  color: var(--nm-plum);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.library__arrange-bar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

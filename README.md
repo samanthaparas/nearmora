@@ -8,7 +8,7 @@ Nearmora is a local-first macOS desktop app for finding your favorite photos, ch
 
 ## Status
 
-R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) and R3b (scan control, offline folders, moments, search and a virtualized grid) are done. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
 
 ## Commands
 
@@ -44,7 +44,7 @@ src/
   preload/         Builds window.nearmora, the UI's only bridge to the main process
   renderer/        The UI (React). Sandboxed: no Node.js, no file access
     src/styles/      Design tokens (colors, fonts, spacing) and base styles
-    src/library/     The Library and Sources screens: folders and scans, moments, search and filters, virtualized grid
+    src/library/     The Library and Sources screens: folders and scans, moments, albums, search and filters, virtualized grid
   shared/          Types and schemas used by more than one process
 tests/unit/        Fast tests of individual functions (Vitest)
 tests/integration/ Catalog and scanning tests against real files and SQLite (Vitest)

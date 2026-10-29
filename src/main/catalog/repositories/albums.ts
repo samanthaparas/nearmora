@@ -11,8 +11,18 @@ import { CatalogError, isConstraintError } from '../errors'
 const Title = z.string().trim().min(1).max(120)
 
 const AlbumRow = z
-  .object({ id: z.string(), title: z.string(), created_at: z.number().int(), asset_count: z.number().int() })
-  .transform((row) => ({ id: row.id, title: row.title, createdAt: row.created_at, assetCount: row.asset_count }))
+  .object({
+    id: z.string(),
+    title: z.string(),
+    created_at: z.number().int(),
+    asset_count: z.number().int(),
+    cover_asset_id: z.string().nullable(),
+  })
+  .transform((row) => ({ id: row.id, title: row.title, createdAt: row.created_at, assetCount: row.asset_count, coverAssetId: row.cover_asset_id }))
+
+// The album's first photo is its cover.
+const ALBUM_COLUMNS = `a.id, a.title, a.created_at, COUNT(m.asset_id) AS asset_count,
+  (SELECT asset_id FROM album_asset c WHERE c.album_id = a.id ORDER BY c.position LIMIT 1) AS cover_asset_id`
 export type Album = z.output<typeof AlbumRow>
 
 function parseTitle(title: string): string {
@@ -30,7 +40,7 @@ export function createAlbum(db: Catalog, title: string): Album {
 export function getAlbum(db: Catalog, id: string): Album {
   const row = db
     .prepare(
-      `SELECT a.id, a.title, a.created_at, COUNT(m.asset_id) AS asset_count
+      `SELECT ${ALBUM_COLUMNS}
        FROM album a LEFT JOIN album_asset m ON m.album_id = a.id
        WHERE a.id = ? GROUP BY a.id`,
     )
@@ -42,7 +52,7 @@ export function getAlbum(db: Catalog, id: string): Album {
 export function listAlbums(db: Catalog): Album[] {
   return db
     .prepare(
-      `SELECT a.id, a.title, a.created_at, COUNT(m.asset_id) AS asset_count
+      `SELECT ${ALBUM_COLUMNS}
        FROM album a LEFT JOIN album_asset m ON m.album_id = a.id
        GROUP BY a.id ORDER BY a.created_at, a.id`,
     )
