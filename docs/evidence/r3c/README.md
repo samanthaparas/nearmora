@@ -13,7 +13,7 @@ Labels: [auto] automated · [int] real SQLite on disk · [pkg] packaged app · [
 | No accidental photo removal | Deleting an album leaves all 4 pictures in the catalog; R2's tests already cover album deletion keeping assets and a clean `foreign_key_check` | [int] |
 | In the app, keyboard only | Select 3 photos, add them to a new album, then use **Return** on a focused "Move later" twice: the order changes and focus stays on the same photo's button. Then Undo, rename, restart (same name and order), delete with "Keep album" focused, and Undo the delete | [e2e] |
 | Originals untouched | SHA-256, size and modification time of every file in the folder are identical after the whole album test | [e2e] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+| Passes on GitHub's macOS runner | Passed on PR #9, [run 40806318476](https://github.com/samanthaparas/nearmora/actions/runs/40806318476) (2026-10-29): 138 unit and integration tests (the private-pack test skipped as intended), 20 E2E tests including the keyboard-only album flow, and all packaged checks | [ci] |
 
 Totals: 139 unit and integration tests, 20 E2E tests.
 

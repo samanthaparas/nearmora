@@ -9,6 +9,7 @@ import { CatalogError } from '../catalog/errors'
 import { getSource, listSources, removeSource, setSourceStatus, sourceRemovalImpact, type RemovalImpact, type Source } from '../catalog/repositories/sources'
 import type { ProcessImageRequest, ProcessImageResult } from '../media/process-image'
 import { regroupMoments } from './moments'
+import { regroupSimilaritySets } from './regroup-sets'
 import { checkSourceIdentity } from './reconnect'
 import { lastScan, PAUSE, rootAccess, scanSource } from './scan'
 import { addSourceFolder, type AddFolderResult } from './source-folders'
@@ -74,8 +75,9 @@ export function createLibraryService(deps: LibraryServiceDeps) {
 
     void scanSource(deps, sourceId, { signal: controller.signal, onProgress: (counts) => send('running', counts) })
       .then(({ outcome, counts }) => {
-        // New, missing or reconnected photos change the date groups, even when a scan was paused partway.
+        // New, missing or reconnected photos change the date groups and similar sets, even after a partial scan.
         regroupMoments(db)
+        regroupSimilaritySets(db)
         send(outcome, counts)
       })
       .catch((error: unknown) => {
@@ -123,6 +125,7 @@ export function createLibraryService(deps: LibraryServiceDeps) {
       try {
         removeSource(db, sourceId)
         regroupMoments(db)
+        regroupSimilaritySets(db)
         return true
       } catch (error: unknown) {
         if (error instanceof CatalogError && error.code === 'NOT_FOUND') return false
