@@ -1,5 +1,5 @@
 /*
- * Styles for the Library and Sources screens: the folder toolbar, status lines, removal review and the thumbnail grid.
+ * Styles for the Library and Sources screens: folder toolbar, status lines, removal review, moments, filters and the grid.
  * Colors and spacing come from the design tokens so the screen stays consistent with the rest of the app.
  */
 
@@ -38,7 +38,7 @@
 .library__source-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--nm-space-1);
+  gap: var(--nm-space-1) var(--nm-space-3);
 }
 
 /* The removal review: a raised panel so it reads as a decision, not a status line. */
@@ -66,25 +66,21 @@
   color: var(--nm-text-muted);
 }
 
-/* Square cells that fill the width; thumbnails are cropped to fill, the full photo comes later in review. */
+/* Virtualized: the list is as tall as all rows would be, and only visible cells are placed absolutely in it. */
 .library__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--nm-space-1);
+  position: relative;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .library__cell {
-  aspect-ratio: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
   overflow: hidden;
   border-radius: var(--nm-radius-control);
   background: var(--nm-border-subtle);
-}
-
-.library__cell {
-  position: relative;
 }
 
 /* Plum on cream for contrast (8.09:1); the word itself carries the meaning. */
@@ -107,8 +103,124 @@
   object-fit: cover;
 }
 
-.library__more {
-  margin-top: var(--nm-space-3);
+/* In cover-choosing mode each photo is a button filling its cell. */
+.library__pick {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.library__pick:focus-visible {
+  outline-offset: -4px;
+}
+
+/* Search and filters: labelled fields in a wrapping row. */
+.library__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--nm-space-2);
+  margin-bottom: var(--nm-space-3);
+}
+
+.library__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--nm-text-small);
+  font-weight: 600;
+}
+
+.library__field input,
+.library__field select {
+  min-height: var(--nm-target-min);
+  padding: 0 var(--nm-space-1);
+  border: 1px solid var(--nm-text-muted);
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-surface-raised);
+  color: var(--nm-text);
+  font: inherit;
+  font-weight: 400;
+}
+
+.library__field--search input {
+  min-width: 16rem;
+}
+
+.library__check {
+  display: flex;
+  align-items: center;
+  gap: var(--nm-space-1);
+  min-height: var(--nm-target-min);
+}
+
+/* "Your moments": a horizontally scrolling row of cards. */
+.moments {
+  margin-bottom: var(--nm-space-3);
+}
+
+.moments__title {
+  margin: 0 0 var(--nm-space-1);
+  font-size: var(--nm-text-h2);
+}
+
+.moments__list {
+  display: flex;
+  gap: var(--nm-space-2);
+  margin: 0;
+  padding: 0 0 var(--nm-space-1);
+  overflow-x: auto;
+  list-style: none;
+}
+
+.moments__card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 180px;
+  padding: 0 0 var(--nm-space-1);
+  border: 0;
+  background: none;
+  color: var(--nm-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.moments__cover {
+  width: 180px;
+  height: 135px;
+  border-radius: var(--nm-radius-card);
+  object-fit: cover;
+  background: var(--nm-border-subtle);
+}
+
+.moments__name {
+  font-weight: 600;
+}
+
+.moments__count {
+  color: var(--nm-text-muted);
+  font-size: var(--nm-text-small);
+}
+
+.moment-header {
+  margin-bottom: var(--nm-space-3);
+}
+
+.moment-header__title {
+  margin: var(--nm-space-1) 0 0;
+  font-size: var(--nm-text-h2);
+}
+
+.moment-header__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--nm-space-1);
 }
 
 /* Secondary and quiet buttons for actions that sit beside content rather than leading a screen. */
@@ -118,8 +230,11 @@
   color: var(--nm-text);
 }
 
-.button--quiet {
+/* Doubled class: this file loads before App.css, so a single class would lose to .button's padding there. */
+.button.button--quiet {
   min-height: var(--nm-target-min);
+  /* No side padding, so the underlined text lines up with the text around it; spacing comes from the row's gap. */
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--nm-text);

@@ -1,15 +1,22 @@
 /**
- * Measures the catalog's three key queries on 10,000 synthetic pictures, with and without their indexes
- * (`npm run query-plans`). Its output is the "before/after" evidence the R2 gate asks for; no real photos are involved.
+ * Measures the catalog's key queries on 10,000 synthetic pictures, with and without their indexes, and compares
+ * moment grouping in SQL with the same grouping in JavaScript (`npm run query-plans`). Its output is evidence for
+ * the docs; no real photos are involved.
  */
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import Database from 'better-sqlite3'
 
 const ROWS = 10_000
 const RUNS = 200
-const schema = readFileSync(new URL('../src/main/catalog/migrations/0001_init.sql', import.meta.url), 'utf8')
+// Every migration, in order, so the measured schema is the one the app really has.
+const migrationsDir = new URL('../src/main/catalog/migrations/', import.meta.url)
+const schema = readdirSync(migrationsDir)
+  .filter((name) => name.endsWith('.sql'))
+  .sort()
+  .map((name) => readFileSync(new URL(name, migrationsDir), 'utf8'))
+  .join('\n')
 
 // Synthetic catalog: 10k pictures over ~2 years, 10% favorites, 1.2 locations each, sets of 3.
 function buildCatalog() {
@@ -60,6 +67,14 @@ const QUERIES = [
     params: MONTH,
   },
   {
+    name: 'Library first page, newest first (keyset order)',
+    index: 'idx_asset_captured',
+    sql: `SELECT a.id FROM asset a WHERE a.decode_state = 'ok'
+            AND EXISTS (SELECT 1 FROM asset_location l WHERE l.asset_id = a.id AND l.availability = 'available')
+          ORDER BY a.captured_at DESC, a.id DESC LIMIT 200`,
+    params: [],
+  },
+  {
     name: 'Locations of one picture',
     index: 'idx_location_asset',
     sql: 'SELECT relative_path, availability FROM asset_location WHERE asset_id = ?',
@@ -105,3 +120,34 @@ for (const query of QUERIES) {
   for (const line of after.plan) console.log(`  ${line}`)
   console.log('')
 }
+
+// Moment grouping: the app's SQL (window functions) against the same rule in plain JavaScript.
+const GAP = 8 * 60 * 60 * 1000
+const groupingSql = `WITH dated AS (SELECT id, captured_at FROM asset WHERE captured_at IS NOT NULL),
+  flagged AS (SELECT id, captured_at, CASE WHEN captured_at - LAG(captured_at) OVER (ORDER BY captured_at, id) > ? THEN 1 ELSE 0 END AS starts_new FROM dated)
+  SELECT id, SUM(starts_new) OVER (ORDER BY captured_at, id ROWS UNBOUNDED PRECEDING) AS grp FROM flagged`
+const timeIt = (fn) => {
+  const times = []
+  let result
+  for (let i = 0; i < 20; i++) {
+    const t = process.hrtime.bigint()
+    result = fn()
+    times.push(Number(process.hrtime.bigint() - t) / 1e6)
+  }
+  times.sort((a, b) => a - b)
+  return { result, medianMs: times[10] }
+}
+const sqlGroups = timeIt(() => new Set(withIndexes.prepare(groupingSql).all(GAP).map((r) => r.grp)).size)
+const jsGroups = timeIt(() => {
+  const rows = withIndexes.prepare('SELECT id, captured_at FROM asset WHERE captured_at IS NOT NULL ORDER BY captured_at, id').all()
+  let groups = 0
+  let previous
+  for (const row of rows) {
+    if (previous === undefined || row.captured_at - previous > GAP) groups++
+    previous = row.captured_at
+  }
+  return groups
+})
+console.log('## Moment grouping (8-hour gap), median of 20 runs')
+console.log(`SQL window functions: ${sqlGroups.result} moments in ${sqlGroups.medianMs.toFixed(2)} ms`)
+console.log(`JavaScript loop (incl. reading rows): ${jsGroups.result} moments in ${jsGroups.medianMs.toFixed(2)} ms`)

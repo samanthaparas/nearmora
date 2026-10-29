@@ -96,7 +96,21 @@ export const commands = {
     output: z.object({ cancelled: z.boolean() }),
   },
   'library:query': {
-    input: z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(500) }),
+    input: z.object({
+      limit: z.number().int().min(1).max(500),
+      // Continue after this photo (keyset paging); omit for the first page.
+      cursor: z.object({ capturedAt: z.number().int().nullable(), id }).nullable().optional(),
+      filters: z
+        .object({
+          search: z.string().max(200).optional(),
+          from: z.number().int().optional(),
+          to: z.number().int().optional(),
+          sourceId: id.optional(),
+          favoritesOnly: z.boolean().optional(),
+          momentId: id.optional(),
+        })
+        .optional(),
+    }),
     output: z.object({
       items: z.array(
         z.object({
@@ -109,7 +123,31 @@ export const commands = {
         }),
       ),
       total: count,
+      nextCursor: z.object({ capturedAt: z.number().int().nullable(), id }).nullable(),
     }),
+  },
+  'moments:list': {
+    input: z.undefined(),
+    output: z.array(
+      z.object({
+        id,
+        // The person's title, or null to show the date-based one.
+        title: z.string().nullable(),
+        autoTitle: z.string(),
+        startsAt: z.number().int(),
+        endsAt: z.number().int(),
+        photoCount: count,
+        coverAssetId: id.nullable(),
+      }),
+    ),
+  },
+  'moments:update': {
+    input: z.object({
+      momentId: id,
+      title: z.string().trim().min(1).max(120).nullable().optional(),
+      coverAssetId: id.nullable().optional(),
+    }),
+    output: z.object({ updated: z.literal(true) }),
   },
 } as const
 

@@ -51,7 +51,7 @@ async function measure(folder: string, label: string): Promise<void> {
   })
   const rescan = await timeScan(page, () => page.evaluate((id) => window.nearmora.rescanSource({ sourceId: id }), sourceId))
   const total = await page.evaluate(async () => {
-    const result = await window.nearmora.queryLibrary({ offset: 0, limit: 1 })
+    const result = await window.nearmora.queryLibrary({ limit: 1 })
     return result.ok ? result.data.total : -1
   })
   await app.close()

@@ -8,6 +8,7 @@ import { commands, type CommandName } from '@shared/ipc-contract'
 import { channelFor } from '@shared/ipc-channels'
 import type { Catalog } from '../catalog/database'
 import { queryLibrary } from '../catalog/repositories/library'
+import { listMoments, updateMoment } from '../catalog/repositories/moments'
 import type { LibraryService } from '../library/library-service'
 import { createRouter, type Handlers } from './router'
 
@@ -39,8 +40,19 @@ export function createHandlers({ db, library }: HandlerContext): Handlers {
     'sources:remove': ({ sourceId }) => ({ removed: library.remove(sourceId) }),
     'scan:pause': ({ sourceId }) => ({ paused: library.pauseScan(sourceId) }),
     'scan:cancel': ({ sourceId }) => ({ cancelled: library.cancelScan(sourceId) }),
-    'library:query': (page) => queryLibrary(db, page),
+    // Zod has already checked the shape; optional fields that are absent are simply left out.
+    'library:query': ({ limit, cursor, filters }) => queryLibrary(db, { limit, cursor: cursor ?? null, filters: withoutUndefined(filters ?? {}) }),
+    'moments:list': () => listMoments(db),
+    'moments:update': (edit) => {
+      updateMoment(db, withoutUndefined(edit))
+      return { updated: true as const }
+    },
   }
+}
+
+// exactOptionalPropertyTypes: an optional field must be absent, not present-but-undefined.
+function withoutUndefined<T extends object>(value: T): { [K in keyof T]: Exclude<T[K], undefined> } {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as { [K in keyof T]: Exclude<T[K], undefined> }
 }
 
 // Wires each command to an IPC channel. Every call goes through the router's checks first.

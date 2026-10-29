@@ -116,7 +116,7 @@ describe('disconnected folders', () => {
 
     expect(env.library.listSources()[0]?.status).toBe('disconnected')
     expect(env.library.startScan(env.sourceId)).toBe(false) // can't scan until reconnected
-    const offline = queryLibrary(env.db, { offset: 0, limit: 50 })
+    const offline = queryLibrary(env.db, { limit: 50 })
     expect(offline.total).toBe(5)
     expect(offline.items.every((item) => item.offline)).toBe(true)
     expect(await env.library.reconnect(env.sourceId)).toBe('unavailable')
@@ -125,7 +125,7 @@ describe('disconnected folders', () => {
     expect(await env.library.reconnect(env.sourceId)).toBe('reconnected')
     expect(await env.scanEnd()).toBe('done')
     expect(getSource(env.db, env.sourceId).status).toBe('active')
-    expect(queryLibrary(env.db, { offset: 0, limit: 50 }).items.some((item) => item.offline)).toBe(false)
+    expect(queryLibrary(env.db, { limit: 50 }).items.some((item) => item.offline)).toBe(false)
     expect(locations(env.db)).toBe(6)
   })
 
@@ -179,7 +179,7 @@ describe.skipIf(process.platform !== 'darwin')('unplugging a drive mid-scan (AC5
       expect(await env.scanEnd()).toBe('failed')
       expect(getSource(env.db, env.sourceId).status).toBe('disconnected')
       expect((env.db.prepare(`SELECT COUNT(*) AS n FROM asset_location WHERE availability = 'missing'`).get() as { n: number }).n).toBe(0)
-      expect(queryLibrary(env.db, { offset: 0, limit: 50 }).items.every((item) => item.offline)).toBe(true)
+      expect(queryLibrary(env.db, { limit: 50 }).items.every((item) => item.offline)).toBe(true)
 
       // Plug back in: verified, rescanned, back online, and the files on the volume never changed.
       attach()
@@ -203,7 +203,7 @@ describe('removing a folder', () => {
     const env = await setup()
     await env.scanEnd()
     const before = fingerprintFolder(env.root)
-    const assets = queryLibrary(env.db, { offset: 0, limit: 50 }).items.map((item) => item.id)
+    const assets = queryLibrary(env.db, { limit: 50 }).items.map((item) => item.id)
     const setId = createSimilaritySet(env.db, { reason: 'manual', algorithmVersion: 'test@1', assetIds: assets.slice(0, 2) })
     saveReview(env.db, { setId, favorites: [assets[0]!], status: 'reviewed', expectedRevision: 0 })
     const album = createAlbum(env.db, 'Trip')
@@ -213,7 +213,7 @@ describe('removing a folder', () => {
     expect(env.library.remove(env.sourceId)).toBe(true)
 
     expect(locations(env.db)).toBe(0)
-    expect(queryLibrary(env.db, { offset: 0, limit: 50 }).total).toBe(0)
+    expect(queryLibrary(env.db, { limit: 50 }).total).toBe(0)
     // The pictures' records, favorites and albums are kept, so re-adding the folder brings them back.
     expect((env.db.prepare('SELECT COUNT(*) AS n FROM favorite').get() as { n: number }).n).toBe(1)
     expect(fingerprintFolder(env.root)).toEqual(before)

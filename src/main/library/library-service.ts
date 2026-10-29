@@ -8,6 +8,7 @@ import type { Catalog } from '../catalog/database'
 import { CatalogError } from '../catalog/errors'
 import { getSource, listSources, removeSource, setSourceStatus, sourceRemovalImpact, type RemovalImpact, type Source } from '../catalog/repositories/sources'
 import type { ProcessImageRequest, ProcessImageResult } from '../media/process-image'
+import { regroupMoments } from './moments'
 import { checkSourceIdentity } from './reconnect'
 import { lastScan, PAUSE, rootAccess, scanSource } from './scan'
 import { addSourceFolder, type AddFolderResult } from './source-folders'
@@ -72,7 +73,11 @@ export function createLibraryService(deps: LibraryServiceDeps) {
     const send = (state: MainEvent['state'], counts: ScanCounts) => deps.emit({ type: 'scan', sourceId, state, counts })
 
     void scanSource(deps, sourceId, { signal: controller.signal, onProgress: (counts) => send('running', counts) })
-      .then(({ outcome, counts }) => send(outcome, counts))
+      .then(({ outcome, counts }) => {
+        // New, missing or reconnected photos change the date groups, even when a scan was paused partway.
+        regroupMoments(db)
+        send(outcome, counts)
+      })
       .catch((error: unknown) => {
         console.error('[library] scan crashed', error)
         send('failed', NO_COUNTS)
@@ -117,6 +122,7 @@ export function createLibraryService(deps: LibraryServiceDeps) {
       if (running.has(sourceId)) return false
       try {
         removeSource(db, sourceId)
+        regroupMoments(db)
         return true
       } catch (error: unknown) {
         if (error instanceof CatalogError && error.code === 'NOT_FOUND') return false
