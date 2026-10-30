@@ -78,6 +78,19 @@ export type FormatTitle = (startsAt: number, endsAt: number) => string
 const defaultFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' })
 export const formatMomentTitle: FormatTitle = (startsAt, endsAt) => defaultFormat.formatRange(new Date(startsAt), new Date(endsAt))
 
+/**
+ * Part of the day a moment starts in, used when two moments share a date title ("October 26 · morning").
+ * Every part is under 8 hours long and moments start more than 8 hours apart, so same-day moments always differ.
+ */
+export function partOfDay(time: number): string {
+  const hour = new Date(time).getHours()
+  if (hour < 5) return 'early hours'
+  if (hour < 12) return 'morning'
+  if (hour < 17) return 'afternoon'
+  if (hour < 21) return 'evening'
+  return 'night'
+}
+
 interface ExistingMoment {
   id: string
   cover_asset_id: string | null
@@ -126,10 +139,16 @@ export function regroupMoments(db: Catalog, options: { gapMs?: number; formatTit
     const insert = db.prepare('INSERT INTO moment (id, auto_title, starts_at, ends_at) VALUES (?, ?, ?, ?)')
     const member = db.prepare('INSERT INTO moment_asset (moment_id, asset_id) VALUES (?, ?)')
 
+    // Date titles first, so a date shared by more than one moment can say which part of the day each one is.
+    const dateTitles = groups.map((group) => formatTitle(group[0]!.capturedAt, group.at(-1)!.capturedAt))
+    const timesUsed = new Map<string, number>()
+    for (const t of dateTitles) timesUsed.set(t, (timesUsed.get(t) ?? 0) + 1)
+
     groups.forEach((group, index) => {
       const startsAt = group[0]!.capturedAt
       const endsAt = group.at(-1)!.capturedAt
-      const autoTitle = formatTitle(startsAt, endsAt)
+      const dateTitle = dateTitles[index]!
+      const autoTitle = timesUsed.get(dateTitle)! > 1 ? `${dateTitle} · ${partOfDay(startsAt)}` : dateTitle
       const matched = matchFor.get(index)
       let momentId: string
       if (matched) {

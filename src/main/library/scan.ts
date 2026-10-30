@@ -119,10 +119,6 @@ export async function scanSource(deps: ScanDeps, sourceId: string, options: Scan
   async function indexFile(file: FoundFile): Promise<void> {
     counts.found++
     seen.add(file.relativePath)
-    if (file.sizeBytes > maxFileBytes) {
-      counts.tooLarge++
-      return
-    }
 
     // Unchanged since the last scan (same size and modification time) and its thumbnail is still cached: skip the work.
     const known = knownLocation.get(sourceId, file.relativePath) as KnownLocation | undefined
@@ -140,6 +136,11 @@ export async function scanSource(deps: ScanDeps, sourceId: string, options: Scan
       mediaType = detectMediaType(await readSignature(file.absolutePath))
       if (!mediaType) {
         counts.unsupported++
+        return
+      }
+      // Size is checked after type, so a big video counts as "not a photo" rather than "too large".
+      if (file.sizeBytes > maxFileBytes) {
+        counts.tooLarge++
         return
       }
       sha = await sha256File(file.absolutePath)

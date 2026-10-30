@@ -23,9 +23,9 @@ export function describePictures(source: Pick<SourceSummary, 'pictureCount' | 'd
 export function describeSkipped(counts: ScanCounts): string | null {
   const is = (n: number) => (n === 1 ? 'is' : 'are')
   const reasons = [
-    counts.unsupported > 0 && `${counts.unsupported} ${counts.unsupported === 1 ? 'isn’t a JPEG or PNG' : 'aren’t JPEGs or PNGs'}`,
+    counts.unsupported > 0 && `${counts.unsupported} ${counts.unsupported === 1 ? 'isn’t a JPEG or PNG photo' : 'aren’t JPEG or PNG photos'} (videos, for example)`,
     counts.corrupt > 0 && `${counts.corrupt} ${is(counts.corrupt)} damaged or couldn’t be decoded`,
-    counts.tooLarge > 0 && `${counts.tooLarge} ${is(counts.tooLarge)} too large to open safely`,
+    counts.tooLarge > 0 && `${counts.tooLarge} ${counts.tooLarge === 1 ? 'is a photo' : 'are photos'} too large to open safely`,
     counts.unreadable > 0 && `${counts.unreadable} couldn’t be read (check folder permissions)`,
   ].filter((reason): reason is string => typeof reason === 'string')
   const skipped = counts.unsupported + counts.corrupt + counts.tooLarge + counts.unreadable
