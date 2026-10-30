@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { CommandOutput } from '@shared/ipc-contract'
+import { templateName } from '@shared/studio/templates'
 import { ProjectEditor } from './ProjectEditor'
 import '../library/Library.css'
 import '../best-moments/BestMoments.css'
@@ -12,7 +13,6 @@ import './Studio.css'
 
 type ProjectSummary = CommandOutput<'projects:list'>[number]
 
-const KIND_NAMES = { collage_2: 'Two-photo collage', collage_4: 'Four-photo collage', carousel: 'Carousel' } as const
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 
 export function MemoryStudio({ initialProjectId, onGoToFavorites }: { initialProjectId: string | null; onGoToFavorites: () => void }) {
@@ -70,7 +70,7 @@ export function MemoryStudio({ initialProjectId, onGoToFavorites }: { initialPro
                   {project.coverAssetId ? <img className="moments__cover" src={`nm-media://thumb/${project.coverAssetId}`} alt="" /> : null}
                   <span className="moments__name">{project.title}</span>
                   <span className="moments__count">
-                    {KIND_NAMES[project.kind]} · {project.photoCount} photos · edited {dateFormat.format(project.updatedAt)}
+                    {templateName(project.templateId, project.templateVersion)} · {project.photoCount} photos · edited {dateFormat.format(project.updatedAt)}
                   </span>
                 </button>
               </li>

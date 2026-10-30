@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import exifr from 'exifr'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
-import { CANVAS } from '@shared/layout'
+import { FORMATS } from '@shared/studio/formats'
 import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
 import { createProject, getProject, setItemCrop } from '../../src/main/catalog/repositories/projects'
@@ -66,9 +66,9 @@ describe('rendering an export file', () => {
     const dir = tempDir()
     const photo = join(dir, 'split.jpg')
     await twoTone(photo, { split: 'columns' }) // left half red, right half blue
-    for (const aspect of ['1:1', '4:5'] as const) {
-      const out = join(dir, `out-${aspect.replace(':', 'x')}.jpg`)
-      const { width, height } = CANVAS[aspect]
+    for (const format of ['square', 'portrait'] as const) {
+      const out = join(dir, `out-${format}.jpg`)
+      const { width, height } = FORMATS[format]
       const cellHeight = height - 96
       const request: RenderRequest = {
         outputPath: out,
@@ -154,7 +154,7 @@ describe('rendering an export file', () => {
 })
 
 // A scanned folder of two-tone photos and a project, ready to export.
-async function exportable(kind: 'collage_2' | 'carousel' = 'collage_2') {
+async function exportable(kind: 'collage' | 'carousel' = 'collage') {
   const profile = tempProfile()
   const db = await openTestCatalog(profile.catalogFile)
   const thumbnailsDir = join(profile.dir, 'thumbnails')
@@ -166,7 +166,7 @@ async function exportable(kind: 'collage_2' | 'carousel' = 'collage_2') {
   if (!added.ok) throw new Error(added.reason)
   await scanSource({ db, thumbnailsDir, processImage }, added.source.id)
   const assets = (db.prepare('SELECT asset_id FROM asset_location ORDER BY relative_path').pluck().all() as string[]).slice(0, kind === 'carousel' ? 3 : 2)
-  const project = createProject(db, { kind, aspect: '1:1', background: 'cream', assetIds: assets })
+  const project = createProject(db, { templateId: kind === 'carousel' ? 'carousel-full' : 'pair-equal-split', format: 'square', assetIds: assets })
   return { db, profile, photos, sourceId: added.source.id, project }
 }
 

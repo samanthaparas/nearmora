@@ -4,6 +4,8 @@
  */
 
 import { z } from 'zod'
+import { FORMAT_IDS, type FormatId } from './studio/formats'
+import { ParamsSchema } from './studio/params'
 
 const id = z.uuid()
 const count = z.number().int().nonnegative()
@@ -53,16 +55,15 @@ const revision = z.number().int().nonnegative()
 /** The set changed since the screen loaded it (for example, a scan regrouped it). Nothing was written. */
 const Stale = z.object({ status: z.literal('stale') })
 
-const projectKind = z.enum(['collage_2', 'collage_4', 'carousel'])
-const aspect = z.enum(['1:1', '4:5', '5:4'])
-const background = z.enum(['cream', 'white'])
+const format = z.enum(FORMAT_IDS as [FormatId, ...FormatId[]])
+const templateId = z.string().min(1).max(80)
 const crop = z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1), zoom: z.number().min(1).max(4) })
 const ProjectSummary = z.object({
   id,
   title: z.string(),
-  kind: projectKind,
-  aspect,
-  background,
+  templateId,
+  templateVersion: z.number().int().positive(),
+  format,
   photoCount: count,
   coverAssetId: id.nullable(),
   updatedAt: z.number().int(),
@@ -70,16 +71,17 @@ const ProjectSummary = z.object({
 const ProjectDetail = z.object({
   id,
   title: z.string(),
-  kind: projectKind,
-  aspect,
-  background,
-  layoutVersion: z.number().int(),
+  templateId,
+  templateVersion: z.number().int().positive(),
+  format,
+  params: ParamsSchema,
   updatedAt: z.number().int(),
   items: z.array(
     z.object({
       position: count,
       assetId: id,
       crop,
+      fit: z.enum(['fill', 'fit']),
       width: z.number().int().nullable(),
       height: z.number().int().nullable(),
       available: z.boolean(),
@@ -299,11 +301,11 @@ export const commands = {
   'projects:list': { input: z.undefined(), output: z.array(ProjectSummary) },
   'projects:get': { input: z.object({ projectId: id }), output: ProjectDetail },
   'projects:create': {
-    input: z.object({ kind: projectKind, aspect, background, assetIds: z.array(id).min(2).max(10) }),
+    input: z.object({ templateId, format, assetIds: z.array(id).min(2).max(10) }),
     output: ProjectDetail,
   },
   'projects:update': {
-    input: z.object({ projectId: id, title: z.string().trim().min(1).max(120).optional(), aspect: aspect.optional(), background: background.optional() }),
+    input: z.object({ projectId: id, title: z.string().trim().min(1).max(120).optional(), format: format.optional(), params: ParamsSchema.optional() }),
     output: ProjectDetail,
   },
   'projects:reorder': { input: z.object({ projectId: id, assetIds: z.array(id).min(2).max(10) }), output: ProjectDetail },

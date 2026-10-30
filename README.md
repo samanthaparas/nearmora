@@ -39,7 +39,7 @@ src/
     library/         Adding, scanning, reconnecting and removing folders, date moments, similar-photo sets, thumbnail cache, storage
     studio/          Export: checks, staged rendering, verification, finalizing and crash recovery
     catalog/         The SQLite catalog: opening, migrations, backup/restore
-      migrations/      Numbered schema changes (.sql), applied in order (v4 adds landscape projects)
+      migrations/      Numbered schema changes (.sql), applied in order (v4 landscape projects, v5 Studio templates)
       repositories/    Reading and writing sources, pictures, favorites, albums, sets and review choices
     ipc/             The checkpoint for every request the UI makes
     security/        CSP, app:// and nm-media:// serving, navigation and permission guards
@@ -51,7 +51,8 @@ src/
     src/best-moments/ The Best Moments screen: queue, compare view, choosing favorites, corrections, unsaved-changes dialog
     src/studio/      Favorites and Memory Studio: projects, the canvas preview, order and crop controls, export panel
     src/settings/    Settings: storage sizes, cache clearing, privacy statement
-  shared/          Types and schemas used by more than one process, and the Studio layout math (preview and export)
+  shared/          Types and schemas used by more than one process, and the Studio crop math (preview and export)
+    studio/          Studio templates, formats, project settings and the composition both preview and export draw
 tests/unit/        Fast tests of individual functions (Vitest)
 tests/integration/ Catalog and scanning tests against real files and SQLite (Vitest)
 tests/support/     Shared test helpers: generated test photos, the originals-unchanged checks, grouping scores

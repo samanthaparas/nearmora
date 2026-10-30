@@ -1,5 +1,5 @@
 /**
- * Integration tests for Memory Studio projects (AC6): photo counts per layout, crops and order restored exactly
+ * Integration tests for Memory Studio projects (AC6): photo counts per template, settings checked against their schema, crops and order restored exactly
  * after a restart, reordering that keeps each photo's crop, offline photos named, and deleting a project
  * leaving every photo in place.
  */
@@ -27,36 +27,41 @@ async function library(file = tempProfile().catalogFile) {
 describe('creating projects', () => {
   it('enforces the photo count for each layout, and each photo once', async () => {
     const { db, assets } = await library()
-    const make = (kind: 'collage_2' | 'collage_4' | 'carousel', n: number) =>
-      codeOf(() => createProject(db, { kind, aspect: '1:1', background: 'cream', assetIds: assets.slice(0, n) }))
-    expect(make('collage_2', 3)).toBe('INVALID_INPUT')
-    expect(make('collage_4', 3)).toBe('INVALID_INPUT')
-    expect(make('carousel', 1)).toBe('INVALID_INPUT')
-    expect(make('collage_2', 2)).toBeUndefined()
-    expect(make('collage_4', 4)).toBeUndefined()
-    expect(make('carousel', 10)).toBeUndefined()
-    expect(codeOf(() => createProject(db, { kind: 'collage_2', aspect: '1:1', background: 'cream', assetIds: [assets[0]!, assets[0]!] }))).toBe(
+    const make = (templateId: string, n: number) => codeOf(() => createProject(db, { templateId, format: 'square', assetIds: assets.slice(0, n) }))
+    expect(make('pair-equal-split', 3)).toBe('INVALID_INPUT')
+    expect(make('pair-stacked', 1)).toBe('INVALID_INPUT')
+    expect(make('quartet-classic-grid', 3)).toBe('INVALID_INPUT')
+    expect(make('carousel-full', 1)).toBe('INVALID_INPUT')
+    expect(make('pair-equal-split', 2)).toBeUndefined()
+    expect(make('pair-stacked', 2)).toBeUndefined()
+    expect(make('quartet-classic-grid', 4)).toBeUndefined()
+    expect(make('carousel-full', 10)).toBeUndefined()
+    // Unknown templates and formats are refused, not guessed.
+    expect(make('no-such-template', 2)).toBe('INVALID_INPUT')
+    expect(codeOf(() => createProject(db, { templateId: 'pair-equal-split', format: 'poster', assetIds: assets.slice(0, 2) }))).toBe('INVALID_INPUT')
+    expect(codeOf(() => createProject(db, { templateId: 'pair-equal-split', format: 'square', assetIds: [assets[0]!, assets[0]!] }))).toBe(
       'INVALID_INPUT',
     )
   })
 
-  it('starts with a default title, centred crops and the current layout version', async () => {
+  it('starts with the template’s name as title, centred crops, fill, default settings and the template’s version', async () => {
     const { db, assets } = await library()
-    const project = createProject(db, { kind: 'collage_4', aspect: '4:5', background: 'white', assetIds: assets.slice(0, 4) })
-    expect(project).toMatchObject({ title: 'Four-photo collage', kind: 'collage_4', aspect: '4:5', background: 'white', layoutVersion: 1 })
+    const project = createProject(db, { templateId: 'quartet-classic-grid', format: 'portrait', assetIds: assets.slice(0, 4) })
+    expect(project).toMatchObject({ title: 'Classic grid', templateId: 'quartet-classic-grid', templateVersion: 1, format: 'portrait', params: { v: 1 } })
     expect(project.items.map((i) => i.crop)).toEqual(Array(4).fill({ cx: 0.5, cy: 0.5, zoom: 1 }))
+    expect(project.items.map((i) => i.fit)).toEqual(Array(4).fill('fill'))
     expect(listProjects(db)).toMatchObject([{ id: project.id, photoCount: 4, coverAssetId: assets[0] }])
   })
 })
 
 describe('editing and restoring a draft (AC6)', () => {
-  it('reopens after a restart with the same order, crops, title, aspect and background', async () => {
+  it('reopens after a restart with the same order, crops, title, format and settings', async () => {
     const { catalogFile } = tempProfile()
     const { db, assets } = await library(catalogFile)
-    const project = createProject(db, { kind: 'carousel', aspect: '1:1', background: 'cream', assetIds: assets.slice(0, 3) })
+    const project = createProject(db, { templateId: 'carousel-full', format: 'square', assetIds: assets.slice(0, 3) })
     setItemCrop(db, { projectId: project.id, position: 1, crop: { cx: 0.25, cy: 0.75, zoom: 2.5 } })
     reorderProject(db, { projectId: project.id, assetIds: [assets[2]!, assets[1]!, assets[0]!] })
-    updateProject(db, { projectId: project.id, title: 'Beach carousel', aspect: '4:5', background: 'white' })
+    updateProject(db, { projectId: project.id, title: 'Beach carousel', format: 'portrait', params: { v: 1, background: '#ffffff', margin: 30 } })
     const before = getProject(db, project.id)
     db.close()
 
@@ -69,12 +74,17 @@ describe('editing and restoring a draft (AC6)', () => {
 
   it('refuses crops out of range and reorders that change which photos are in it', async () => {
     const { db, assets } = await library()
-    const project = createProject(db, { kind: 'collage_2', aspect: '1:1', background: 'cream', assetIds: assets.slice(0, 2) })
+    const project = createProject(db, { templateId: 'pair-equal-split', format: 'square', assetIds: assets.slice(0, 2) })
     expect(codeOf(() => setItemCrop(db, { projectId: project.id, position: 0, crop: { cx: 1.5, cy: 0.5, zoom: 1 } }))).toBe('INVALID_INPUT')
     expect(codeOf(() => setItemCrop(db, { projectId: project.id, position: 0, crop: { cx: 0.5, cy: 0.5, zoom: 5 } }))).toBe('INVALID_INPUT')
     expect(codeOf(() => setItemCrop(db, { projectId: project.id, position: 7, crop: { cx: 0.5, cy: 0.5, zoom: 1 } }))).toBe('NOT_FOUND')
     expect(codeOf(() => reorderProject(db, { projectId: project.id, assetIds: [assets[0]!, assets[5]!] }))).toBe('INVALID_INPUT')
     expect(codeOf(() => updateProject(db, { projectId: project.id, title: '   ' }))).toBe('INVALID_INPUT')
+    // Settings are checked against the schema: no unknown keys, colours as #rrggbb, margins within range.
+    for (const params of [{ v: 1, background: 'red' }, { v: 1, margin: -4 }, { v: 1, script: 'x' }, { v: 2 }]) {
+      expect(codeOf(() => updateProject(db, { projectId: project.id, params: params as never }))).toBe('INVALID_INPUT')
+    }
+    expect(codeOf(() => updateProject(db, { projectId: project.id, format: 'poster' }))).toBe('INVALID_INPUT')
     expect(getProject(db, project.id).items.map((i) => i.assetId)).toEqual(assets.slice(0, 2))
   })
 })
@@ -82,7 +92,7 @@ describe('editing and restoring a draft (AC6)', () => {
 describe('photos that can’t be reached (AC6)', () => {
   it('names each unavailable photo by file and folder, while the draft stays editable', async () => {
     const { db, assets, sourceId } = await library()
-    const project = createProject(db, { kind: 'collage_2', aspect: '1:1', background: 'cream', assetIds: assets.slice(0, 2) })
+    const project = createProject(db, { templateId: 'pair-equal-split', format: 'square', assetIds: assets.slice(0, 2) })
     expect(getProject(db, project.id).items.every((i) => i.available)).toBe(true)
 
     setSourceStatus(db, sourceId, 'disconnected')
@@ -99,7 +109,7 @@ describe('photos that can’t be reached (AC6)', () => {
 describe('deleting a project', () => {
   it('removes the project and its items only; every picture stays', async () => {
     const { db, assets } = await library()
-    const project = createProject(db, { kind: 'collage_2', aspect: '1:1', background: 'cream', assetIds: assets.slice(0, 2) })
+    const project = createProject(db, { templateId: 'pair-equal-split', format: 'square', assetIds: assets.slice(0, 2) })
     deleteProject(db, project.id)
     expect(listProjects(db)).toEqual([])
     expect(db.prepare('SELECT COUNT(*) FROM project_item').pluck().get()).toBe(0)

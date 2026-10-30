@@ -11,7 +11,8 @@ import { CatalogError, MigrationError } from '../../src/main/catalog/errors'
 import { MIGRATIONS, type Migration } from '../../src/main/catalog/migrations'
 import { latestVersion, readSchemaVersion } from '../../src/main/catalog/migrate'
 import { createAlbum, listAlbums } from '../../src/main/catalog/repositories/albums'
-import { createProject, deleteProject, getProject, setItemCrop, updateProject } from '../../src/main/catalog/repositories/projects'
+import { deleteProject, getProject, updateProject } from '../../src/main/catalog/repositories/projects'
+import { compose } from '../../src/shared/studio/compose'
 import { openTestCatalog, seedAssets, seedSource, tempProfile } from './helpers'
 
 const v1 = MIGRATIONS[0]!
@@ -140,28 +141,79 @@ describe('migrating an existing catalog', () => {
   })
 })
 
+// Old project rows written with plain SQL, as an older Nearmora would have, so these tests don't depend on today's repository code.
+function insertOldProject(db: Database.Database, row: { id: string; kind: string; aspect: string; background: string; assets: string[]; crop?: [number, number, number] }) {
+  db.prepare(`INSERT INTO project (id, title, kind, aspect, background, layout_version, updated_at) VALUES (?, ?, ?, ?, ?, 1, 5)`).run(
+    row.id,
+    `Old ${row.kind}`,
+    row.kind,
+    row.aspect,
+    row.background,
+  )
+  row.assets.forEach((assetId, position) => {
+    const [cx, cy, zoom] = position === 1 && row.crop ? row.crop : [0.5, 0.5, 1]
+    db.prepare(`INSERT INTO project_item (project_id, position, asset_id, crop_cx, crop_cy, crop_zoom) VALUES (?, ?, ?, ?, ?, ?)`).run(row.id, position, assetId, cx, cy, zoom)
+  })
+}
+
 describe('schema v4: landscape projects', () => {
   it('keeps every existing project, photo and crop, allows landscape, and still deletes items with their project', async () => {
     const { catalogFile, backupDir } = tempProfile()
     const old = await openTestCatalog(catalogFile, { migrations: MIGRATIONS.slice(0, 3) })
     const assets = seedAssets(old, seedSource(old).sourceId, 2)
-    const project = createProject(old, { kind: 'collage_2', aspect: '4:5', background: 'white', assetIds: assets, title: 'Before v4' })
-    setItemCrop(old, { projectId: project.id, position: 1, crop: { cx: 0.3, cy: 0.7, zoom: 2 } })
-    const before = getProject(old, project.id)
+    insertOldProject(old, { id: 'p1', kind: 'collage_2', aspect: '4:5', background: 'white', assets, crop: [0.3, 0.7, 2] })
+    const items = () => old.prepare('SELECT * FROM project_item ORDER BY position').all()
+    const before = { project: old.prepare('SELECT * FROM project').all(), items: items() }
     expect(() => old.prepare(`UPDATE project SET aspect = '5:4'`).run()).toThrow(/CHECK/)
     old.close()
 
-    const db = await openTestCatalog(catalogFile, { backupDir })
+    const db = await openTestCatalog(catalogFile, { backupDir, migrations: MIGRATIONS.slice(0, 4) })
     expect(readSchemaVersion(db)).toBe(4)
-    expect(getProject(db, project.id)).toEqual(before)
-    updateProject(db, { projectId: project.id, aspect: '5:4' })
-    expect(getProject(db, project.id).aspect).toBe('5:4')
+    expect({ project: db.prepare('SELECT * FROM project').all(), items: db.prepare('SELECT * FROM project_item ORDER BY position').all() }).toEqual(before)
+    db.prepare(`UPDATE project SET aspect = '5:4'`).run()
     // The item table points at the new project table, so deleting a project still removes its items (and only those).
     expect(db.prepare('PRAGMA foreign_key_list(project_item)').all()).toEqual(
       expect.arrayContaining([expect.objectContaining({ table: 'project', on_delete: 'CASCADE' })]),
     )
-    deleteProject(db, project.id)
+    db.prepare(`DELETE FROM project WHERE id = 'p1'`).run()
     expect(db.prepare('SELECT COUNT(*) AS n FROM project_item').get()).toEqual({ n: 0 })
     expect(db.prepare('SELECT COUNT(*) AS n FROM asset').get()).toEqual({ n: 2 })
+  })
+})
+
+describe('schema v5: templates', () => {
+  it('maps every older project onto a template that lays it out exactly as before, keeping photos and crops', async () => {
+    const { catalogFile, backupDir } = tempProfile()
+    const old = await openTestCatalog(catalogFile, { migrations: MIGRATIONS.slice(0, 4) })
+    const assets = seedAssets(old, seedSource(old).sourceId, 4)
+    insertOldProject(old, { id: 'two', kind: 'collage_2', aspect: '1:1', background: 'white', assets: assets.slice(0, 2), crop: [0.3, 0.7, 2] })
+    insertOldProject(old, { id: 'four', kind: 'collage_4', aspect: '5:4', background: 'cream', assets })
+    insertOldProject(old, { id: 'slides', kind: 'carousel', aspect: '4:5', background: 'cream', assets: assets.slice(0, 3) })
+    old.close()
+
+    const db = await openTestCatalog(catalogFile, { backupDir })
+    expect(readSchemaVersion(db)).toBe(LATEST)
+    expect(readdirSync(backupDir)).toHaveLength(1) // backed up before migrating
+    const two = getProject(db, 'two')
+    expect(two).toMatchObject({ title: 'Old collage_2', templateId: 'pair-equal-split', templateVersion: 1, format: 'square', params: { v: 1, background: '#ffffff' } })
+    expect(two.items.map((i) => [i.assetId, i.crop, i.fit])).toEqual([
+      [assets[0], { cx: 0.5, cy: 0.5, zoom: 1 }, 'fill'],
+      [assets[1], { cx: 0.3, cy: 0.7, zoom: 2 }, 'fill'],
+    ])
+    expect(getProject(db, 'four')).toMatchObject({ templateId: 'quartet-classic-grid', format: 'landscape', params: { v: 1, background: '#f8f0e8' } })
+    expect(getProject(db, 'slides')).toMatchObject({ templateId: 'carousel-full', format: 'portrait' })
+
+    // Studio Lite's square two-photo layout: a 48 px margin, a 24 px gap and two 480 × 984 cells.
+    const layout = compose({ ...two, photoCount: 2 })
+    expect(layout.elements.map((e) => e.rect)).toEqual([
+      { x: 48, y: 48, width: 480, height: 984 },
+      { x: 552, y: 48, width: 480, height: 984 },
+    ])
+    expect(layout.background).toBe('#ffffff')
+    // Projects keep working: edit, then delete (its items go with it; pictures stay).
+    updateProject(db, { projectId: 'four', format: 'portrait' })
+    deleteProject(db, 'slides')
+    expect(db.prepare(`SELECT COUNT(*) AS n FROM project_item WHERE project_id = 'slides'`).get()).toEqual({ n: 0 })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM asset').get()).toEqual({ n: 4 })
   })
 })

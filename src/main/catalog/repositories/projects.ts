@@ -1,5 +1,6 @@
 /**
- * Memory Studio projects (AC6): collages and carousels made from favorites, with each photo's order and crop.
+ * Memory Studio projects (AC6): collages and carousels made from favorites, from a versioned template, with each
+ * photo's order and crop.
  * Every change is saved straight away, so a draft can't be lost and reopens exactly after a restart.
  * Projects only reference pictures; nothing here touches a photo file.
  */
@@ -7,24 +8,22 @@
 import { randomUUID } from 'node:crypto'
 import { posix } from 'node:path'
 import { z } from 'zod'
-import { DEFAULT_CROP, LAYOUT_VERSION, MAX_ZOOM, PHOTO_COUNT, type Aspect, type Background, type Crop, type ProjectKind } from '@shared/layout'
+import { DEFAULT_CROP, MAX_ZOOM, type Crop } from '@shared/layout'
+import { isFormatId, type FormatId } from '@shared/studio/formats'
+import { DEFAULT_PARAMS, ParamsSchema, readParams, type Params } from '@shared/studio/params'
+import { latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
 import type { Catalog } from '../database'
 import { CatalogError, isConstraintError } from '../errors'
 
-const Kind = z.enum(['collage_2', 'collage_4', 'carousel'])
-const AspectSchema = z.enum(['1:1', '4:5', '5:4'])
-const BackgroundSchema = z.enum(['cream', 'white'])
 const Title = z.string().trim().min(1).max(120)
 const CropSchema = z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1), zoom: z.number().min(1).max(MAX_ZOOM) })
-
-const DEFAULT_TITLES: Record<ProjectKind, string> = { collage_2: 'Two-photo collage', collage_4: 'Four-photo collage', carousel: 'Carousel' }
 
 export interface ProjectSummary {
   id: string
   title: string
-  kind: ProjectKind
-  aspect: Aspect
-  background: Background
+  templateId: string
+  templateVersion: number
+  format: FormatId
   photoCount: number
   coverAssetId: string | null
   updatedAt: number
@@ -34,6 +33,8 @@ export interface ProjectItem {
   position: number
   assetId: string
   crop: Crop
+  /** Fill covers the slot (cropping the photo); fit shows the whole photo inside it. Used from phase S2. */
+  fit: 'fill' | 'fit'
   width: number | null
   height: number | null
   /** False when no file of this picture can be read now (folder disconnected, or file missing). */
@@ -44,24 +45,35 @@ export interface ProjectItem {
 }
 
 export interface ProjectDetail extends Omit<ProjectSummary, 'photoCount' | 'coverAssetId'> {
-  layoutVersion: number
+  params: Params
   items: ProjectItem[]
 }
 
-function checkCount(kind: ProjectKind, count: number): void {
-  const { min, max } = PHOTO_COUNT[kind]
-  if (count < min || count > max) {
-    throw new CatalogError('INVALID_INPUT', min === max ? `This layout takes exactly ${min} photos` : `A carousel takes ${min}–${max} photos`)
-  }
+// New projects always start from the newest version of a template.
+function newestTemplate(templateId: string): TemplateDefinition {
+  const template = latestTemplates().find((t) => t.id === templateId)
+  if (!template) throw new CatalogError('INVALID_INPUT', 'Unknown template')
+  return template
+}
+
+function checkFormat(format: string): FormatId {
+  if (!isFormatId(format)) throw new CatalogError('INVALID_INPUT', 'Unknown format')
+  return format
+}
+
+// A format read back from the catalog that this version doesn't know (written by a newer Nearmora) is refused, not guessed.
+const storedFormat = (format: string): FormatId => {
+  if (!isFormatId(format)) throw new CatalogError('INVALID_INPUT', `This project uses a format this version of Nearmora doesn't know (${format})`)
+  return format
 }
 
 const touch = (db: Catalog, projectId: string) => db.prepare('UPDATE project SET updated_at = ? WHERE id = ?').run(Date.now(), projectId)
 
-function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ assetId: string; crop: Crop }>): void {
-  const insert = db.prepare('INSERT INTO project_item (project_id, position, asset_id, crop_cx, crop_cy, crop_zoom) VALUES (?, ?, ?, ?, ?, ?)')
-  items.forEach(({ assetId, crop }, position) => {
+function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ assetId: string; crop: Crop; fit: 'fill' | 'fit' }>): void {
+  const insert = db.prepare('INSERT INTO project_item (project_id, position, asset_id, crop_cx, crop_cy, crop_zoom, fit) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  items.forEach(({ assetId, crop, fit }, position) => {
     try {
-      insert.run(projectId, position, assetId, crop.cx, crop.cy, crop.zoom)
+      insert.run(projectId, position, assetId, crop.cx, crop.cy, crop.zoom, fit)
     } catch (error: unknown) {
       if (isConstraintError(error, 'FOREIGNKEY')) throw new CatalogError('NOT_FOUND', 'Picture not found', { cause: error })
       throw error
@@ -69,28 +81,29 @@ function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ asse
   })
 }
 
-export function createProject(
-  db: Catalog,
-  input: { kind: ProjectKind; aspect: Aspect; background: Background; assetIds: readonly string[]; title?: string },
-): ProjectDetail {
-  const kind = Kind.parse(input.kind)
-  checkCount(kind, input.assetIds.length)
+export function createProject(db: Catalog, input: { templateId: string; format: string; assetIds: readonly string[]; title?: string }): ProjectDetail {
+  const template = newestTemplate(input.templateId)
+  const format = checkFormat(input.format)
+  const { min, max } = template.photos
+  if (input.assetIds.length < min || input.assetIds.length > max) {
+    throw new CatalogError('INVALID_INPUT', min === max ? `${template.name} takes exactly ${min} photos` : `${template.name} takes ${min}–${max} photos`)
+  }
   if (new Set(input.assetIds).size !== input.assetIds.length) throw new CatalogError('INVALID_INPUT', 'Each photo can be used once per project')
-  const title = Title.safeParse(input.title ?? DEFAULT_TITLES[kind])
+  const title = Title.safeParse(input.title ?? template.name)
   if (!title.success) throw new CatalogError('INVALID_INPUT', 'Project titles need 1–120 characters')
 
   const id = randomUUID()
   db.transaction(() => {
-    db.prepare('INSERT INTO project (id, title, kind, aspect, background, layout_version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    db.prepare('INSERT INTO project (id, title, template_id, template_version, format, params_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       id,
       title.data,
-      kind,
-      AspectSchema.parse(input.aspect),
-      BackgroundSchema.parse(input.background),
-      LAYOUT_VERSION,
+      template.id,
+      template.version,
+      format,
+      JSON.stringify(DEFAULT_PARAMS),
       Date.now(),
     )
-    insertItems(db, id, input.assetIds.map((assetId) => ({ assetId, crop: DEFAULT_CROP })))
+    insertItems(db, id, input.assetIds.map((assetId) => ({ assetId, crop: DEFAULT_CROP, fit: 'fill' as const })))
   })()
   return getProject(db, id)
 }
@@ -100,25 +113,25 @@ export function listProjects(db: Catalog): ProjectSummary[] {
   return (
     db
       .prepare(
-        `SELECT p.id, p.title, p.kind, p.aspect, p.background, p.updated_at AS updatedAt,
+        `SELECT p.id, p.title, p.template_id AS templateId, p.template_version AS templateVersion, p.format, p.updated_at AS updatedAt,
                 COUNT(i.position) AS photoCount,
                 (SELECT asset_id FROM project_item c WHERE c.project_id = p.id ORDER BY c.position LIMIT 1) AS coverAssetId
          FROM project p LEFT JOIN project_item i ON i.project_id = p.id
          GROUP BY p.id ORDER BY p.updated_at DESC, p.id`,
       )
-      .all() as ProjectSummary[]
-  )
+      .all() as Array<Omit<ProjectSummary, 'format'> & { format: string }>
+  ).map((row) => ({ ...row, format: storedFormat(row.format) }))
 }
 
 export function getProject(db: Catalog, projectId: string): ProjectDetail {
-  const project = db.prepare('SELECT id, title, kind, aspect, background, layout_version, updated_at FROM project WHERE id = ?').get(projectId) as
-    | { id: string; title: string; kind: ProjectKind; aspect: Aspect; background: Background; layout_version: number; updated_at: number }
+  const project = db.prepare('SELECT id, title, template_id, template_version, format, params_json, updated_at FROM project WHERE id = ?').get(projectId) as
+    | { id: string; title: string; template_id: string; template_version: number; format: string; params_json: string; updated_at: number }
     | undefined
   if (!project) throw new CatalogError('NOT_FOUND', 'Project not found')
 
   const rows = db
     .prepare(
-      `SELECT i.position, i.asset_id, i.crop_cx, i.crop_cy, i.crop_zoom, a.width, a.height,
+      `SELECT i.position, i.asset_id, i.crop_cx, i.crop_cy, i.crop_zoom, i.fit, a.width, a.height,
               EXISTS (SELECT 1 FROM asset_location l JOIN source s ON s.id = l.source_id
                       WHERE l.asset_id = a.id AND l.availability = 'available' AND s.status = 'active') AS available,
               (SELECT l.relative_path FROM asset_location l WHERE l.asset_id = a.id ORDER BY l.availability = 'available' DESC, l.relative_path LIMIT 1) AS relative_path,
@@ -133,6 +146,7 @@ export function getProject(db: Catalog, projectId: string): ProjectDetail {
     crop_cx: number
     crop_cy: number
     crop_zoom: number
+    fit: 'fill' | 'fit'
     width: number | null
     height: number | null
     available: number
@@ -143,15 +157,16 @@ export function getProject(db: Catalog, projectId: string): ProjectDetail {
   return {
     id: project.id,
     title: project.title,
-    kind: project.kind,
-    aspect: project.aspect,
-    background: project.background,
-    layoutVersion: project.layout_version,
+    templateId: project.template_id,
+    templateVersion: project.template_version,
+    format: storedFormat(project.format),
+    params: parseStoredParams(project.params_json),
     updatedAt: project.updated_at,
     items: rows.map((row) => ({
       position: row.position,
       assetId: row.asset_id,
       crop: { cx: row.crop_cx, cy: row.crop_cy, zoom: row.crop_zoom },
+      fit: row.fit,
       width: row.width,
       height: row.height,
       available: row.available === 1,
@@ -161,7 +176,17 @@ export function getProject(db: Catalog, projectId: string): ProjectDetail {
   }
 }
 
-export function updateProject(db: Catalog, input: { projectId: string; title?: string; aspect?: Aspect; background?: Background }): void {
+// Stored settings that don't match the schema (damaged, or written by a newer Nearmora) are refused, not guessed at.
+function parseStoredParams(json: string): Params {
+  try {
+    return readParams(JSON.parse(json))
+  } catch (error: unknown) {
+    throw new CatalogError('INVALID_INPUT', 'This project’s settings can’t be read by this version of Nearmora', { cause: error })
+  }
+}
+
+/** Title, format and settings. Settings are replaced as a whole, after checking them against the schema. */
+export function updateProject(db: Catalog, input: { projectId: string; title?: string; format?: string; params?: Params }): void {
   db.transaction(() => {
     getProject(db, input.projectId)
     if (input.title !== undefined) {
@@ -169,9 +194,11 @@ export function updateProject(db: Catalog, input: { projectId: string; title?: s
       if (!title.success) throw new CatalogError('INVALID_INPUT', 'Project titles need 1–120 characters')
       db.prepare('UPDATE project SET title = ? WHERE id = ?').run(title.data, input.projectId)
     }
-    if (input.aspect !== undefined) db.prepare('UPDATE project SET aspect = ? WHERE id = ?').run(AspectSchema.parse(input.aspect), input.projectId)
-    if (input.background !== undefined) {
-      db.prepare('UPDATE project SET background = ? WHERE id = ?').run(BackgroundSchema.parse(input.background), input.projectId)
+    if (input.format !== undefined) db.prepare('UPDATE project SET format = ? WHERE id = ?').run(checkFormat(input.format), input.projectId)
+    if (input.params !== undefined) {
+      const params = ParamsSchema.safeParse(input.params)
+      if (!params.success) throw new CatalogError('INVALID_INPUT', 'Those settings aren’t valid')
+      db.prepare('UPDATE project SET params_json = ? WHERE id = ?').run(JSON.stringify(params.data), input.projectId)
     }
     touch(db, input.projectId)
   })()
@@ -183,9 +210,9 @@ export function reorderProject(db: Catalog, input: { projectId: string; assetIds
     const current = getProject(db, input.projectId).items
     const same = input.assetIds.length === current.length && current.every((item) => input.assetIds.includes(item.assetId))
     if (!same) throw new CatalogError('INVALID_INPUT', 'A reorder must list the project’s photos exactly once')
-    const cropOf = new Map(current.map((item) => [item.assetId, item.crop]))
+    const itemOf = new Map(current.map((item) => [item.assetId, item]))
     db.prepare('DELETE FROM project_item WHERE project_id = ?').run(input.projectId)
-    insertItems(db, input.projectId, input.assetIds.map((assetId) => ({ assetId, crop: cropOf.get(assetId)! })))
+    insertItems(db, input.projectId, input.assetIds.map((assetId) => ({ assetId, crop: itemOf.get(assetId)!.crop, fit: itemOf.get(assetId)!.fit })))
     touch(db, input.projectId)
   })()
 }

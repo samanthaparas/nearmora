@@ -1,19 +1,16 @@
 /**
  * The Favorites screen: every photo marked as a favorite (in Best Moments), ready to become a collage or carousel.
- * Select photos, then choose a layout; the new project opens in Memory Studio.
+ * Select photos, then choose a template; the new project opens in Memory Studio.
  */
 
 import { useMemo, useState, type ReactNode } from 'react'
-import { PHOTO_COUNT, type ProjectKind } from '@shared/layout'
+import { latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
 import { PhotoGrid, altFor, libraryFetcher, type Photo } from '../library/PhotoGrid'
 import '../library/Library.css'
 import './Studio.css'
 
-const LAYOUTS: Array<{ kind: ProjectKind; label: string; hint: string }> = [
-  { kind: 'collage_2', label: 'Two-photo collage', hint: 'select 2' },
-  { kind: 'collage_4', label: 'Four-photo collage', hint: 'select 4' },
-  { kind: 'carousel', label: 'Carousel', hint: 'select 2–10' },
-]
+// "select 2", or "select 2–10" for a template that takes a range.
+const hint = ({ photos: { min, max } }: TemplateDefinition) => (min === max ? `select ${min}` : `select ${min}–${max}`)
 
 export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string) => void }) {
   const fetchPage = useMemo(() => libraryFetcher({ favoritesOnly: true }), [])
@@ -21,8 +18,8 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
   const [total, setTotal] = useState<number | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
-  async function create(kind: ProjectKind) {
-    const result = await window.nearmora.createProject({ kind, aspect: '1:1', background: 'cream', assetIds: selected })
+  async function create(template: TemplateDefinition) {
+    const result = await window.nearmora.createProject({ templateId: template.id, format: 'square', assetIds: selected })
     if (!result.ok) return setMessage('That project couldn’t be created. Nothing was changed.')
     onOpenProject(result.data.id)
   }
@@ -67,12 +64,18 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
           <span className="review__note">
             {selected.length} selected{selected.length > 0 ? ' · in the order you picked them' : ''}
           </span>
-          {LAYOUTS.map(({ kind, label, hint }) => {
-            const { min, max } = PHOTO_COUNT[kind]
-            const fits = selected.length >= min && selected.length <= max
+          {latestTemplates().map((template) => {
+            const fits = selected.length >= template.photos.min && selected.length <= template.photos.max
             return (
-              <button key={kind} type="button" className="button button--secondary" disabled={!fits} onClick={() => void create(kind)}>
-                {label} <span className="review__note">({hint})</span>
+              <button
+                key={template.id}
+                type="button"
+                className="button button--secondary"
+                disabled={!fits}
+                title={template.description}
+                onClick={() => void create(template)}
+              >
+                {template.name} <span className="review__note">({hint(template)})</span>
               </button>
             )
           })}
