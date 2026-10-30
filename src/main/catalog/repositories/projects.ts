@@ -1,6 +1,6 @@
 /**
  * Memory Studio projects (AC6): collages and carousels made from favorites, from a versioned template, with each
- * photo's order and crop.
+ * photo's order, crop and fit.
  * Every change is saved straight away, so a draft can't be lost and reopens exactly after a restart.
  * Projects only reference pictures; nothing here touches a photo file.
  */
@@ -8,15 +8,15 @@
 import { randomUUID } from 'node:crypto'
 import { posix } from 'node:path'
 import { z } from 'zod'
-import { DEFAULT_CROP, MAX_ZOOM, type Crop } from '@shared/layout'
+import { DEFAULT_CROP, type Crop, type Fit } from '@shared/layout'
+import { DesignSchema, type Design } from '@shared/studio/design'
 import { isFormatId, type FormatId } from '@shared/studio/formats'
-import { DEFAULT_PARAMS, ParamsSchema, readParams, type Params } from '@shared/studio/params'
-import { latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
+import { DEFAULT_PARAMS, readParams, type Params } from '@shared/studio/params'
+import { findTemplate, latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
 import type { Catalog } from '../database'
 import { CatalogError, isConstraintError } from '../errors'
 
 const Title = z.string().trim().min(1).max(120)
-const CropSchema = z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1), zoom: z.number().min(1).max(MAX_ZOOM) })
 
 export interface ProjectSummary {
   id: string
@@ -33,8 +33,7 @@ export interface ProjectItem {
   position: number
   assetId: string
   crop: Crop
-  /** Fill covers the slot (cropping the photo); fit shows the whole photo inside it. Used from phase S2. */
-  fit: 'fill' | 'fit'
+  fit: Fit
   width: number | null
   height: number | null
   /** False when no file of this picture can be read now (folder disconnected, or file missing). */
@@ -67,9 +66,7 @@ const storedFormat = (format: string): FormatId => {
   return format
 }
 
-const touch = (db: Catalog, projectId: string) => db.prepare('UPDATE project SET updated_at = ? WHERE id = ?').run(Date.now(), projectId)
-
-function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ assetId: string; crop: Crop; fit: 'fill' | 'fit' }>): void {
+function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ assetId: string; crop: Crop; fit: Fit }>): void {
   const insert = db.prepare('INSERT INTO project_item (project_id, position, asset_id, crop_cx, crop_cy, crop_zoom, fit) VALUES (?, ?, ?, ?, ?, ?, ?)')
   items.forEach(({ assetId, crop, fit }, position) => {
     try {
@@ -146,7 +143,7 @@ export function getProject(db: Catalog, projectId: string): ProjectDetail {
     crop_cx: number
     crop_cy: number
     crop_zoom: number
-    fit: 'fill' | 'fit'
+    fit: Fit
     width: number | null
     height: number | null
     available: number
@@ -185,56 +182,35 @@ function parseStoredParams(json: string): Params {
   }
 }
 
+/** Renames a project. Everything else about it is its design (see `setDesign`). */
+export function renameProject(db: Catalog, input: { projectId: string; title: string }): void {
+  const title = Title.safeParse(input.title)
+  if (!title.success) throw new CatalogError('INVALID_INPUT', 'Project titles need 1–120 characters')
+  const result = db.prepare('UPDATE project SET title = ?, updated_at = ? WHERE id = ?').run(title.data, Date.now(), input.projectId)
+  if (result.changes === 0) throw new CatalogError('NOT_FOUND', 'Project not found')
+}
+
 /**
- * Title, layout, format and settings. A new layout must take the project's number of photos; it starts at its newest
- * version, and the photos keep their order and crops. Settings are replaced as a whole, after checking them.
+ * Saves a project's whole design in one transaction: layout and version, shape, settings, and every photo with its
+ * crop and fit. Every Quick edit, undo, redo and reset goes through here. The layout must be one this version knows
+ * and must take this many photos; each photo can appear once. Anything invalid is refused and nothing is written.
  */
-export function updateProject(db: Catalog, input: { projectId: string; title?: string; templateId?: string; format?: string; params?: Params }): void {
-  db.transaction(() => {
-    const current = getProject(db, input.projectId)
-    if (input.templateId !== undefined) {
-      const template = newestTemplate(input.templateId)
-      const count = current.items.length
-      if (count < template.photos.min || count > template.photos.max) throw new CatalogError('INVALID_INPUT', `${template.name} doesn’t take ${count} photos`)
-      db.prepare('UPDATE project SET template_id = ?, template_version = ? WHERE id = ?').run(template.id, template.version, input.projectId)
-    }
-    if (input.title !== undefined) {
-      const title = Title.safeParse(input.title)
-      if (!title.success) throw new CatalogError('INVALID_INPUT', 'Project titles need 1–120 characters')
-      db.prepare('UPDATE project SET title = ? WHERE id = ?').run(title.data, input.projectId)
-    }
-    if (input.format !== undefined) db.prepare('UPDATE project SET format = ? WHERE id = ?').run(checkFormat(input.format), input.projectId)
-    if (input.params !== undefined) {
-      const params = ParamsSchema.safeParse(input.params)
-      if (!params.success) throw new CatalogError('INVALID_INPUT', 'Those settings aren’t valid')
-      db.prepare('UPDATE project SET params_json = ? WHERE id = ?').run(JSON.stringify(params.data), input.projectId)
-    }
-    touch(db, input.projectId)
-  })()
-}
-
-/** Puts the same photos in a new order; each keeps its own crop. */
-export function reorderProject(db: Catalog, input: { projectId: string; assetIds: readonly string[] }): void {
-  db.transaction(() => {
-    const current = getProject(db, input.projectId).items
-    const same = input.assetIds.length === current.length && current.every((item) => input.assetIds.includes(item.assetId))
-    if (!same) throw new CatalogError('INVALID_INPUT', 'A reorder must list the project’s photos exactly once')
-    const itemOf = new Map(current.map((item) => [item.assetId, item]))
-    db.prepare('DELETE FROM project_item WHERE project_id = ?').run(input.projectId)
-    insertItems(db, input.projectId, input.assetIds.map((assetId) => ({ assetId, crop: itemOf.get(assetId)!.crop, fit: itemOf.get(assetId)!.fit })))
-    touch(db, input.projectId)
-  })()
-}
-
-export function setItemCrop(db: Catalog, input: { projectId: string; position: number; crop: Crop }): void {
-  const crop = CropSchema.safeParse(input.crop)
-  if (!crop.success) throw new CatalogError('INVALID_INPUT', 'Crop position must be 0–1 and zoom 1–4')
+export function setDesign(db: Catalog, input: { projectId: string; design: Design }): void {
+  const parsed = DesignSchema.safeParse(input.design)
+  if (!parsed.success) throw new CatalogError('INVALID_INPUT', 'That design isn’t valid')
+  const design = parsed.data
+  const template = findTemplate(design.templateId, design.templateVersion)
+  if (!template) throw new CatalogError('INVALID_INPUT', 'Unknown template')
+  const count = design.items.length
+  if (count < template.photos.min || count > template.photos.max) throw new CatalogError('INVALID_INPUT', `${template.name} doesn’t take ${count} photos`)
+  if (new Set(design.items.map((i) => i.assetId)).size !== count) throw new CatalogError('INVALID_INPUT', 'Each photo can be used once per project')
   db.transaction(() => {
     const result = db
-      .prepare('UPDATE project_item SET crop_cx = ?, crop_cy = ?, crop_zoom = ? WHERE project_id = ? AND position = ?')
-      .run(crop.data.cx, crop.data.cy, crop.data.zoom, input.projectId, input.position)
-    if (result.changes === 0) throw new CatalogError('NOT_FOUND', 'No photo at that position')
-    touch(db, input.projectId)
+      .prepare('UPDATE project SET template_id = ?, template_version = ?, format = ?, params_json = ?, updated_at = ? WHERE id = ?')
+      .run(template.id, template.version, design.format, JSON.stringify(design.params), Date.now(), input.projectId)
+    if (result.changes === 0) throw new CatalogError('NOT_FOUND', 'Project not found')
+    db.prepare('DELETE FROM project_item WHERE project_id = ?').run(input.projectId)
+    insertItems(db, input.projectId, design.items)
   })()
 }
 

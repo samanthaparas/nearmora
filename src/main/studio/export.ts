@@ -9,7 +9,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { accessSync, constants, createReadStream, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import sharp from 'sharp'
-import type { Crop, Rect } from '@shared/layout'
+import type { Crop, Fit, Rect } from '@shared/layout'
 import { compose } from '@shared/studio/compose'
 import type { Catalog } from '../catalog/database'
 import { getProject } from '../catalog/repositories/projects'
@@ -31,7 +31,9 @@ export interface ExportPlan {
   width: number
   height: number
   background: string
-  outputs: Array<{ fileName: string; layers: Array<{ sourcePath: string; crop: Crop; cell: Rect }> }>
+  /** The frame around each photo, in canvas pixels. */
+  border: { width: number; color: string }
+  outputs: Array<{ fileName: string; layers: Array<{ sourcePath: string; crop: Crop; fit: Fit; cell: Rect }> }>
 }
 
 export type ExportOutcome =
@@ -125,7 +127,8 @@ export async function prepareExport(
     layers: [],
   }))
   for (const element of composition.elements) {
-    outputs[element.canvas]!.layers.push({ sourcePath: paths[element.slot]!, crop: project.items[element.slot]!.crop, cell: element.rect })
+    const item = project.items[element.slot]!
+    outputs[element.canvas]!.layers.push({ sourcePath: paths[element.slot]!, crop: item.crop, fit: item.fit, cell: element.rect })
   }
   return {
     status: 'ready',
@@ -136,6 +139,7 @@ export async function prepareExport(
       width: composition.width,
       height: composition.height,
       background: composition.background,
+      border: composition.border,
       outputs,
     },
   }
@@ -212,6 +216,7 @@ export async function runExport(
       width: plan.width,
       height: plan.height,
       background: plan.background,
+      border: plan.border,
       quality: JPEG_QUALITY,
       layers: output.layers,
     })

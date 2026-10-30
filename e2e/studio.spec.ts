@@ -212,3 +212,81 @@ test('the picker groups every everyday layout with a drawing, and the editor swi
   await expect(page.getByRole('button', { name: /Offset grid · 4 photos/ })).toBeVisible()
   await app.close()
 })
+
+test('Quick edits: colour, spacing, border, fit, swap and replace, each undoable, and all kept after a restart', async () => {
+  let { app } = await launchApp(profile)
+  let page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  await pick.nth(2).click()
+  await pick.nth(3).click()
+  await page.getByRole('button', { name: /^Quiet frame/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Quiet frame' })).toBeVisible()
+  const undoButton = page.getByRole('button', { name: 'Undo', exact: true })
+  await expect(undoButton).toBeDisabled()
+  const thumbs = () => page.getByRole('list', { name: 'Photos in this project, in order' }).locator('img').evaluateAll((imgs) => imgs.map((i) => i.getAttribute('src')))
+  const startOrder = await thumbs()
+
+  // A named background swatch, then a border made by keyboard on the slider (one undo step for the whole move).
+  await page.getByRole('group', { name: 'Background' }).getByRole('radio', { name: 'Charcoal' }).check()
+  await expect(page.getByText('Background changed. All changes saved.')).toBeVisible()
+  await page.getByRole('slider', { name: 'Border width' }).focus()
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowRight')
+  await expect(page.getByText('Border width changed. All changes saved.')).toBeVisible()
+  await expect(page.getByRole('slider', { name: 'Border width' })).toHaveValue('12')
+  await expect(page.getByRole('img', { name: /Preview: quiet frame, square, charcoal background, white border/ })).toBeVisible()
+  await page.getByRole('slider', { name: 'Margin' }).fill('40')
+  await expect(page.getByText('Margin changed. All changes saved.')).toBeVisible()
+
+  // Photo 2 shows whole; its crop controls switch off. Then the two photos swap places.
+  await page.getByRole('button', { name: 'Adjust photo 2' }).click()
+  await page.getByRole('radio', { name: 'Show the whole photo' }).check()
+  await expect(page.getByRole('button', { name: 'Zoom in' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Swap with photo 1' }).click()
+  await expect(page.getByText('Swapped photos 2 and 1. All changes saved.')).toBeVisible()
+  expect(await thumbs()).toEqual([...startOrder].reverse())
+  // The whole-photo setting travelled with its photo, now first and selected.
+  await expect(page.getByRole('radio', { name: 'Show the whole photo' })).toBeChecked()
+
+  // Undo by button and by ⌘Z, then redo by ⇧⌘Z.
+  await undoButton.click()
+  await expect(page.getByText('Undone: swapped photos 2 and 1. All changes saved.')).toBeVisible()
+  expect(await thumbs()).toEqual(startOrder)
+  await page.getByRole('heading', { level: 3, name: 'Layout' }).click() // focus leaves the controls entirely
+  await page.keyboard.press('Meta+z')
+  await expect(page.getByText('Undone: whole photo shown. All changes saved.')).toBeVisible()
+  await page.keyboard.press('Meta+Shift+z')
+  await expect(page.getByText('Redone: whole photo shown. All changes saved.')).toBeVisible()
+
+  // Replace photo 1 with another favorite: the choices leave out photos already in the project.
+  await page.getByRole('button', { name: 'Adjust photo 1' }).click()
+  await page.getByRole('button', { name: 'Replace…' }).click()
+  const choices = page.getByRole('group', { name: 'Replace photo 1 with a favorite' }).getByRole('button', { name: /^Use / })
+  await expect(choices).toHaveCount(3)
+  await choices.first().click()
+  await expect(page.getByText('Replaced photo 1. All changes saved.')).toBeVisible()
+  const edited = await thumbs()
+  expect(edited[0]).not.toBe(startOrder[0])
+  await app.close()
+
+  // After a restart: everything is as it was left. (The undo list starts fresh in each session.)
+  ;({ app } = await launchApp(profile))
+  page = await app.firstWindow()
+  await nav(page, 'Memory Studio')
+  await page.getByRole('button', { name: /Quiet frame/ }).first().click()
+  await expect(page.getByRole('img', { name: /charcoal background, white border/ })).toBeVisible()
+  await expect(page.getByRole('slider', { name: 'Border width' })).toHaveValue('12')
+  await expect(page.getByRole('slider', { name: 'Margin' })).toHaveValue('40')
+  expect(await thumbs()).toEqual(edited)
+  await page.getByRole('button', { name: 'Adjust photo 2' }).click()
+  await expect(page.getByRole('radio', { name: 'Show the whole photo' })).toBeChecked()
+
+  // Reset goes back to the layout's own look and keeps the photos; it can be undone too.
+  await page.getByRole('button', { name: 'Reset to layout defaults' }).click()
+  await expect(page.getByRole('img', { name: /Preview: quiet frame, square, cream background$/ })).toBeVisible()
+  await expect(page.getByRole('slider', { name: 'Margin' })).toHaveValue('140')
+  expect(await thumbs()).toEqual(edited)
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(page.getByRole('img', { name: /charcoal background, white border/ })).toBeVisible()
+  await app.close()
+})

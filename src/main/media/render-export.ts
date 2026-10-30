@@ -7,7 +7,7 @@
 
 import { rmSync } from 'node:fs'
 import sharp from 'sharp'
-import { sourceRect, type Crop, type Rect } from '@shared/layout'
+import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
 import { MAX_INPUT_PIXELS } from './limits'
 
 export interface RenderRequest {
@@ -16,13 +16,22 @@ export interface RenderRequest {
   height: number
   /** Background colour as #rrggbb. */
   background: string
+  /** The frame around each photo, in canvas pixels (width 0 means none). */
+  border: { width: number; color: string }
   quality: number
-  layers: Array<{ sourcePath: string; crop: Crop; cell: Rect }>
+  layers: Array<{ sourcePath: string; crop: Crop; fit: Fit; cell: Rect }>
 }
 
 export type RenderResult = { ok: true } | { ok: false; reason: 'disk_full' | 'unreadable' | 'failed' }
 
 const open = (path: string) => sharp(path, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
+
+// A canvas rectangle in whole pixels, as sharp places composites.
+const snap = (rect: Rect) => {
+  const left = Math.round(rect.x)
+  const top = Math.round(rect.y)
+  return { left, top, width: Math.max(1, Math.round(rect.x + rect.width) - left), height: Math.max(1, Math.round(rect.y + rect.height) - top) }
+}
 
 // The crop rectangle in whole pixels, kept inside the photo.
 function pixelRect(image: { width: number; height: number }, rect: Rect): { left: number; top: number; width: number; height: number } {
@@ -43,16 +52,22 @@ export async function renderCanvas(request: RenderRequest): Promise<RenderResult
       const metadata = await open(layer.sourcePath).metadata()
       // Crops are defined on the photo as displayed (after EXIF rotation), as in the preview.
       const shown = metadata.autoOrient ?? { width: metadata.width, height: metadata.height }
-      const width = Math.round(layer.cell.width)
-      const height = Math.round(layer.cell.height)
+      // The same placement the preview uses: border, the part of the photo shown, and where it goes.
+      const place = placePhoto(shown, layer.cell, layer.crop, layer.fit, request.border.width)
+      if (place.frame) {
+        const frame = snap(place.frame)
+        const fill = await sharp({ create: { width: frame.width, height: frame.height, channels: 3, background: request.border.color } }).png().toBuffer()
+        composites.push({ input: fill, left: frame.left, top: frame.top })
+      }
+      const dest = snap(place.dest)
       const piece = await open(layer.sourcePath)
         .rotate() // apply EXIF orientation first; the crop below is in upright coordinates
-        .extract(pixelRect(shown, sourceRect(shown, layer.cell, layer.crop)))
-        .resize(width, height, { fit: 'fill' })
+        .extract(pixelRect(shown, place.src))
+        .resize(dest.width, dest.height, { fit: 'fill' })
         .toColourspace('srgb')
         .png()
         .toBuffer()
-      composites.push({ input: piece, left: Math.round(layer.cell.x), top: Math.round(layer.cell.y) })
+      composites.push({ input: piece, left: dest.left, top: dest.top })
     }
   } catch {
     return { ok: false, reason: 'unreadable' }

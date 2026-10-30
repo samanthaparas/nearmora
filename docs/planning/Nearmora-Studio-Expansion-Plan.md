@@ -26,7 +26,7 @@ References: the two-photo and four-photo concept boards and their guides (owner'
 | Phase | Contents | Done when |
 |---|---|---|
 | **S1** | Versioned composition schema; template definitions; resolver; preview and export drawing from one composition; schema v5 migration of existing projects; first templates: Equal split, Stacked, Classic grid, carousel | Existing projects open and export identically; new projects can start from the three templates |
-| **S2** | Quick edits: replace photo, swap, fit or fill, background colour, gutter, margin, border width and colour, undo and redo, reset to template | Every Quick edit is undoable and survives restart |
+| **S2** ✅ | Quick edits: replace photo, swap, fit or fill, background colour, gutter, margin, border width and colour, undo and redo, reset to template | Every Quick edit is undoable and survives restart. Done: edits are saved at once and survive a restart; the undo list covers the current editing session (ADR-0015) |
 | **S3** | Remaining everyday layouts (8 pairs, 10 quartets) — done first, as S3a, at the owner's request; then social presets (square, portrait, vertical, wide) and print presets with an effective-resolution warning | All 18 everyday layouts are selectable and exported correctly at every preset |
 | **S4** | Playful templates: original decorations (own SVG artwork, provenance documented), captions, masks (circle, arch, torn edge, film, ticket); export compositor spike | Each playful layout is drawn the same in preview and export |
 | **S5** | Seamless carousel: 2–3 slides, boundary guides, slide previews, master-and-slices export | PNG slices reassemble the master exactly |
@@ -74,6 +74,19 @@ Postcards, Film night, Torn pages, Window light, Love letter, Colorblock, Scrapb
 ### Four-photo, playful
 
 Postcard stack, Film weekend, Torn journal, Garden windows, Love notes, Color play, Travel scrapbook, Four seasons, Circle collection, Keepsake ticket: ⬜ S4
+
+### Quick edits (S2)
+
+| Edit | Status | Notes |
+|---|---|---|
+| Replace photo | ✅ S2 | From Favorites; photos already in the project aren't offered |
+| Swap | ✅ S2 | With any other photo; crop and fit travel with the photo |
+| Fit or fill | ✅ S2 | Per photo; crop controls switch off while the whole photo is shown |
+| Background colour | ✅ S2 | Cream, white, sand, charcoal, or any colour from the system picker |
+| Margin and gutter | ✅ S2 | Sliders, 0–200 px at 1080 (scale with the canvas); collages only |
+| Border width and colour | ✅ S2 | 0–60 px, inside each photo's place; hugs the photo when it's shown whole |
+| Undo and redo | ✅ S2 | Buttons and ⌘Z / ⇧⌘Z; a drag or pinch is one step; 100 steps per session |
+| Reset to layout defaults | ✅ S2 | Photos and order stay; can be undone |
 
 ### Formats
 

@@ -12,7 +12,8 @@ import { describe, expect, it } from 'vitest'
 import { FORMATS } from '@shared/studio/formats'
 import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
-import { createProject, getProject, setItemCrop } from '../../src/main/catalog/repositories/projects'
+import { createProject, getProject, setDesign } from '../../src/main/catalog/repositories/projects'
+import { designOf, updateItem } from '../../src/shared/studio/design'
 import { setSourceStatus } from '../../src/main/catalog/repositories/sources'
 import { scanSource } from '../../src/main/library/scan'
 import { addSourceFolder } from '../../src/main/library/source-folders'
@@ -59,6 +60,8 @@ async function colourAt(file: string, x: number, y: number): Promise<string> {
   return `rgb(${r},${g},${b})`
 }
 
+// Most renders here have no photo border; the border tests set their own.
+const NO_BORDER = { width: 0, color: '#ffffff' }
 const cellCentre = { left: { x: 48 + 480 / 2, y: 540 }, right: { x: 48 + 480 + 24 + 480 / 2, y: 540 } } // two-photo collage, 1:1
 
 describe('rendering an export file', () => {
@@ -76,9 +79,10 @@ describe('rendering an export file', () => {
         height,
         background: '#f8f0e8',
         quality: 90,
+        border: NO_BORDER,
         layers: [
-          { sourcePath: photo, crop: { cx: 0.25, cy: 0.5, zoom: 1 }, cell: { x: 48, y: 48, width: 480, height: cellHeight } },
-          { sourcePath: photo, crop: { cx: 0.75, cy: 0.5, zoom: 1 }, cell: { x: 552, y: 48, width: 480, height: cellHeight } },
+          { sourcePath: photo, crop: { cx: 0.25, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 48, y: 48, width: 480, height: cellHeight } },
+          { sourcePath: photo, crop: { cx: 0.75, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 552, y: 48, width: 480, height: cellHeight } },
         ],
       }
       expect(await renderCanvas(request)).toEqual({ ok: true })
@@ -96,9 +100,9 @@ describe('rendering an export file', () => {
     await twoTone(photo, { split: 'rows', orientation: 6 })
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
     expect(await colourAt(out, 540, 540)).toBe('red')
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, layers: [{ sourcePath: photo, crop: { cx: 0.1, cy: 0.5, zoom: 3 }, cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, layers: [{ sourcePath: photo, crop: { cx: 0.1, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
     expect(await colourAt(out, 540, 540)).toBe('blue')
   })
 
@@ -111,7 +115,7 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }] })
     const meta = await sharp(out).metadata()
     expect({ exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc }).toEqual({ exif: undefined, xmp: undefined, iptc: undefined })
     expect(await exifr.parse(out, { gps: true, xmp: true, iptc: true, tiff: true, exif: true })).toBeUndefined()
@@ -128,12 +132,64 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     // The cell is the photo's own size, so nothing is resampled and every output pixel should match the source.
-    await renderCanvas({ outputPath: out, width: w, height: h, background: '#ffffff', quality: 92, layers: [{ sourcePath: stripes, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, cell: { x: 0, y: 0, width: w, height: h } }] })
+    await renderCanvas({ outputPath: out, width: w, height: h, background: '#ffffff', quality: 92, border: NO_BORDER, layers: [{ sourcePath: stripes, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 0, y: 0, width: w, height: h } }] })
     expect((await sharp(out).metadata()).chromaSubsampling).toBe('4:4:4')
     const back = await sharp(out).raw().toBuffer()
     let error = 0
     for (let i = 0; i < pixels.length; i++) error += Math.abs(pixels[i]! - back[i]!)
     expect(error / pixels.length).toBeLessThan(15)
+  })
+
+  // Photo borders and fit (S2 Quick edits) come from the same placePhoto() the preview draws with.
+  it('draws a photo border inside the photo’s place, and the photo inside the border', async () => {
+    const dir = tempDir()
+    const photo = join(dir, 'photo.jpg')
+    await twoTone(photo, { split: 'columns' })
+    const out = join(dir, 'out.jpg')
+    const cell = { x: 40, y: 40, width: 1000, height: 1000 }
+    const result = await renderCanvas({
+      outputPath: out,
+      width: 1080,
+      height: 1080,
+      background: '#ffffff',
+      quality: 90,
+      border: { width: 60, color: '#f8f0e8' },
+      layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }],
+    })
+    expect(result).toEqual({ ok: true })
+    expect(await colourAt(out, 20, 540)).toBe('white') // the margin, outside the place
+    expect(await colourAt(out, 70, 540)).toBe('cream') // the border band, 40–100 px
+    expect(await colourAt(out, 540, 70)).toBe('cream')
+    expect(await colourAt(out, 300, 540)).toBe('red') // the photo, inside the border
+    expect(await colourAt(out, 780, 540)).toBe('blue')
+  })
+
+  it('fit shows the whole photo centred in its place, with the border hugging the photo', async () => {
+    const dir = tempDir()
+    const photo = join(dir, 'photo.jpg')
+    await twoTone(photo, { split: 'columns' }) // 4:3
+    const out = join(dir, 'out.jpg')
+    const cell = { x: 40, y: 40, width: 1000, height: 1000 }
+    const render = (border: number) =>
+      renderCanvas({
+        outputPath: out,
+        width: 1080,
+        height: 1080,
+        background: '#ffffff',
+        quality: 90,
+        border: { width: border, color: '#f8f0e8' },
+        layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, fit: 'fit', cell }],
+      })
+    // No border: 1000 × 750, centred, so 125 px of background above and below. The crop is ignored.
+    await render(0)
+    expect(await colourAt(out, 540, 100)).toBe('white')
+    expect(await colourAt(out, 60, 540)).toBe('red') // the photo's left edge is the place's left edge
+    expect(await colourAt(out, 1020, 540)).toBe('blue')
+    // A 20 px border: the photo is 960 × 720 at y 180–900, and the border wraps it at y 160–180.
+    await render(20)
+    expect(await colourAt(out, 540, 140)).toBe('white')
+    expect(await colourAt(out, 540, 170)).toBe('cream')
+    expect(await colourAt(out, 300, 540)).toBe('red')
   })
 
   it('flattens transparency onto the chosen background, on purpose', async () => {
@@ -147,7 +203,8 @@ describe('rendering an export file', () => {
       height: 1080,
       background: '#f8f0e8',
       quality: 90,
-      layers: [{ sourcePath: clear, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, cell: { x: 0, y: 0, width: 1080, height: 1080 } }],
+      border: NO_BORDER,
+      layers: [{ sourcePath: clear, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 0, y: 0, width: 1080, height: 1080 } }],
     })
     expect(await colourAt(out, 540, 540)).toBe('cream')
   })
@@ -318,7 +375,7 @@ describe('file names and backups', () => {
 
   it('a backup restores projects exactly, with order and crops (AC11)', async () => {
     const { db, project } = await exportable('carousel')
-    setItemCrop(db, { projectId: project.id, position: 2, crop: { cx: 0.2, cy: 0.8, zoom: 3 } })
+    setDesign(db, { projectId: project.id, design: updateItem(designOf(getProject(db, project.id)), 2, { crop: { cx: 0.2, cy: 0.8, zoom: 3 } }) })
     const before = getProject(db, project.id)
     const { folder } = await backupCatalog(db, { destinationDir: tempDir(), appVersion: '0.0.1' })
     const clean = tempProfile()

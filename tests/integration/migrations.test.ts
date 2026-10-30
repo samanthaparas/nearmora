@@ -11,7 +11,8 @@ import { CatalogError, MigrationError } from '../../src/main/catalog/errors'
 import { MIGRATIONS, type Migration } from '../../src/main/catalog/migrations'
 import { latestVersion, readSchemaVersion } from '../../src/main/catalog/migrate'
 import { createAlbum, listAlbums } from '../../src/main/catalog/repositories/albums'
-import { deleteProject, getProject, updateProject } from '../../src/main/catalog/repositories/projects'
+import { deleteProject, getProject, setDesign } from '../../src/main/catalog/repositories/projects'
+import { designOf } from '../../src/shared/studio/design'
 import { compose } from '../../src/shared/studio/compose'
 import { openTestCatalog, seedAssets, seedSource, tempProfile } from './helpers'
 
@@ -211,7 +212,7 @@ describe('schema v5: templates', () => {
     ])
     expect(layout.background).toBe('#ffffff')
     // Projects keep working: edit, then delete (its items go with it; pictures stay).
-    updateProject(db, { projectId: 'four', format: 'portrait' })
+    setDesign(db, { projectId: 'four', design: { ...designOf(getProject(db, 'four')), format: 'portrait' } })
     deleteProject(db, 'slides')
     expect(db.prepare(`SELECT COUNT(*) AS n FROM project_item WHERE project_id = 'slides'`).get()).toEqual({ n: 0 })
     expect(db.prepare('SELECT COUNT(*) AS n FROM asset').get()).toEqual({ n: 4 })

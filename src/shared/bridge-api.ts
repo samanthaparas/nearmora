@@ -45,9 +45,8 @@ export interface NearmoraApi {
   listProjects(): Promise<IpcResult<CommandOutput<'projects:list'>>>
   getProject(input: CommandInput<'projects:get'>): Promise<IpcResult<CommandOutput<'projects:get'>>>
   createProject(input: CommandInput<'projects:create'>): Promise<IpcResult<CommandOutput<'projects:create'>>>
-  updateProject(input: CommandInput<'projects:update'>): Promise<IpcResult<CommandOutput<'projects:update'>>>
-  reorderProject(input: CommandInput<'projects:reorder'>): Promise<IpcResult<CommandOutput<'projects:reorder'>>>
-  setProjectCrop(input: CommandInput<'projects:setCrop'>): Promise<IpcResult<CommandOutput<'projects:setCrop'>>>
+  renameProject(input: CommandInput<'projects:rename'>): Promise<IpcResult<CommandOutput<'projects:rename'>>>
+  setProjectDesign(input: CommandInput<'projects:setDesign'>): Promise<IpcResult<CommandOutput<'projects:setDesign'>>>
   deleteProject(input: CommandInput<'projects:delete'>): Promise<IpcResult<CommandOutput<'projects:delete'>>>
   startExport(input: CommandInput<'export:start'>): Promise<IpcResult<CommandOutput<'export:start'>>>
   cancelExport(input: CommandInput<'export:cancel'>): Promise<IpcResult<CommandOutput<'export:cancel'>>>

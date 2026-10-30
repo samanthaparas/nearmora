@@ -1,17 +1,19 @@
 /**
  * Draws one output canvas (a collage, or one carousel slide) from the project's composition, the same element list
  * the export draws (AC7). Uses the large preview image, or the thumbnail when that's
- * not available. A pinch or mouse wheel over a photo zooms that photo.
+ * not available. Borders and fit-or-fill come from the same placement math as the export. A pinch or mouse wheel over a
+ * photo zooms that photo.
  */
 
 import { useEffect, useRef } from 'react'
-import { sourceRect, type Crop } from '@shared/layout'
+import { placePhoto, type Crop, type Fit } from '@shared/layout'
 import type { Composition } from '@shared/studio/compose'
 import { useWheelZoom } from '../wheel-zoom'
 
 export interface CanvasItem {
   assetId: string
   crop: Crop
+  fit: Fit
 }
 
 // One image element per photo, shared by every canvas on the screen; falls back to the thumbnail if needed.
@@ -88,8 +90,13 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
         if (result?.status !== 'fulfilled') return
         const image = result.value
         // The crop is in proportions of the photo, so it means the same on the preview image and the original.
-        const src = sourceRect({ width: image.naturalWidth, height: image.naturalHeight }, p.cell, p.item.crop)
-        context.drawImage(image, src.x, src.y, src.width, src.height, p.cell.x, p.cell.y, p.cell.width, p.cell.height)
+        const place = placePhoto({ width: image.naturalWidth, height: image.naturalHeight }, p.cell, p.item.crop, p.item.fit, composition.border.width)
+        if (place.frame) {
+          context.fillStyle = composition.border.color
+          context.fillRect(place.frame.x, place.frame.y, place.frame.width, place.frame.height)
+        }
+        const { src, dest } = place
+        context.drawImage(image, src.x, src.y, src.width, src.height, dest.x, dest.y, dest.width, dest.height)
       })
       const selected = mine.find((p) => p.position === highlight)
       if (selected) {
