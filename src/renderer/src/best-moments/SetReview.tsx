@@ -1,7 +1,8 @@
 /**
  * Reviewing one set in Best Moments: compare two photos side by side (or as A/B tabs in a narrow window),
  * choose zero, one or several favorites, then Save (with Undo) or Decide later. Photos can be taken out, nearby
- * ones put in, or the set split apart. Leaving with unsaved choices always asks first.
+ * ones put in, or the set split apart; a removal that leaves one photo saves the picks first. Leaving with unsaved
+ * choices always asks first.
  * "Similar" means possibly related; nothing here deletes or changes a photo file.
  */
 
@@ -51,6 +52,8 @@ export function SetReview({ setId, onLeave, onNext, onChanged }: {
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
   const [confirmSplit, setConfirmSplit] = useState(false)
   const [nearby, setNearby] = useState<Nearby | null>(null)
+  // Why the set ended, when a removal left only one photo; shown instead of the general "split up" note.
+  const [endedNote, setEndedNote] = useState<string | null>(null)
   const narrow = useNarrow()
   const dirty = isDirty(saved, draft)
 
@@ -144,7 +147,7 @@ export function SetReview({ setId, onLeave, onNext, onChanged }: {
   if (members.length < 2) {
     return (
       <div>
-        <p role="status">This set has been split up, so there’s nothing left to compare. Its photos are all still in your Library.</p>
+        <p role="status">{endedNote ?? 'This set has been split up, so there’s nothing left to compare. Its photos are all still in your Library.'}</p>
         <button type="button" className="button button--secondary" onClick={onLeave}>
           Back to Best Moments
         </button>
@@ -165,11 +168,29 @@ export function SetReview({ setId, onLeave, onNext, onChanged }: {
     } else if (event.key === '+' || event.key === '=') zoom(1.5)
     else if (event.key === '-') zoom(1 / 1.5)
   }
-  const removeMember = (m: Member) =>
-    correct(
-      () => window.nearmora.removeFromSet({ setId, assetId: m.assetId, expectedRevision: detail.revision }),
+  const removeMember = async (m: Member) => {
+    if (members.length > 2) {
+      return correct(
+        () => window.nearmora.removeFromSet({ setId, assetId: m.assetId, expectedRevision: detail.revision }),
+        'Taken out of this set. The photo is still in your Library.',
+      )
+    }
+    // A set needs two photos, so this removal ends it. Unsaved favorites are saved first, so they aren't lost with it.
+    let revision = detail.revision
+    if (dirty) {
+      const saved = await window.nearmora.saveReview({ setId, favorites: [...draft], status: 'reviewed', expectedRevision: revision })
+      if (!saved.ok || saved.data.status === 'stale') return setMessage('Your choices couldn’t be saved, so the photo wasn’t taken out. Please try again.')
+      revision = saved.data.revision
+    }
+    const kept = [...draft].filter((id) => id !== m.assetId).length
+    setEndedNote(
+      `You took a photo out, which left only one, so this set has ended.${kept > 0 ? ' Your favorite is saved and is in Favorites.' : ''} Both photos are still in your Library.`,
+    )
+    return correct(
+      () => window.nearmora.removeFromSet({ setId, assetId: m.assetId, expectedRevision: revision }),
       'Taken out of this set. The photo is still in your Library.',
     )
+  }
 
   const panel = (m: Member, label: string, hidden: boolean) => (
     <ComparePanel
@@ -259,8 +280,11 @@ export function SetReview({ setId, onLeave, onNext, onChanged }: {
         </div>
       )}
 
-      {/* Every photo in the set. Choosing one shows it as Photo B (or A, if it's already B). */}
-      <ul className="strip" aria-label="All photos in this set">
+      {/* Every photo in the set. Choosing one that isn't showing brings it in as Photo B; one already showing stays put. */}
+      <p id="strip-hint" className="review__note">
+        All {members.length} photos in this set. Click one to compare it as Photo B, on the right. Swap sides moves it to A.
+      </p>
+      <ul className="strip" aria-label="All photos in this set" aria-describedby="strip-hint">
         {members.map((m, index) => {
           const side = m === a ? 'A' : m === b ? 'B' : null
           return (
@@ -270,7 +294,9 @@ export function SetReview({ setId, onLeave, onNext, onChanged }: {
                 className="strip__item"
                 aria-pressed={side !== null}
                 aria-label={`Compare ${describeMember(m)}${draft.has(m.assetId) ? ', favorite' : ''}${side ? `, showing as Photo ${side}` : ''}`}
-                onClick={() => (side === 'B' ? setLeft(index) : setRight(index))}
+                onClick={() => {
+                  if (side === null) setRight(index)
+                }}
               >
                 <img src={`nm-media://thumb/${m.assetId}`} alt="" />
                 <span className="strip__label" aria-hidden="true">

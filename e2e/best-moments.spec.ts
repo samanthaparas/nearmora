@@ -181,3 +181,38 @@ test('going offline mid-review loses nothing: choices still save, and the folder
     renameSync(parked, root)
   }
 })
+
+test('the photo strip brings a photo in as B, and ending a set by removing a photo keeps the unsaved favorite', async () => {
+  // Fresh profile, so there's an unreviewed three-photo set.
+  profile = tempFolder('profile-strip')
+  const { app, page } = await start()
+  await app.evaluate(({ dialog }, chosen) => {
+    dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [chosen] })
+  }, root)
+  await page.getByRole('button', { name: 'Add folder' }).click()
+  await expect(page.locator('p', { hasText: 'Burst · 4 photos' })).toBeVisible({ timeout: 20_000 })
+  await openFirstSet(page)
+
+  // Clicking the third photo shows it as B; clicking the one showing as A changes nothing.
+  const strip = page.getByRole('list', { name: 'All photos in this set' }).getByRole('button')
+  await expect(page.getByText('Click one to compare it as Photo B', { exact: false })).toBeVisible()
+  await strip.nth(2).click()
+  await expect(strip.nth(2)).toHaveAccessibleName(/showing as Photo B$/)
+  await strip.nth(0).click()
+  await expect(strip.nth(0)).toHaveAccessibleName(/showing as Photo A$/)
+  await expect(strip.nth(2)).toHaveAccessibleName(/showing as Photo B$/)
+
+  // Down to two photos, favorite A without saving, then take B out: the set ends and the favorite is kept.
+  await page.getByRole('figure', { name: 'Photo B' }).getByRole('button', { name: 'Remove from set' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: '2 similar photos' })).toBeVisible()
+  await page.getByRole('figure', { name: 'Photo A' }).getByRole('button', { name: '☆ Favorite' }).click()
+  await expect(page.getByText('1 of 2 chosen · not saved yet')).toBeVisible()
+  await page.getByRole('figure', { name: 'Photo B' }).getByRole('button', { name: 'Remove from set' }).click()
+  await expect(page.getByText('so this set has ended. Your favorite is saved', { exact: false })).toBeVisible()
+
+  // No "unsaved choices" question on leaving, and the favorite is in Favorites.
+  await nav(page, 'Favorites')
+  await expect(page.getByRole('dialog', { name: 'Save your choices?' })).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Favorites, 1 in total' })).toBeVisible()
+  await app.close()
+})

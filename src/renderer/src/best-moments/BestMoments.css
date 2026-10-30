@@ -144,3 +144,8 @@
   margin: 0 0 var(--nm-space-1);
   font-size: var(--nm-text-h2);
 }
+
+/* The hint above the strip of set photos. */
+p.review__note {
+  margin: var(--nm-space-2) 0 var(--nm-space-1);
+}

@@ -19,6 +19,8 @@ export const FIT: View = { scale: 1, x: 0, y: 0 }
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' })
 export const describeMember = (m: Member): string =>
   `${m.capturedAt === null ? 'Photo' : `Photo from ${dateTime.format(m.capturedAt)}`}${m.offline ? ', offline' : ''}`
+// The caption already says "Photo A", so it shows just the date and time.
+const captionTime = (m: Member): string => `${m.capturedAt === null ? 'No date' : dateTime.format(m.capturedAt)}${m.offline ? ' · offline' : ''}`
 
 export function ComparePanel({ member, label, view, onPan, favorite, onToggleFavorite, onRemove, hidden = false }: {
   member: Member
@@ -69,7 +71,7 @@ export function ComparePanel({ member, label, view, onPan, favorite, onToggleFav
       </div>
       <figcaption className="compare__caption">
         <span>
-          {label} · {describeMember(member)}
+          {label} · {captionTime(member)}
           {member.addedByYou ? ' · added by you' : ''}
         </span>
         <span className="library__source-actions">
