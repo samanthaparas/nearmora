@@ -182,3 +182,33 @@ test('new projects start from a template: Stacked puts two photos one above the 
   await expect(page.getByRole('button', { name: /Stacked · 2 photos/ })).toBeVisible()
   await app.close()
 })
+
+test('the picker groups every everyday layout with a drawing, and the editor switches layout keeping the photos', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const twoPhotos = page.getByRole('region', { name: 'Two photos' })
+  const fourPhotos = page.getByRole('region', { name: 'Four photos' })
+  await expect(twoPhotos.getByRole('button')).toHaveCount(8)
+  await expect(fourPhotos.getByRole('button')).toHaveCount(10)
+  // Nothing selected: nothing enabled. Four selected: only four-photo layouts and the carousel.
+  await expect(fourPhotos.getByRole('button', { name: /^Lead \+ three/ })).toBeDisabled()
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (let i = 0; i < 4; i++) await pick.nth(i).click()
+  await expect(twoPhotos.getByRole('button', { name: /^Wide gutter/ })).toBeDisabled()
+  await fourPhotos.getByRole('button', { name: /^Lead \+ three/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Lead + three' })).toBeVisible()
+  await expect(page.getByRole('img', { name: /Preview: lead \+ three, square, cream background/ })).toBeVisible()
+
+  // Switch layout in the editor: the photos stay, in the same order, and the change is saved.
+  const layouts = page.getByRole('region', { name: 'Layout' })
+  await expect(layouts.getByRole('button', { name: 'Lead + three' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(layouts.getByRole('button', { name: 'Equal split' })).toHaveCount(0) // only layouts for four photos
+  await layouts.getByRole('button', { name: 'Offset grid' }).click()
+  await expect(page.getByText('Layout changed to Offset grid. All changes saved.')).toBeVisible()
+  await expect(page.getByRole('img', { name: /Preview: offset grid, square/ })).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Photos in this project, in order' }).getByRole('button')).toHaveCount(4)
+  await page.getByRole('button', { name: '← All projects' }).click()
+  await expect(page.getByRole('button', { name: /Offset grid · 4 photos/ })).toBeVisible()
+  await app.close()
+})

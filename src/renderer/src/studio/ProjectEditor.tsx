@@ -1,5 +1,5 @@
 /**
- * Editing one Memory Studio project (AC6): title, format, cream or white background, the order of photos, and each
+ * Editing one Memory Studio project (AC6): title, layout, format, cream or white background, the order of photos, and each
  * photo's crop position and zoom, all by buttons or keyboard. Every change is saved at once. The preview is drawn
  * from the same composition (template + format + settings) as the export.
  * Photos that can't be reached are named, so nobody discovers it only at export time.
@@ -11,9 +11,10 @@ import { clampCrop, DEFAULT_CROP, MAX_ZOOM, type Crop } from '@shared/layout'
 import { compose, UnknownTemplateError, type Composition } from '@shared/studio/compose'
 import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
 import { BACKGROUNDS, type Params } from '@shared/studio/params'
-import { templateName } from '@shared/studio/templates'
+import { templateName, templatesFor } from '@shared/studio/templates'
 import { ExportPanel } from './ExportPanel'
 import { StudioCanvas } from './StudioCanvas'
+import { TemplateIcon } from './TemplateIcon'
 
 type Project = CommandOutput<'projects:get'>
 type Item = Project['items'][number]
@@ -84,7 +85,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
     } else setStatus(`That change couldn’t be saved. Nothing was changed.`)
   }
 
-  async function settings(change: { title?: string; format?: FormatId; params?: Params }, what: string) {
+  async function settings(change: { title?: string; templateId?: string; format?: FormatId; params?: Params }, what: string) {
     applied(await window.nearmora.updateProject({ projectId, ...change }), what)
   }
 
@@ -215,6 +216,31 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
               Save title
             </button>
           </form>
+
+          {/* Any layout that takes this many photos; photos keep their order and crops. */}
+          <section aria-labelledby="layout-title">
+            <h3 id="layout-title" className="studio__template-title">
+              Layout
+            </h3>
+            <ul className="studio__template-list">
+              {templatesFor(project.items.length).map((template) => (
+                <li key={template.id}>
+                  <button
+                    type="button"
+                    className="studio__template"
+                    aria-pressed={template.id === project.templateId}
+                    title={template.description}
+                    onClick={() => {
+                      if (template.id !== project.templateId) void settings({ templateId: template.id }, `Layout changed to ${template.name}`)
+                    }}
+                  >
+                    <TemplateIcon template={template} />
+                    <span>{template.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
 
           <fieldset className="studio__choice">
             <legend>Shape</legend>

@@ -5,12 +5,20 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
+import { TemplateIcon } from './TemplateIcon'
 import { PhotoGrid, altFor, libraryFetcher, type Photo } from '../library/PhotoGrid'
 import '../library/Library.css'
 import './Studio.css'
 
 // "select 2", or "select 2–10" for a template that takes a range.
 const hint = ({ photos: { min, max } }: TemplateDefinition) => (min === max ? `select ${min}` : `select ${min}–${max}`)
+
+// The picker's groups, in the order they're shown.
+const GROUPS: Array<{ title: string; fits: (t: TemplateDefinition) => boolean }> = [
+  { title: 'Two photos', fits: (t) => t.mode === 'single' && t.photos.max === 2 },
+  { title: 'Four photos', fits: (t) => t.mode === 'single' && t.photos.max === 4 },
+  { title: 'Carousel', fits: (t) => t.mode === 'carousel' },
+]
 
 export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string) => void }) {
   const fetchPage = useMemo(() => libraryFetcher({ favoritesOnly: true }), [])
@@ -64,21 +72,6 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
           <span className="review__note">
             {selected.length} selected{selected.length > 0 ? ' · in the order you picked them' : ''}
           </span>
-          {latestTemplates().map((template) => {
-            const fits = selected.length >= template.photos.min && selected.length <= template.photos.max
-            return (
-              <button
-                key={template.id}
-                type="button"
-                className="button button--secondary"
-                disabled={!fits}
-                title={template.description}
-                onClick={() => void create(template)}
-              >
-                {template.name} <span className="review__note">({hint(template)})</span>
-              </button>
-            )
-          })}
           {selected.length > 0 ? (
             <button type="button" className="button button--quiet" onClick={() => setSelected([])}>
               Clear selection
@@ -86,6 +79,39 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
           ) : null}
         </div>
       )}
+      {total !== 0 ? (
+        // Every layout, grouped by how many photos it takes; only those that fit the selection are enabled.
+        <div className="studio__templates">
+          {GROUPS.map((group) => (
+            <section key={group.title} className="studio__template-group" aria-label={group.title}>
+              <h2 className="studio__template-title">{group.title}</h2>
+              <ul className="studio__template-list">
+                {latestTemplates()
+                  .filter(group.fits)
+                  .map((template) => {
+                    const fits = selected.length >= template.photos.min && selected.length <= template.photos.max
+                    return (
+                      <li key={template.id}>
+                        <button
+                          type="button"
+                          className="studio__template"
+                          disabled={!fits}
+                          title={template.description}
+                          onClick={() => void create(template)}
+                        >
+                          <TemplateIcon template={template} />
+                          <span>
+                            {template.name} <span className="review__note">({hint(template)})</span>
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+              </ul>
+            </section>
+          ))}
+        </div>
+      ) : null}
       {message ? (
         <p className="library__notice" role="alert">
           {message}
