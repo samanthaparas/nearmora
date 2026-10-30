@@ -29,6 +29,7 @@ export interface NearmoraApi {
   renameAlbum(input: CommandInput<'albums:rename'>): Promise<IpcResult<CommandOutput<'albums:rename'>>>
   deleteAlbum(input: CommandInput<'albums:delete'>): Promise<IpcResult<CommandOutput<'albums:delete'>>>
   addPhotosToAlbum(input: CommandInput<'albums:addPhotos'>): Promise<IpcResult<CommandOutput<'albums:addPhotos'>>>
+  setFavorites(input: CommandInput<'favorites:set'>): Promise<IpcResult<CommandOutput<'favorites:set'>>>
   removePhotoFromAlbum(input: CommandInput<'albums:removePhoto'>): Promise<IpcResult<CommandOutput<'albums:removePhoto'>>>
   movePhotoInAlbum(input: CommandInput<'albums:move'>): Promise<IpcResult<CommandOutput<'albums:move'>>>
   undoAlbumEdit(input: CommandInput<'albums:undo'>): Promise<IpcResult<CommandOutput<'albums:undo'>>>

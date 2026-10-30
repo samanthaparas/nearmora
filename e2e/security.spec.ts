@@ -74,6 +74,7 @@ test('bridge exposes only the named API, frozen', async () => {
       'renameAlbum',
       'deleteAlbum',
       'addPhotosToAlbum',
+      'setFavorites',
       'removePhotoFromAlbum',
       'movePhotoInAlbum',
       'undoAlbumEdit',

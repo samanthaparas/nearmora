@@ -323,3 +323,16 @@
 .settings__list dd {
   margin: 0;
 }
+
+/* A favorite photo says so in words in the top-right corner (the selected label uses the top-left). */
+.library__fav {
+  position: absolute;
+  top: var(--nm-space-1);
+  right: var(--nm-space-1);
+  padding: 2px var(--nm-space-1);
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-cream);
+  color: var(--nm-plum);
+  font-size: var(--nm-text-small);
+  font-weight: 600;
+}

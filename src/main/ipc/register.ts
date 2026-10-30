@@ -17,6 +17,7 @@ import {
   undoAlbumEdit,
 } from '../catalog/repositories/album-edits'
 import { createAlbum, listAlbums } from '../catalog/repositories/albums'
+import { setFavorites } from '../catalog/repositories/favorites'
 import { queryAlbumPhotos, queryLibrary } from '../catalog/repositories/library'
 import { listMoments, updateMoment } from '../catalog/repositories/moments'
 import {
@@ -81,6 +82,7 @@ export function createHandlers({ db, library, exports, paths }: HandlerContext):
     'albums:rename': ({ albumId, title }) => renameAlbumWithUndo(db, albumId, title),
     'albums:delete': ({ albumId }) => deleteAlbumWithUndo(db, albumId),
     'albums:addPhotos': ({ albumId, assetIds }) => addToAlbum(db, albumId, assetIds),
+    'favorites:set': (input) => setFavorites(db, input),
     'albums:removePhoto': ({ albumId, assetId }) => removeFromAlbum(db, albumId, assetId),
     'albums:move': ({ albumId, assetId, toIndex }) => moveInAlbum(db, albumId, assetId, toIndex),
     'albums:undo': ({ undoId }) => undoAlbumEdit(db, undoId),

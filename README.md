@@ -40,7 +40,7 @@ src/
     studio/          Export: checks, staged rendering, verification, finalizing and crash recovery
     catalog/         The SQLite catalog: opening, migrations, backup/restore
       migrations/      Numbered schema changes (.sql), applied in order
-      repositories/    Reading and writing sources, pictures, albums, sets and review choices
+      repositories/    Reading and writing sources, pictures, favorites, albums, sets and review choices
     ipc/             The checkpoint for every request the UI makes
     security/        CSP, app:// and nm-media:// serving, navigation and permission guards
   preload/         Builds window.nearmora, the UI's only bridge to the main process

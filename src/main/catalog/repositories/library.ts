@@ -31,8 +31,16 @@ const LibraryRow = z
     height: z.number().int().nullable(),
     captured_at: z.number().int().nullable(),
     offline: z.union([z.literal(0), z.literal(1)]),
+    favorite: z.union([z.literal(0), z.literal(1)]),
   })
-  .transform((row) => ({ id: row.id, width: row.width, height: row.height, capturedAt: row.captured_at, offline: row.offline === 1 }))
+  .transform((row) => ({
+    id: row.id,
+    width: row.width,
+    height: row.height,
+    capturedAt: row.captured_at,
+    offline: row.offline === 1,
+    favorite: row.favorite === 1,
+  }))
 export type LibraryItem = z.output<typeof LibraryRow>
 
 // LIKE treats % and _ as wildcards; escape them so a search for "50%" means the characters "50%".
@@ -99,7 +107,8 @@ export function queryLibrary(
     WHERE l.asset_id = a.id AND l.availability = 'available' AND s.status = 'active')`
   const items = db
     .prepare(
-      `SELECT a.id, a.width, a.height, a.captured_at, ${offline} AS offline FROM asset a
+      `SELECT a.id, a.width, a.height, a.captured_at, ${offline} AS offline,
+              EXISTS (SELECT 1 FROM favorite f WHERE f.asset_id = a.id) AS favorite FROM asset a
        WHERE ${where.sql}${after}
        ORDER BY a.captured_at DESC, a.id DESC
        LIMIT ?`,
@@ -125,6 +134,7 @@ export function queryAlbumPhotos(
   const rows = db
     .prepare(
       `SELECT a.id, a.width, a.height, a.captured_at, m.position,
+              EXISTS (SELECT 1 FROM favorite f WHERE f.asset_id = a.id) AS favorite,
               NOT EXISTS (
                 SELECT 1 FROM asset_location l JOIN source s ON s.id = l.source_id
                 WHERE l.asset_id = a.id AND l.availability = 'available' AND s.status = 'active') AS offline

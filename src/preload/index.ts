@@ -28,6 +28,7 @@ const api: NearmoraApi = {
   renameAlbum: (input) => ipcRenderer.invoke(channelFor('albums:rename'), input),
   deleteAlbum: (input) => ipcRenderer.invoke(channelFor('albums:delete'), input),
   addPhotosToAlbum: (input) => ipcRenderer.invoke(channelFor('albums:addPhotos'), input),
+  setFavorites: (input) => ipcRenderer.invoke(channelFor('favorites:set'), input),
   removePhotoFromAlbum: (input) => ipcRenderer.invoke(channelFor('albums:removePhoto'), input),
   movePhotoInAlbum: (input) => ipcRenderer.invoke(channelFor('albums:move'), input),
   undoAlbumEdit: (input) => ipcRenderer.invoke(channelFor('albums:undo'), input),
