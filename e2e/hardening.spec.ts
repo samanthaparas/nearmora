@@ -139,7 +139,9 @@ test('the whole core workflow works with networking blocked, makes no network re
   })
   const requests = await app.evaluate(() => (globalThis as Record<string, unknown>)['__nearmoraRequests'] as string[])
   expect(requests).toContain('https://control.nearmora.invalid/')
-  expect(requests.filter((url) => url !== 'https://control.nearmora.invalid/')).toEqual([])
+  // nm-media: serves previews by reading them with net.fetch(file://…), which this recorder sometimes reports
+  // (depending on Chromium's cache). Those are disk reads, not network; the socket check below covers the network.
+  expect(requests.filter((url) => url !== 'https://control.nearmora.invalid/' && !url.startsWith('file://'))).toEqual([])
 
   // Traffic inspection at the operating-system level: no process of the app holds a network socket.
   const { unexpected, harnessPorts } = await unexpectedSockets(app)
