@@ -59,7 +59,7 @@ async function pickFolderNextTime(app: ElectronApplication, path: string): Promi
   }, path)
 }
 
-// A profile with a scanned burst, saved favorites and a two-photo collage, so every screen has content.
+// A profile with a scanned burst, saved favorites and an Equal split collage, so every screen has content.
 async function seededProfile(extraArgs: string[] = []): Promise<{ app: ElectronApplication; page: Page }> {
   const { root } = await generateBurstFolder(join(tempFolder('photos'), 'Burst'), 3)
   const { app } = await launchApp(tempFolder('profile'), extraArgs)
@@ -76,7 +76,7 @@ async function seededProfile(extraArgs: string[] = []): Promise<{ app: ElectronA
   const pick = page.getByRole('button', { name: /^Select: / })
   await pick.nth(0).click()
   await pick.nth(1).click()
-  await page.getByRole('button', { name: /Two-photo collage/ }).click()
+  await page.getByRole('button', { name: /Equal split/ }).click()
   await expect(page.getByRole('region', { name: 'Export' })).toBeVisible()
   return { app, page }
 }
@@ -126,7 +126,7 @@ test('the whole core workflow works with networking blocked, makes no network re
   await page.getByRole('button', { name: 'Zoom in' }).click()
   await page.getByRole('button', { name: '← All sets' }).click()
   await nav(page, 'Memory Studio')
-  await page.getByRole('button', { name: /Two-photo collage/ }).first().click()
+  await page.getByRole('button', { name: /Equal split/ }).first().click()
   const destination = tempFolder('exports')
   await pickFolderNextTime(app, destination)
   await page.getByRole('region', { name: 'Export' }).getByRole('button', { name: 'Export…' }).click()
@@ -164,7 +164,7 @@ test('every screen passes automated accessibility checks (WCAG 2.1 AA), at norma
     ['Memory Studio', () => nav(page, 'Memory Studio')],
     ['Project editor', async () => {
       await nav(page, 'Memory Studio')
-      await page.getByRole('button', { name: /Two-photo collage/ }).first().click()
+      await page.getByRole('button', { name: /Equal split/ }).first().click()
     }],
     ['Sources', () => nav(page, 'Sources')],
     ['Settings', () => page.getByRole('button', { name: 'Settings', exact: true }).click()],

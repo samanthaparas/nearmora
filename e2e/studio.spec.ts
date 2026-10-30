@@ -49,11 +49,11 @@ test('a collage made from Favorites keeps its order, crop, shape and title after
   await expect(page.getByRole('list', { name: 'Favorites, 5 in total' })).toBeVisible()
   const pick = page.getByRole('button', { name: /^Select: / })
   await pick.nth(0).click()
-  await expect(page.getByRole('button', { name: /Two-photo collage/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: /Equal split/ })).toBeDisabled()
   await pick.nth(1).click()
-  await page.getByRole('button', { name: /Two-photo collage/ }).click()
-  await expect(page.getByRole('heading', { level: 2, name: 'Two-photo collage' })).toBeVisible()
-  await expect(page.getByRole('img', { name: /Preview: two-photo collage, square, cream background/ })).toBeVisible()
+  await page.getByRole('button', { name: /Equal split/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Equal split' })).toBeVisible()
+  await expect(page.getByRole('img', { name: /Preview: equal split, square, cream background/ })).toBeVisible()
 
   // Keyboard only: focus a crop button, then use arrow keys and + inside the controls group.
   await page.getByRole('button', { name: 'Show more of the right' }).focus()
@@ -133,17 +133,17 @@ test('a landscape collage, and a mouse wheel over a photo zooms that photo and s
   const pick = page.getByRole('button', { name: /^Select: / })
   await pick.nth(0).click()
   await pick.nth(1).click()
-  await page.getByRole('button', { name: /Two-photo collage/ }).click()
+  await page.getByRole('button', { name: /Equal split/ }).click()
 
   await page.getByLabel('Landscape (1350 × 1080)').click()
   await expect(page.getByLabel('Landscape (1350 × 1080)')).toBeChecked()
-  await expect(page.getByRole('img', { name: /Preview: two-photo collage, landscape, cream background/ })).toBeVisible()
+  await expect(page.getByRole('img', { name: /Preview: equal split, landscape, cream background/ })).toBeVisible()
   await expect(page.getByText('JPEG, 1350 × 1080 pixels, 1 file')).toBeVisible()
 
   // Wheel over the right-hand photo: it becomes the photo being adjusted, and zooms in.
   // The preview takes its new shape a moment after the label changes, and may sit outside the window on a small
   // screen: bring it into view and wait for landscape proportions before pointing at it.
-  const canvas = page.getByRole('img', { name: /Preview: two-photo collage/ })
+  const canvas = page.getByRole('img', { name: /Preview: equal split/ })
   await canvas.scrollIntoViewIfNeeded()
   await expect.poll(async () => {
     const b = await canvas.boundingBox()
@@ -159,8 +159,26 @@ test('a landscape collage, and a mouse wheel over a photo zooms that photo and s
 
   // Saved: reopening the project shows the same crop.
   await page.getByRole('button', { name: '← All projects' }).click()
-  await page.getByRole('button', { name: /Two-photo collage/ }).first().click()
+  await page.getByRole('button', { name: /Equal split/ }).first().click()
   await page.getByRole('button', { name: 'Adjust photo 2' }).click()
   expect(await cropNote(page)).toBe(zoomed)
+  await app.close()
+})
+
+test('new projects start from a template: Stacked puts two photos one above the other, and its name shows on the card', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  await pick.nth(0).click()
+  await pick.nth(1).click()
+  // Only templates that fit two photos are enabled.
+  await expect(page.getByRole('button', { name: /^Classic grid/ })).toBeDisabled()
+  await page.getByRole('button', { name: /^Stacked/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Stacked' })).toBeVisible()
+  await expect(page.getByRole('img', { name: /Preview: stacked, square, cream background/ })).toBeVisible()
+  await expect(page.getByText('Stacked · 2 photos · 1080 × 1080')).toBeVisible()
+  await page.getByRole('button', { name: '← All projects' }).click()
+  await expect(page.getByRole('button', { name: /Stacked · 2 photos/ })).toBeVisible()
   await app.close()
 })

@@ -1,27 +1,37 @@
 /**
- * Editing one Memory Studio project (AC6): title, square, portrait or landscape, cream or white background, the order of
- * photos, and each photo's crop position and zoom, all by buttons or keyboard. Every change is saved at once.
+ * Editing one Memory Studio project (AC6): title, format, cream or white background, the order of photos, and each
+ * photo's crop position and zoom, all by buttons or keyboard. Every change is saved at once. The preview is drawn
+ * from the same composition (template + format + settings) as the export.
  * Photos that can't be reached are named, so nobody discovers it only at export time.
  */
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { CommandOutput } from '@shared/ipc-contract'
-import { ASPECT_LABEL, CANVAS, canvasCount, clampCrop, DEFAULT_CROP, MAX_ZOOM, placements, type Aspect, type Background, type Crop } from '@shared/layout'
+import { clampCrop, DEFAULT_CROP, MAX_ZOOM, type Crop } from '@shared/layout'
+import { compose, UnknownTemplateError, type Composition } from '@shared/studio/compose'
+import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
+import { BACKGROUNDS, type Params } from '@shared/studio/params'
+import { templateName } from '@shared/studio/templates'
 import { ExportPanel } from './ExportPanel'
 import { StudioCanvas } from './StudioCanvas'
 
 type Project = CommandOutput<'projects:get'>
 type Item = Project['items'][number]
 
-const KIND_NAMES = { collage_2: 'Two-photo collage', collage_4: 'Four-photo collage', carousel: 'Carousel' } as const
 const PAN_STEP = 0.05
 const ZOOM_STEP = 0.25
 
 const describeCrop = (crop: Crop) =>
   `${Math.round(crop.cx * 100)}% across, ${Math.round(crop.cy * 100)}% down, zoom ${Math.round(crop.zoom * 100)}%`
 
-// "1350 × 1080": the output size for a shape, as shown on screen.
-const sizeOf = (aspect: Aspect): string => `${CANVAS[aspect].width} × ${CANVAS[aspect].height}`
+// "1350 × 1080": the output size of a format, as shown on screen.
+const sizeOf = (format: FormatId): string => `${FORMATS[format].width} × ${FORMATS[format].height}`
+
+const composeProject = (p: Project): Composition => compose({ ...p, photoCount: p.items.length })
+
+// "cream", "white", or "custom" for any other colour (free colours arrive in phase S2).
+const backgroundName = (params: Params): string =>
+  Object.entries(BACKGROUNDS).find(([, colour]) => colour === (params.background ?? BACKGROUNDS.cream))?.[0] ?? 'custom'
 export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: string; onClose: () => void; onDeleted: () => void }) {
   const [project, setProject] = useState<Project | null>(null)
   const [selected, setSelected] = useState(0)
@@ -56,6 +66,13 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   )
 
   if (!project) return <p>{status === 'All changes saved' ? 'Opening project…' : status}</p>
+  let composition: Composition
+  try {
+    composition = composeProject(project)
+  } catch (error: unknown) {
+    if (!(error instanceof UnknownTemplateError)) throw error
+    return <p role="alert">This project uses a layout this version of Nearmora doesn’t know. It is kept as it is; a newer version can open it.</p>
+  }
   const item = project.items[selected] ?? project.items[0]!
   const unavailable = project.items.filter((i) => !i.available)
 
@@ -67,7 +84,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
     } else setStatus(`That change couldn’t be saved. Nothing was changed.`)
   }
 
-  async function settings(change: { title?: string; aspect?: Aspect; background?: Background }, what: string) {
+  async function settings(change: { title?: string; format?: FormatId; params?: Params }, what: string) {
     applied(await window.nearmora.updateProject({ projectId, ...change }), what)
   }
 
@@ -81,7 +98,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
 
   // Crops are kept within the photo (clampCrop) before saving, using the same layout math as the preview and export.
   async function setCrop(target: Item, next: Crop) {
-    const cell = placements(project!.kind, project!.aspect, project!.items.length)[target.position]!.cell
+    const cell = composition.elements[target.position]!.rect
     const crop = target.width && target.height ? clampCrop({ width: target.width, height: target.height }, cell, next) : next
     setProject((p) => p && { ...p, items: p.items.map((i) => (i.position === target.position ? { ...i, crop } : i)) })
     const result = await window.nearmora.setProjectCrop({ projectId, position: target.position, crop })
@@ -94,7 +111,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
       if (!p) return p
       const target = p.items.find((i) => i.position === position)
       if (!target) return p
-      const cell = placements(p.kind, p.aspect, p.items.length)[position]!.cell
+      const cell = composeProject(p).elements[position]!.rect
       const next = { ...target.crop, zoom: Math.min(MAX_ZOOM, Math.max(1, target.crop.zoom * factor)) }
       const crop = target.width && target.height ? clampCrop({ width: target.width, height: target.height }, cell, next) : next
       if (pendingZoom.current) window.clearTimeout(pendingZoom.current.timer)
@@ -122,22 +139,21 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
     else if (event.key === '-') zoom(-ZOOM_STEP)
   }
 
-  const slides = canvasCount(project.kind, project.items.length)
+  const slides = composition.canvasCount
+  const name = templateName(project.templateId, project.templateVersion)
   const preview = (canvasIndex: number, width: number) => (
     <StudioCanvas
       key={canvasIndex}
-      kind={project.kind}
-      aspect={project.aspect}
-      background={project.background}
+      composition={composition}
       items={project.items}
       canvasIndex={canvasIndex}
       displayWidth={width}
       highlight={item.position}
       onWheelZoom={wheelZoom}
       label={
-        project.kind === 'carousel'
+        composition.mode === 'carousel'
           ? `Preview of slide ${canvasIndex + 1} of ${slides}`
-          : `Preview: ${KIND_NAMES[project.kind].toLowerCase()}, ${ASPECT_LABEL[project.aspect].split(' ')[0]!.toLowerCase()}, ${project.background} background`
+          : `Preview: ${name.toLowerCase()}, ${FORMATS[project.format].label.toLowerCase()}, ${backgroundName(project.params)} background`
       }
     />
   )
@@ -152,8 +168,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           {project.title}
         </h2>
         <p className="review__note">
-          {KIND_NAMES[project.kind]} · {project.items.length} photos · {sizeOf(project.aspect)}
-          {project.kind === 'carousel' ? ` · ${slides} slides` : ''}
+          {name} · {project.items.length} photos · {sizeOf(project.format)}
+          {composition.mode === 'carousel' ? ` · ${slides} slides` : ''}
         </p>
       </div>
 
@@ -176,7 +192,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
 
       <div className="studio__layout">
         <div className="studio__previews">
-          {project.kind === 'carousel' ? (
+          {composition.mode === 'carousel' ? (
             <div className="studio__slides">{Array.from({ length: slides }, (_, i) => preview(i, 220))}</div>
           ) : (
             preview(0, 480)
@@ -202,10 +218,10 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
 
           <fieldset className="studio__choice">
             <legend>Shape</legend>
-            {(['1:1', '4:5', '5:4'] as const).map((value) => (
+            {FORMAT_IDS.map((value) => (
               <label key={value} className="library__check">
-                <input type="radio" name="aspect" checked={project.aspect === value} onChange={() => void settings({ aspect: value }, 'Shape changed')} />
-                <span>{ASPECT_LABEL[value]}</span>
+                <input type="radio" name="format" checked={project.format === value} onChange={() => void settings({ format: value }, 'Shape changed')} />
+                <span>{formatLabel(value)}</span>
               </label>
             ))}
           </fieldset>
@@ -216,8 +232,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
                 <input
                   type="radio"
                   name="background"
-                  checked={project.background === value}
-                  onChange={() => void settings({ background: value }, 'Background changed')}
+                  checked={backgroundName(project.params) === value}
+                  onChange={() => void settings({ params: { ...project.params, background: BACKGROUNDS[value] } }, 'Background changed')}
                 />
                 <span>{value === 'cream' ? 'Cream' : 'White'}</span>
               </label>
@@ -289,7 +305,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           <ExportPanel
             projectId={projectId}
             blocked={unavailable.length > 0}
-            summary={`JPEG, ${sizeOf(project.aspect)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
+            summary={`JPEG, ${sizeOf(project.format)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
           />
 
           <button type="button" className="button button--quiet" onClick={() => setConfirmDelete(true)}>

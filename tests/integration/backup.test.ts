@@ -32,8 +32,8 @@ async function populatedCatalog() {
   const album = createAlbum(db, 'Beach day')
   setAlbumMembers(db, album.id, [assets[3]!, assets[1]!])
   const projectId = randomUUID()
-  db.prepare(`INSERT INTO project VALUES (?, 'Beach collage', 'collage_2', '4:5', 'cream', 1, 0)`).run(projectId)
-  db.prepare('INSERT INTO project_item VALUES (?, 0, ?, 0.4, 0.6, 1.5)').run(projectId, assets[0])
+  db.prepare(`INSERT INTO project VALUES (?, 'Beach collage', 'pair-equal-split', 1, 'portrait', '{"v":1}', 0)`).run(projectId)
+  db.prepare(`INSERT INTO project_item VALUES (?, 0, ?, 0.4, 0.6, 1.5, 'fill')`).run(projectId, assets[0])
   return { db, profile, assets, setId, albumId: album.id, projectId, rootPath }
 }
 

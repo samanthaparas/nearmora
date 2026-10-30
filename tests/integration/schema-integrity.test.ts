@@ -33,8 +33,8 @@ describe('foreign keys', () => {
     const { sourceId } = seedSource(db)
     const [assetId] = seedAssets(db, sourceId, 1)
     const projectId = randomUUID()
-    db.prepare(`INSERT INTO project VALUES (?, 'Collage', 'collage_2', '1:1', 'cream', 1, 0)`).run(projectId)
-    db.prepare('INSERT INTO project_item VALUES (?, 0, ?, 0.5, 0.5, 1)').run(projectId, assetId)
+    db.prepare(`INSERT INTO project VALUES (?, 'Collage', 'pair-equal-split', 1, 'square', '{"v":1}', 0)`).run(projectId)
+    db.prepare(`INSERT INTO project_item VALUES (?, 0, ?, 0.5, 0.5, 1, 'fill')`).run(projectId, assetId)
 
     expect(() => db.prepare('DELETE FROM asset WHERE id = ?').run(assetId)).toThrow(/FOREIGN KEY/)
     expect(count(db, 'asset')).toBe(1)

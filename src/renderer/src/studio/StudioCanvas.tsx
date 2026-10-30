@@ -1,11 +1,12 @@
 /**
- * Draws one output canvas (a collage, or one carousel slide) with the shared layout math, so the preview is
- * computed exactly as the export will be (AC7). Uses the large preview image, or the thumbnail when that's
+ * Draws one output canvas (a collage, or one carousel slide) from the project's composition, the same element list
+ * the export draws (AC7). Uses the large preview image, or the thumbnail when that's
  * not available. A pinch or mouse wheel over a photo zooms that photo.
  */
 
 import { useEffect, useRef } from 'react'
-import { BACKGROUND_COLOR, CANVAS, placements, sourceRect, type Aspect, type Background, type Crop, type ProjectKind } from '@shared/layout'
+import { sourceRect, type Crop } from '@shared/layout'
+import type { Composition } from '@shared/studio/compose'
 import { useWheelZoom } from '../wheel-zoom'
 
 export interface CanvasItem {
@@ -32,10 +33,9 @@ function loadImage(assetId: string): Promise<HTMLImageElement> {
   return pending
 }
 
-export function StudioCanvas({ kind, aspect, background, items, canvasIndex, displayWidth, highlight, label, onWheelZoom }: {
-  kind: ProjectKind
-  aspect: Aspect
-  background: Background
+export function StudioCanvas({ composition, items, canvasIndex, displayWidth, highlight, label, onWheelZoom }: {
+  composition: Composition
+  /** The project's photos by position; element `slot` numbers index into this. */
   items: readonly CanvasItem[]
   canvasIndex: number
   displayWidth: number
@@ -46,7 +46,7 @@ export function StudioCanvas({ kind, aspect, background, items, canvasIndex, dis
   onWheelZoom?: (position: number, factor: number) => void
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const size = CANVAS[aspect]
+  const size = { width: composition.width, height: composition.height }
   const scale = displayWidth / size.width
   const displayHeight = size.height * scale
 
@@ -57,11 +57,11 @@ export function StudioCanvas({ kind, aspect, background, items, canvasIndex, dis
     const box = canvas.getBoundingClientRect()
     const x = ((event.clientX - box.left) * size.width) / box.width
     const y = ((event.clientY - box.top) * size.height) / box.height
-    const hit = placements(kind, aspect, items.length).findIndex(
-      (p) => p.canvas === canvasIndex && x >= p.cell.x && x <= p.cell.x + p.cell.width && y >= p.cell.y && y <= p.cell.y + p.cell.height,
+    const hit = composition.elements.find(
+      (e) => e.canvas === canvasIndex && x >= e.rect.x && x <= e.rect.x + e.rect.width && y >= e.rect.y && y <= e.rect.y + e.rect.height,
     )
-    if (hit < 0) return false
-    onWheelZoom(hit, factor)
+    if (!hit) return false
+    onWheelZoom(hit.slot, factor)
     return true
   })
 
@@ -75,12 +75,12 @@ export function StudioCanvas({ kind, aspect, background, items, canvasIndex, dis
     const context = canvas.getContext('2d')
     if (!context) return
     context.setTransform(scale * ratio, 0, 0, scale * ratio, 0, 0) // draw in output pixels; the transform scales to the screen
-    context.fillStyle = BACKGROUND_COLOR[background]
+    context.fillStyle = composition.background
     context.fillRect(0, 0, size.width, size.height)
 
-    const mine = placements(kind, aspect, items.length)
-      .map((placement, position) => ({ ...placement, position, item: items[position]! }))
-      .filter((p) => p.canvas === canvasIndex)
+    const mine = composition.elements
+      .filter((e) => e.canvas === canvasIndex && items[e.slot])
+      .map((e) => ({ cell: e.rect, position: e.slot, item: items[e.slot]! }))
     void Promise.allSettled(mine.map((p) => loadImage(p.item.assetId))).then((loaded) => {
       if (cancelled) return
       mine.forEach((p, i) => {
@@ -101,7 +101,7 @@ export function StudioCanvas({ kind, aspect, background, items, canvasIndex, dis
     return () => {
       cancelled = true
     }
-  }, [kind, aspect, background, items, canvasIndex, displayWidth, displayHeight, scale, size, highlight])
+  }, [composition, items, canvasIndex, displayWidth, displayHeight, scale, size.width, size.height, highlight])
 
   // Shrinks to fit narrow windows and 200% zoom (no sideways scrolling); the canvas keeps its shape from its pixel size.
   return <canvas ref={ref} className="studio__canvas" role="img" aria-label={label} style={{ width: displayWidth, maxWidth: '100%', height: 'auto' }} />

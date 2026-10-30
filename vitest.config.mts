@@ -15,5 +15,8 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.{ts,tsx}'],
     environment: 'node',
+    // On CI, one test file at a time: mounting and ejecting the tests' small disk images can briefly stall path
+    // lookups on the runner, which made unrelated tests time out when they ran alongside (about 13 s slower locally).
+    fileParallelism: !process.env['CI'],
   },
 })

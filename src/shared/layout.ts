@@ -1,64 +1,14 @@
 /**
- * Memory Studio layout math, shared by the on-screen preview (renderer) and the export (main process), so what
- * the person sees is computed exactly the way the exported file is (AC7). Plain functions, no dependencies.
+ * Memory Studio crop math, shared by the on-screen preview (renderer) and the export (main process), so what the
+ * person sees is computed exactly the way the exported file is (AC7). Where photos go is decided by the templates in
+ * shared/studio; this file decides which part of each photo fills its place. Plain functions, no dependencies.
  */
-
-export type ProjectKind = 'collage_2' | 'collage_4' | 'carousel'
-export type Aspect = '1:1' | '4:5' | '5:4'
-export type Background = 'cream' | 'white'
-
-/** Bump when any rule below changes, so saved projects record which layout they were made with. */
-export const LAYOUT_VERSION = 1
-
-/** Output size in pixels (blueprint: square 1080×1080, portrait 1080×1350; landscape 1350×1080 is portrait turned sideways). */
-export const CANVAS: Record<Aspect, { width: number; height: number }> = {
-  '1:1': { width: 1080, height: 1080 },
-  '4:5': { width: 1080, height: 1350 },
-  '5:4': { width: 1350, height: 1080 },
-}
-
-/** How each shape is named on screen, with its size. */
-export const ASPECT_LABEL: Record<Aspect, string> = {
-  '1:1': 'Square (1080 × 1080)',
-  '4:5': 'Portrait (1080 × 1350)',
-  '5:4': 'Landscape (1350 × 1080)',
-}
-
-export const BACKGROUND_COLOR: Record<Background, string> = { cream: '#f8f0e8', white: '#ffffff' }
-
-/** How many photos each kind takes. */
-export const PHOTO_COUNT: Record<ProjectKind, { min: number; max: number }> = {
-  collage_2: { min: 2, max: 2 },
-  collage_4: { min: 4, max: 4 },
-  carousel: { min: 2, max: 10 },
-}
-
-// Collages leave a margin around the edge and a gap between photos, in output pixels.
-const MARGIN = 48
-const GAP = 24
 
 export interface Rect {
   x: number
   y: number
   width: number
   height: number
-}
-
-/** Where each photo goes on one canvas. A carousel slide is one photo filling the whole canvas. */
-export function cells(kind: ProjectKind, aspect: Aspect): Rect[] {
-  const { width, height } = CANVAS[aspect]
-  if (kind === 'carousel') return [{ x: 0, y: 0, width, height }]
-  const columns = 2
-  const rows = kind === 'collage_4' ? 2 : 1
-  const cellWidth = (width - 2 * MARGIN - (columns - 1) * GAP) / columns
-  const cellHeight = (height - 2 * MARGIN - (rows - 1) * GAP) / rows
-  const result: Rect[] = []
-  for (let row = 0; row < rows; row++) {
-    for (let column = 0; column < columns; column++) {
-      result.push({ x: MARGIN + column * (cellWidth + GAP), y: MARGIN + row * (cellHeight + GAP), width: cellWidth, height: cellHeight })
-    }
-  }
-  return result
 }
 
 /** How a photo sits in its cell: the point of the photo at the cell's centre (0–1 across and down) and a zoom (1 = just fills). */
@@ -98,14 +48,3 @@ export function clampCrop(image: { width: number; height: number }, cell: { widt
     zoom: clamp(crop.zoom, 1, MAX_ZOOM),
   }
 }
-
-/** Which canvas (output file) and which cell on it each photo goes to, in order. */
-export function placements(kind: ProjectKind, aspect: Aspect, photoCount: number): Array<{ canvas: number; cell: Rect }> {
-  const layout = cells(kind, aspect)
-  return Array.from({ length: photoCount }, (_, index) =>
-    kind === 'carousel' ? { canvas: index, cell: layout[0]! } : { canvas: 0, cell: layout[index % layout.length]! },
-  )
-}
-
-/** Number of output files: one for a collage, one per photo for a carousel. */
-export const canvasCount = (kind: ProjectKind, photoCount: number): number => (kind === 'carousel' ? photoCount : 1)

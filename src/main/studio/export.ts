@@ -9,7 +9,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import { accessSync, constants, createReadStream, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import sharp from 'sharp'
-import { BACKGROUND_COLOR, CANVAS, canvasCount, placements, type Crop, type Rect } from '@shared/layout'
+import type { Crop, Rect } from '@shared/layout'
+import { compose } from '@shared/studio/compose'
 import type { Catalog } from '../catalog/database'
 import { getProject } from '../catalog/repositories/projects'
 import { listSources } from '../catalog/repositories/sources'
@@ -115,20 +116,28 @@ export async function prepareExport(
   if (unavailable.length > 0) return { status: 'refused', reason: 'unavailable', files: unavailable }
   if (changed.length > 0) return { status: 'refused', reason: 'changed', files: changed }
 
-  const { width, height } = CANVAS[project.aspect]
+  // The same composition the editor's preview draws: same template, format, settings and photo positions.
+  const composition = compose({ ...project, photoCount: project.items.length })
   const name = safeName(project.title)
-  const count = canvasCount(project.kind, project.items.length)
-  const outputs: ExportPlan['outputs'] = Array.from({ length: count }, (_, i) => ({
+  const outputs: ExportPlan['outputs'] = Array.from({ length: composition.canvasCount }, (_, i) => ({
     // Carousel slides are numbered so they sort in order everywhere.
-    fileName: project.kind === 'carousel' ? `${name} ${String(i + 1).padStart(2, '0')}.jpg` : `${name}.jpg`,
+    fileName: composition.mode === 'carousel' ? `${name} ${String(i + 1).padStart(2, '0')}.jpg` : `${name}.jpg`,
     layers: [],
   }))
-  placements(project.kind, project.aspect, project.items.length).forEach((placement, position) => {
-    outputs[placement.canvas]!.layers.push({ sourcePath: paths[position]!, crop: project.items[position]!.crop, cell: placement.cell })
-  })
+  for (const element of composition.elements) {
+    outputs[element.canvas]!.layers.push({ sourcePath: paths[element.slot]!, crop: project.items[element.slot]!.crop, cell: element.rect })
+  }
   return {
     status: 'ready',
-    plan: { projectId: project.id, title: project.title, destinationDir: destination, width, height, background: BACKGROUND_COLOR[project.background], outputs },
+    plan: {
+      projectId: project.id,
+      title: project.title,
+      destinationDir: destination,
+      width: composition.width,
+      height: composition.height,
+      background: composition.background,
+      outputs,
+    },
   }
 }
 
