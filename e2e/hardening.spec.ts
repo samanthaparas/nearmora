@@ -133,15 +133,15 @@ test('the whole core workflow works with networking blocked, makes no network re
   await expect(page.getByRole('region', { name: 'Export' })).toContainText('Exported 1 file', { timeout: 30_000 })
 
   // Positive control: a deliberate request from main must show up, proving the recorder sees network requests.
-  // (The app's own app: and nm-media: requests are served in-process and never reach this recorder.)
   await app.evaluate(async ({ net }) => {
     await net.fetch('https://control.nearmora.invalid/').catch(() => undefined)
   })
   const requests = await app.evaluate(() => (globalThis as Record<string, unknown>)['__nearmoraRequests'] as string[])
   expect(requests).toContain('https://control.nearmora.invalid/')
-  // nm-media: serves previews by reading them with net.fetch(file://…), which this recorder sometimes reports
-  // (depending on Chromium's cache). Those are disk reads, not network; the socket check below covers the network.
-  expect(requests.filter((url) => url !== 'https://control.nearmora.invalid/' && !url.startsWith('file://'))).toEqual([])
+  // The recorder sometimes also reports the app's own in-process schemes (app:, nm-media:) and the file:// reads
+  // behind them, depending on Chromium's cache. Those are local, so only other schemes count as network here.
+  const local = ['app:', 'nm-media:', 'file:']
+  expect(requests.filter((url) => url !== 'https://control.nearmora.invalid/' && !local.includes(new URL(url).protocol))).toEqual([])
 
   // Traffic inspection at the operating-system level: no process of the app holds a network socket.
   const { unexpected, harnessPorts } = await unexpectedSockets(app)
