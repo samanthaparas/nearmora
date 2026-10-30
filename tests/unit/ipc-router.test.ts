@@ -48,13 +48,12 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'projects:create': () => {
       throw new Error('not used')
     },
-    'projects:update': () => {
+    'projects:rename': () => {
       throw new Error('not used')
     },
-    'projects:reorder': () => {
+    'projects:setDesign': () => {
       throw new Error('not used')
     },
-    'projects:setCrop': () => ({ saved: true }),
     'projects:delete': () => ({ deleted: true }),
     'export:start': () => ({ status: 'cancelled' }),
     'export:cancel': () => ({ cancelled: false }),

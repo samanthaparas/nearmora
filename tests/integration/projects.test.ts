@@ -1,7 +1,7 @@
 /**
- * Integration tests for Memory Studio projects (AC6): photo counts per template, settings checked against their schema, crops and order restored exactly
- * after a restart, reordering that keeps each photo's crop, offline photos named, and deleting a project
- * leaving every photo in place.
+ * Integration tests for Memory Studio projects (AC6): photo counts per template, whole designs saved and checked in one
+ * step (layout, shape, settings, borders, order, swaps, replacements, crops and fit), all restored exactly after a
+ * restart, offline photos named, and deleting a project leaving every photo in place.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -10,10 +10,10 @@ import {
   deleteProject,
   getProject,
   listProjects,
-  reorderProject,
-  setItemCrop,
-  updateProject,
+  renameProject,
+  setDesign,
 } from '../../src/main/catalog/repositories/projects'
+import { designOf, moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '../../src/shared/studio/design'
 import { setSourceStatus } from '../../src/main/catalog/repositories/sources'
 import { codeOf, openTestCatalog, seedAssets, seedSource, tempProfile } from './helpers'
 
@@ -23,6 +23,10 @@ async function library(file = tempProfile().catalogFile) {
   const assets = seedAssets(db, source.sourceId, 10)
   return { db, assets, sourceId: source.sourceId }
 }
+
+// Saves an edited copy of the project's current design, the way the editor does.
+type Catalog = Awaited<ReturnType<typeof openTestCatalog>>
+const edit = (db: Catalog, projectId: string, change: (design: Design) => Design) => setDesign(db, { projectId, design: change(designOf(getProject(db, projectId))) })
 
 describe('creating projects', () => {
   it('enforces the photo count for each layout, and each photo once', async () => {
@@ -55,37 +59,77 @@ describe('creating projects', () => {
 })
 
 describe('editing and restoring a draft (AC6)', () => {
-  it('reopens after a restart with the same order, crops, title, format and settings', async () => {
+  it('reopens after a restart with the same order, crops, fit, title, format and settings', async () => {
     const { catalogFile } = tempProfile()
     const { db, assets } = await library(catalogFile)
-    const project = createProject(db, { templateId: 'carousel-full', format: 'square', assetIds: assets.slice(0, 3) })
-    setItemCrop(db, { projectId: project.id, position: 1, crop: { cx: 0.25, cy: 0.75, zoom: 2.5 } })
-    reorderProject(db, { projectId: project.id, assetIds: [assets[2]!, assets[1]!, assets[0]!] })
-    updateProject(db, { projectId: project.id, title: 'Beach carousel', format: 'portrait', params: { v: 1, background: '#ffffff', margin: 30 } })
+    const project = createProject(db, { templateId: 'quartet-classic-grid', format: 'square', assetIds: assets.slice(0, 4) })
+    edit(db, project.id, (d) => updateItem(d, 1, { crop: { cx: 0.25, cy: 0.75, zoom: 2.5 } }))
+    edit(db, project.id, (d) => updateItem(d, 3, { fit: 'fit' }))
+    edit(db, project.id, (d) => moveItem(d, 0, 2))
+    edit(db, project.id, (d) => ({
+      ...d,
+      format: 'portrait',
+      params: { v: 1, background: '#123456', margin: 30, gutter: 0, borderWidth: 12, borderColor: '#2f2b2c' },
+    }))
+    renameProject(db, { projectId: project.id, title: 'Beach grid' })
     const before = getProject(db, project.id)
     db.close()
 
     const reopened = await openTestCatalog(catalogFile)
     expect(getProject(reopened, project.id)).toEqual(before)
-    expect(before.items.map((i) => i.assetId)).toEqual([assets[2], assets[1], assets[0]])
-    // The crop followed its photo when the order changed.
-    expect(before.items[1]).toMatchObject({ assetId: assets[1], crop: { cx: 0.25, cy: 0.75, zoom: 2.5 } })
+    expect(before).toMatchObject({ title: 'Beach grid', format: 'portrait', params: { borderWidth: 12, borderColor: '#2f2b2c', background: '#123456' } })
+    expect(before.items.map((i) => i.assetId)).toEqual([assets[1], assets[2], assets[0], assets[3]])
+    // Crop and fit followed their photo when the order changed.
+    expect(before.items[0]).toMatchObject({ assetId: assets[1], crop: { cx: 0.25, cy: 0.75, zoom: 2.5 }, fit: 'fill' })
+    expect(before.items[3]).toMatchObject({ assetId: assets[3], fit: 'fit' })
   })
 
-  it('refuses crops out of range and reorders that change which photos are in it', async () => {
+  it('swaps and replaces photos: a swap keeps each crop, a replacement starts centred and keeps its place’s fit', async () => {
     const { db, assets } = await library()
     const project = createProject(db, { templateId: 'pair-equal-split', format: 'square', assetIds: assets.slice(0, 2) })
-    expect(codeOf(() => setItemCrop(db, { projectId: project.id, position: 0, crop: { cx: 1.5, cy: 0.5, zoom: 1 } }))).toBe('INVALID_INPUT')
-    expect(codeOf(() => setItemCrop(db, { projectId: project.id, position: 0, crop: { cx: 0.5, cy: 0.5, zoom: 5 } }))).toBe('INVALID_INPUT')
-    expect(codeOf(() => setItemCrop(db, { projectId: project.id, position: 7, crop: { cx: 0.5, cy: 0.5, zoom: 1 } }))).toBe('NOT_FOUND')
-    expect(codeOf(() => reorderProject(db, { projectId: project.id, assetIds: [assets[0]!, assets[5]!] }))).toBe('INVALID_INPUT')
-    expect(codeOf(() => updateProject(db, { projectId: project.id, title: '   ' }))).toBe('INVALID_INPUT')
-    // Settings are checked against the schema: no unknown keys, colours as #rrggbb, margins within range.
-    for (const params of [{ v: 1, background: 'red' }, { v: 1, margin: -4 }, { v: 1, script: 'x' }, { v: 2 }]) {
-      expect(codeOf(() => updateProject(db, { projectId: project.id, params: params as never }))).toBe('INVALID_INPUT')
+    edit(db, project.id, (d) => updateItem(updateItem(d, 0, { crop: { cx: 0.1, cy: 0.5, zoom: 2 } }), 1, { fit: 'fit', crop: { cx: 0.9, cy: 0.9, zoom: 3 } }))
+    edit(db, project.id, (d) => swapItems(d, 0, 1))
+    expect(getProject(db, project.id).items.map((i) => [i.assetId, i.crop.cx, i.fit])).toEqual([
+      [assets[1], 0.9, 'fit'],
+      [assets[0], 0.1, 'fill'],
+    ])
+    edit(db, project.id, (d) => replaceItem(d, 0, assets[7]!))
+    expect(getProject(db, project.id).items[0]).toMatchObject({ assetId: assets[7], crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fit', fileName: 'IMG_0008.jpg' })
+  })
+
+  it('resets to the layout defaults, keeping the photos and their order', async () => {
+    const { db, assets } = await library()
+    const project = createProject(db, { templateId: 'pair-stacked', format: 'square', assetIds: assets.slice(0, 2) })
+    edit(db, project.id, (d) => ({ ...swapItems(updateItem(d, 0, { fit: 'fit', crop: { cx: 0.2, cy: 0.2, zoom: 2 } }), 0, 1), params: { v: 1, margin: 0, borderWidth: 20 } }))
+    edit(db, project.id, resetDesign)
+    const reset = getProject(db, project.id)
+    expect(reset.params).toEqual({ v: 1 })
+    expect(reset.items.map((i) => [i.assetId, i.fit, i.crop])).toEqual([
+      [assets[1], 'fill', { cx: 0.5, cy: 0.5, zoom: 1 }],
+      [assets[0], 'fill', { cx: 0.5, cy: 0.5, zoom: 1 }],
+    ])
+  })
+
+  it('refuses an invalid design as a whole, so nothing is half-saved', async () => {
+    const { db, assets } = await library()
+    const project = createProject(db, { templateId: 'pair-equal-split', format: 'square', assetIds: assets.slice(0, 2) })
+    const before = getProject(db, project.id)
+    const bad = (change: (d: Design) => unknown) => codeOf(() => edit(db, project.id, change as (d: Design) => Design))
+    expect(bad((d) => updateItem(d, 0, { crop: { cx: 1.5, cy: 0.5, zoom: 1 } }))).toBe('INVALID_INPUT')
+    expect(bad((d) => updateItem(d, 0, { crop: { cx: 0.5, cy: 0.5, zoom: 5 } }))).toBe('INVALID_INPUT')
+    expect(bad((d) => updateItem(d, 0, { fit: 'stretch' as never }))).toBe('INVALID_INPUT')
+    // The same photo twice, a photo that isn't in the catalog, or a photo count the layout can't take.
+    expect(bad((d) => replaceItem(d, 1, assets[0]!))).toBe('INVALID_INPUT')
+    expect(bad((d) => replaceItem(d, 1, '00000000-0000-4000-8000-000000000000'))).toBe('NOT_FOUND')
+    expect(bad((d) => ({ ...d, items: [...d.items, { ...d.items[0]!, assetId: assets[5]! }] }))).toBe('INVALID_INPUT')
+    // Settings are checked against the schema: no unknown keys, colours as #rrggbb, sizes within range.
+    for (const params of [{ v: 1, background: 'red' }, { v: 1, margin: -4 }, { v: 1, script: 'x' }, { v: 2 }, { v: 1, borderWidth: 61 }, { v: 1, borderColor: 'url(x)' }]) {
+      expect(bad((d) => ({ ...d, params }))).toBe('INVALID_INPUT')
     }
-    expect(codeOf(() => updateProject(db, { projectId: project.id, format: 'poster' }))).toBe('INVALID_INPUT')
-    expect(getProject(db, project.id).items.map((i) => i.assetId)).toEqual(assets.slice(0, 2))
+    expect(bad((d) => ({ ...d, format: 'poster' }))).toBe('INVALID_INPUT')
+    expect(bad((d) => ({ ...d, templateVersion: 99 }))).toBe('INVALID_INPUT')
+    expect(codeOf(() => renameProject(db, { projectId: project.id, title: '   ' }))).toBe('INVALID_INPUT')
+    expect(getProject(db, project.id)).toEqual(before)
   })
 })
 
@@ -93,15 +137,15 @@ describe('changing a project’s layout', () => {
   it('switches to another layout for the same number of photos, keeping order and crops; refuses one that doesn’t fit', async () => {
     const { db, assets } = await library()
     const project = createProject(db, { templateId: 'quartet-classic-grid', format: 'portrait', assetIds: assets.slice(0, 4) })
-    setItemCrop(db, { projectId: project.id, position: 2, crop: { cx: 0.2, cy: 0.8, zoom: 3 } })
-    updateProject(db, { projectId: project.id, templateId: 'quartet-lead-three' })
+    edit(db, project.id, (d) => updateItem(d, 2, { crop: { cx: 0.2, cy: 0.8, zoom: 3 } }))
+    edit(db, project.id, (d) => ({ ...d, templateId: 'quartet-lead-three', templateVersion: 1 }))
     const switched = getProject(db, project.id)
     expect(switched).toMatchObject({ templateId: 'quartet-lead-three', templateVersion: 1, title: 'Classic grid' })
     expect(switched.items.map((i) => i.assetId)).toEqual(assets.slice(0, 4))
     expect(switched.items[2]!.crop).toEqual({ cx: 0.2, cy: 0.8, zoom: 3 })
     // A two-photo layout can't hold four photos, and an unknown layout is refused; nothing changes either way.
-    expect(codeOf(() => updateProject(db, { projectId: project.id, templateId: 'pair-stacked' }))).toBe('INVALID_INPUT')
-    expect(codeOf(() => updateProject(db, { projectId: project.id, templateId: 'no-such-layout' }))).toBe('INVALID_INPUT')
+    expect(codeOf(() => edit(db, project.id, (d) => ({ ...d, templateId: 'pair-stacked' })))).toBe('INVALID_INPUT')
+    expect(codeOf(() => edit(db, project.id, (d) => ({ ...d, templateId: 'no-such-layout' })))).toBe('INVALID_INPUT')
     expect(getProject(db, project.id).templateId).toBe('quartet-lead-three')
   })
 })
@@ -118,7 +162,7 @@ describe('photos that can’t be reached (AC6)', () => {
       [false, 'IMG_0001.jpg', 'Summer'],
       [false, 'IMG_0002.jpg', 'Summer'],
     ])
-    setItemCrop(db, { projectId: project.id, position: 0, crop: { cx: 0.4, cy: 0.5, zoom: 1.5 } })
+    edit(db, project.id, (d) => updateItem(d, 0, { crop: { cx: 0.4, cy: 0.5, zoom: 1.5 } }))
     expect(getProject(db, project.id).items[0]?.crop.zoom).toBe(1.5)
   })
 })

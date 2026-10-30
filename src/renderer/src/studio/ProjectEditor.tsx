@@ -1,26 +1,28 @@
 /**
- * Editing one Memory Studio project (AC6): title, layout, format, cream or white background, the order of photos, and each
- * photo's crop position and zoom, all by buttons or keyboard. Every change is saved at once. The preview is drawn
- * from the same composition (template + format + settings) as the export.
- * Photos that can't be reached are named, so nobody discovers it only at export time.
+ * Editing one Memory Studio project (AC6) with Quick edits: layout, shape, background colour, margin, gutter, photo
+ * border, and for each photo its order, swap, replace, fit or fill, crop and zoom. Every edit is saved at once, can be
+ * undone and redone (buttons, or ⌘Z and ⇧⌘Z), and "Reset to layout defaults" brings back the layout's own look.
+ * The preview is drawn from the same composition as the export. Photos that can't be reached are named before export.
  */
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import type { CommandOutput } from '@shared/ipc-contract'
-import { clampCrop, DEFAULT_CROP, MAX_ZOOM, type Crop } from '@shared/layout'
-import { compose, UnknownTemplateError, type Composition } from '@shared/studio/compose'
+import { useState, type KeyboardEvent } from 'react'
+import { clampCrop, DEFAULT_CROP, MAX_ZOOM, photoArea, type Crop } from '@shared/layout'
+import { compose, resolveParams, UnknownTemplateError, type Composition } from '@shared/studio/compose'
+import { moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '@shared/studio/design'
 import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
-import { BACKGROUNDS, type Params } from '@shared/studio/params'
-import { templateName, templatesFor } from '@shared/studio/templates'
+import { BACKGROUNDS, BORDER_COLORS, MAX_BORDER, type Params } from '@shared/studio/params'
+import { findTemplate, templatesFor } from '@shared/studio/templates'
+import { ColourChoice } from './ColourChoice'
 import { ExportPanel } from './ExportPanel'
+import { ReplacePhoto } from './ReplacePhoto'
 import { StudioCanvas } from './StudioCanvas'
 import { TemplateIcon } from './TemplateIcon'
-
-type Project = CommandOutput<'projects:get'>
-type Item = Project['items'][number]
+import { useProjectEditing } from './use-project-editing'
 
 const PAN_STEP = 0.05
 const ZOOM_STEP = 0.25
+/** The widest margin or gutter offered by the sliders, in reference pixels (the settings allow up to 300). */
+const MAX_SPACING = 200
 
 const describeCrop = (crop: Crop) =>
   `${Math.round(crop.cx * 100)}% across, ${Math.round(crop.cy * 100)}% down, zoom ${Math.round(crop.zoom * 100)}%`
@@ -28,109 +30,58 @@ const describeCrop = (crop: Crop) =>
 // "1350 × 1080": the output size of a format, as shown on screen.
 const sizeOf = (format: FormatId): string => `${FORMATS[format].width} × ${FORMATS[format].height}`
 
-const composeProject = (p: Project): Composition => compose({ ...p, photoCount: p.items.length })
+const composeDesign = (design: Design): Composition => compose({ ...design, photoCount: design.items.length })
 
-// "cream", "white", or "custom" for any other colour (free colours arrive in phase S2).
-const backgroundName = (params: Params): string =>
-  Object.entries(BACKGROUNDS).find(([, colour]) => colour === (params.background ?? BACKGROUNDS.cream))?.[0] ?? 'custom'
+// "cream", "white", or the colour itself when it isn't one of the named ones; used in the preview's description.
+const colourName = (colour: string): string => Object.entries(BACKGROUNDS).find(([, c]) => c === colour.toLowerCase())?.[0] ?? colour
+
 export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: string; onClose: () => void; onDeleted: () => void }) {
-  const [project, setProject] = useState<Project | null>(null)
+  const { project, setProject, design, canUndo, canRedo, status, setStatus, change, live, undo, redo } = useProjectEditing(projectId)
   const [selected, setSelected] = useState(0)
-  const [titleDraft, setTitleDraft] = useState('')
-  const [status, setStatus] = useState<string>('All changes saved')
+  const [titleDraft, setTitleDraft] = useState<string | null>(null)
+  const [replacing, setReplacing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  // A pinch sends many small zoom steps; the preview follows each one, and only the last is saved.
-  const pendingZoom = useRef<{ timer: number; position: number; crop: Crop } | null>(null)
 
-  // State is set in the promise callback, after main replies, never synchronously inside an effect.
-  const load = useCallback(
-    () =>
-      window.nearmora.getProject({ projectId }).then((result) => {
-        if (!result.ok) return setStatus('This project couldn’t be opened.')
-        setProject(result.data)
-        setTitleDraft(result.data.title)
-      }),
-    [projectId],
-  )
-  useEffect(() => {
-    void load()
-  }, [load])
-  // Leaving the editor mid-pinch still saves the last zoom.
-  useEffect(
-    () => () => {
-      const pending = pendingZoom.current
-      if (!pending) return
-      window.clearTimeout(pending.timer)
-      void window.nearmora.setProjectCrop({ projectId, position: pending.position, crop: pending.crop })
-    },
-    [projectId],
-  )
-
-  if (!project) return <p>{status === 'All changes saved' ? 'Opening project…' : status}</p>
+  if (!project || !design) return <p>{status === 'All changes saved' ? 'Opening project…' : status}</p>
   let composition: Composition
   try {
-    composition = composeProject(project)
+    composition = composeDesign(design)
   } catch (error: unknown) {
     if (!(error instanceof UnknownTemplateError)) throw error
     return <p role="alert">This project uses a layout this version of Nearmora doesn’t know. It is kept as it is; a newer version can open it.</p>
   }
-  const item = project.items[selected] ?? project.items[0]!
-  const unavailable = project.items.filter((i) => !i.available)
+  const template = findTemplate(design.templateId, design.templateVersion)!
+  const resolved = resolveParams(template, design.params)
+  const position = Math.min(selected, design.items.length - 1)
+  const item = design.items[position]!
+  // Photo details (size, offline, file name) come from the last save; a just-replaced photo has none until it lands.
+  const detailOf = (assetId: string) => project.items.find((i) => i.assetId === assetId)
+  const unavailable = design.items.map((i) => detailOf(i.assetId)).filter((d) => d && !d.available)
+  const title = titleDraft ?? project.title
 
-  // Applies a result from main; anything that failed leaves the project as it was and says so.
-  function applied(result: { ok: boolean; data?: Project }, what: string) {
-    if (result.ok && result.data) {
-      setProject(result.data)
-      setStatus(`${what}. All changes saved.`)
-    } else setStatus(`That change couldn’t be saved. Nothing was changed.`)
-  }
+  const setParams = (params: Partial<Params>) => ({ ...design, params: { ...design.params, ...params } })
 
-  async function settings(change: { title?: string; templateId?: string; format?: FormatId; params?: Params }, what: string) {
-    applied(await window.nearmora.updateProject({ projectId, ...change }), what)
+  // Crops are kept within the photo before they're stored, measured against the photo's area inside its border.
+  function cropFor(assetId: string, at: number, next: Crop): Crop {
+    const detail = detailOf(assetId)
+    const cell = photoArea(composition.elements[at]!.rect, composition.border.width)
+    return detail?.width && detail.height ? clampCrop({ width: detail.width, height: detail.height }, cell, next) : next
   }
+  const setCrop = (next: Crop) => change(updateItem(design, position, { crop: cropFor(item.assetId, position, next) }), `Crop: ${describeCrop(next)}`)
+  const pan = (dx: number, dy: number) => setCrop({ ...item.crop, cx: item.crop.cx + dx, cy: item.crop.cy + dy })
+  const zoom = (delta: number) => setCrop({ ...item.crop, zoom: Math.min(MAX_ZOOM, Math.max(1, item.crop.zoom + delta)) })
 
-  async function move(from: number, to: number) {
-    const ids = project!.items.map((i) => i.assetId)
-    const [moved] = ids.splice(from, 1)
-    ids.splice(to, 0, moved!)
-    applied(await window.nearmora.reorderProject({ projectId, assetIds: ids }), `Moved to position ${to + 1}`)
-    setSelected(to)
+  // Pinch or wheel over a photo: selects it and zooms it live; the whole gesture is one undo step.
+  function wheelZoom(at: number, factor: number) {
+    setSelected(at)
+    const target = design!.items[at]!
+    const next = { ...target.crop, zoom: Math.min(MAX_ZOOM, Math.max(1, target.crop.zoom * factor)) }
+    live(updateItem(design!, at, { crop: cropFor(target.assetId, at, next) }), 'Zoom changed')
   }
-
-  // Crops are kept within the photo (clampCrop) before saving, using the same layout math as the preview and export.
-  async function setCrop(target: Item, next: Crop) {
-    const cell = composition.elements[target.position]!.rect
-    const crop = target.width && target.height ? clampCrop({ width: target.width, height: target.height }, cell, next) : next
-    setProject((p) => p && { ...p, items: p.items.map((i) => (i.position === target.position ? { ...i, crop } : i)) })
-    const result = await window.nearmora.setProjectCrop({ projectId, position: target.position, crop })
-    setStatus(result.ok ? `Crop: ${describeCrop(crop)}. All changes saved.` : 'That crop couldn’t be saved. Nothing was changed.')
-  }
-  // Pinch or wheel over a photo: selects it and zooms it right away, then saves once the gesture pauses.
-  function wheelZoom(position: number, factor: number) {
-    setSelected(position)
-    setProject((p) => {
-      if (!p) return p
-      const target = p.items.find((i) => i.position === position)
-      if (!target) return p
-      const cell = composeProject(p).elements[position]!.rect
-      const next = { ...target.crop, zoom: Math.min(MAX_ZOOM, Math.max(1, target.crop.zoom * factor)) }
-      const crop = target.width && target.height ? clampCrop({ width: target.width, height: target.height }, cell, next) : next
-      if (pendingZoom.current) window.clearTimeout(pendingZoom.current.timer)
-      const timer = window.setTimeout(() => {
-        pendingZoom.current = null
-        void window.nearmora.setProjectCrop({ projectId, position, crop }).then((result) => {
-          setStatus(result.ok ? `Crop: ${describeCrop(crop)}. All changes saved.` : 'That crop couldn’t be saved. Nothing was changed.')
-        })
-      }, 300)
-      pendingZoom.current = { timer, position, crop }
-      return { ...p, items: p.items.map((i) => (i.position === position ? { ...i, crop } : i)) }
-    })
-  }
-  const pan = (dx: number, dy: number) => void setCrop(item, { ...item.crop, cx: item.crop.cx + dx, cy: item.crop.cy + dy })
-  const zoom = (delta: number) => void setCrop(item, { ...item.crop, zoom: Math.min(MAX_ZOOM, Math.max(1, item.crop.zoom + delta)) })
 
   // Arrow keys move the photo inside its frame; + and − zoom. Moving right shows more of the photo's right side.
   function onCropKeys(event: KeyboardEvent) {
+    if (item.fit === 'fit') return
     const moves: Record<string, [number, number]> = { ArrowLeft: [-PAN_STEP, 0], ArrowRight: [PAN_STEP, 0], ArrowUp: [0, -PAN_STEP], ArrowDown: [0, PAN_STEP] }
     const step = moves[event.key]
     if (step) {
@@ -141,22 +92,32 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   }
 
   const slides = composition.canvasCount
-  const name = templateName(project.templateId, project.templateVersion)
   const preview = (canvasIndex: number, width: number) => (
     <StudioCanvas
       key={canvasIndex}
       composition={composition}
-      items={project.items}
+      items={design.items}
       canvasIndex={canvasIndex}
       displayWidth={width}
-      highlight={item.position}
+      highlight={position}
       onWheelZoom={wheelZoom}
       label={
         composition.mode === 'carousel'
           ? `Preview of slide ${canvasIndex + 1} of ${slides}`
-          : `Preview: ${name.toLowerCase()}, ${FORMATS[project.format].label.toLowerCase()}, ${backgroundName(project.params)} background`
+          : `Preview: ${template.name.toLowerCase()}, ${FORMATS[design.format].label.toLowerCase()}, ${colourName(resolved.background)} background${
+              resolved.borderWidth > 0 ? `, ${colourName(resolved.borderColor)} border` : ''
+            }`
       }
     />
+  )
+
+  // A range for a spacing setting: shown live while it moves, saved and added to undo when it pauses.
+  const slider = (label: string, value: number, max: number, onLive: (value: number) => Design) => (
+    <label className="studio__slider">
+      <span>{label}</span>
+      <input type="range" min={0} max={max} step={2} value={value} aria-valuetext={`${value} pixels`} onChange={(e) => live(onLive(Number(e.target.value)), `${label} changed`)} />
+      <output aria-hidden="true">{value} px</output>
+    </label>
   )
 
   return (
@@ -169,7 +130,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           {project.title}
         </h2>
         <p className="review__note">
-          {name} · {project.items.length} photos · {sizeOf(project.format)}
+          {template.name} · {design.items.length} photos · {sizeOf(design.format)}
           {composition.mode === 'carousel' ? ` · ${slides} slides` : ''}
         </p>
       </div>
@@ -185,8 +146,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             {unavailable.length} {unavailable.length === 1 ? 'photo is' : 'photos are'} offline
           </p>
           <p className="review__note">
-            {unavailable.map((i) => `${i.fileName ?? 'A photo'}${i.folderName ? ` (in “${i.folderName}”)` : ''}`).join(', ')}. You can keep editing; export needs
-            them reconnected.
+            {unavailable.map((i) => `${i!.fileName ?? 'A photo'}${i!.folderName ? ` (in “${i!.folderName}”)` : ''}`).join(', ')}. You can keep editing; export
+            needs them reconnected.
           </p>
         </div>
       ) : null}
@@ -201,41 +162,64 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
         </div>
 
         <div className="studio__controls">
+          {/* Undo, redo and reset cover every Quick edit below; the title has its own Save. */}
+          <div className="studio__bar" role="toolbar" aria-label="Edit history">
+            <button type="button" className="button button--secondary" disabled={!canUndo} aria-keyshortcuts="Meta+Z" onClick={undo}>
+              Undo
+            </button>
+            <button type="button" className="button button--secondary" disabled={!canRedo} aria-keyshortcuts="Meta+Shift+Z" onClick={redo}>
+              Redo
+            </button>
+            <button
+              type="button"
+              className="button button--quiet"
+              title="Spacing, colours, border, fit and crops go back to the layout’s own. Photos and their order stay."
+              onClick={() => change(resetDesign(design), 'Reset to layout defaults')}
+            >
+              Reset to layout defaults
+            </button>
+          </div>
+
           <form
             className="moment-header__form"
             onSubmit={(e) => {
               e.preventDefault()
-              void settings({ title: titleDraft }, 'Renamed')
+              void window.nearmora.renameProject({ projectId, title }).then((result) => {
+                if (!result.ok) return setStatus('That title couldn’t be saved. Nothing was changed.')
+                setProject(result.data)
+                setTitleDraft(null)
+                setStatus('Renamed. All changes saved.')
+              })
             }}
           >
             <label className="library__field">
               <span>Title</span>
-              <input value={titleDraft} maxLength={120} onChange={(e) => setTitleDraft(e.target.value)} />
+              <input value={title} maxLength={120} onChange={(e) => setTitleDraft(e.target.value)} />
             </label>
-            <button type="submit" className="button button--secondary" disabled={titleDraft.trim() === project.title}>
+            <button type="submit" className="button button--secondary" disabled={title.trim() === project.title}>
               Save title
             </button>
           </form>
 
-          {/* Any layout that takes this many photos; photos keep their order and crops. */}
+          {/* Any layout that takes this many photos; photos keep their order, crops and fit. */}
           <section aria-labelledby="layout-title">
             <h3 id="layout-title" className="studio__template-title">
               Layout
             </h3>
             <ul className="studio__template-list">
-              {templatesFor(project.items.length).map((template) => (
-                <li key={template.id}>
+              {templatesFor(design.items.length).map((t) => (
+                <li key={t.id}>
                   <button
                     type="button"
                     className="studio__template"
-                    aria-pressed={template.id === project.templateId}
-                    title={template.description}
+                    aria-pressed={t.id === design.templateId}
+                    title={t.description}
                     onClick={() => {
-                      if (template.id !== project.templateId) void settings({ templateId: template.id }, `Layout changed to ${template.name}`)
+                      if (t.id !== design.templateId) change({ ...design, templateId: t.id, templateVersion: t.version }, `Layout changed to ${t.name}`)
                     }}
                   >
-                    <TemplateIcon template={template} />
-                    <span>{template.name}</span>
+                    <TemplateIcon template={t} />
+                    <span>{t.name}</span>
                   </button>
                 </li>
               ))}
@@ -246,83 +230,165 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             <legend>Shape</legend>
             {FORMAT_IDS.map((value) => (
               <label key={value} className="library__check">
-                <input type="radio" name="format" checked={project.format === value} onChange={() => void settings({ format: value }, 'Shape changed')} />
+                <input type="radio" name="format" checked={design.format === value} onChange={() => change({ ...design, format: value }, 'Shape changed')} />
                 <span>{formatLabel(value)}</span>
               </label>
             ))}
           </fieldset>
-          <fieldset className="studio__choice">
-            <legend>Background</legend>
-            {(['cream', 'white'] as const).map((value) => (
-              <label key={value} className="library__check">
-                <input
-                  type="radio"
-                  name="background"
-                  checked={backgroundName(project.params) === value}
-                  onChange={() => void settings({ params: { ...project.params, background: BACKGROUNDS[value] } }, 'Background changed')}
-                />
-                <span>{value === 'cream' ? 'Cream' : 'White'}</span>
-              </label>
-            ))}
+
+          <ColourChoice
+            legend="Background"
+            swatches={BACKGROUNDS}
+            value={resolved.background}
+            onPick={(colour) => change(setParams({ background: colour }), 'Background changed')}
+            onLive={(colour) => live(setParams({ background: colour }), 'Background changed')}
+          />
+
+          {/* Carousel slides are one photo edge to edge, so spacing only applies to collages. */}
+          {composition.mode === 'single' ? (
+            <fieldset className="studio__choice studio__choice--column">
+              <legend>Spacing</legend>
+              {slider('Margin', resolved.margin, MAX_SPACING, (margin) => setParams({ margin }))}
+              {slider('Gutter', resolved.gutter, MAX_SPACING, (gutter) => setParams({ gutter }))}
+            </fieldset>
+          ) : null}
+
+          <fieldset className="studio__choice studio__choice--column">
+            <legend>Photo border</legend>
+            {slider('Border width', resolved.borderWidth, MAX_BORDER, (borderWidth) => setParams({ borderWidth }))}
           </fieldset>
+          <ColourChoice
+            legend="Border colour"
+            swatches={BORDER_COLORS}
+            value={resolved.borderColor}
+            disabled={resolved.borderWidth === 0}
+            onPick={(colour) => change(setParams({ borderColor: colour }), 'Border colour changed')}
+            onLive={(colour) => live(setParams({ borderColor: colour }), 'Border colour changed')}
+          />
 
           {/* Pick the photo to adjust; its frame is outlined in the preview. */}
           <ol className="studio__items" aria-label="Photos in this project, in order">
-            {project.items.map((i) => (
+            {design.items.map((i, at) => (
               <li key={i.assetId} className="studio__item">
                 <button
                   type="button"
                   className="strip__item"
-                  aria-pressed={i.position === item.position}
-                  aria-label={`Adjust photo ${i.position + 1}${i.available ? '' : ', offline'}`}
-                  onClick={() => setSelected(i.position)}
+                  aria-pressed={at === position}
+                  aria-label={`Adjust photo ${at + 1}${detailOf(i.assetId)?.available === false ? ', offline' : ''}`}
+                  onClick={() => {
+                    setSelected(at)
+                    setReplacing(false)
+                  }}
                 >
                   <img src={`nm-media://thumb/${i.assetId}`} alt="" />
                   <span className="strip__label" aria-hidden="true">
-                    {i.position + 1}
+                    {at + 1}
                   </span>
                 </button>
               </li>
             ))}
           </ol>
 
-          <div className="studio__adjust" role="group" aria-label={`Photo ${item.position + 1}: order and crop (arrow keys move it, + and − zoom)`} onKeyDown={onCropKeys}>
+          <div
+            className="studio__adjust"
+            role="group"
+            aria-label={`Photo ${position + 1}: order, fit and crop${item.fit === 'fill' ? ' (arrow keys move it, + and − zoom)' : ''}`}
+            onKeyDown={onCropKeys}
+          >
             <p className="review__note">
-              Photo {item.position + 1} of {project.items.length} · {describeCrop(item.crop)}
+              Photo {position + 1} of {design.items.length} · {item.fit === 'fill' ? describeCrop(item.crop) : 'whole photo shown'}
             </p>
             <div className="library__source-actions">
-              <button type="button" className="button button--quiet" disabled={item.position === 0} onClick={() => void move(item.position, item.position - 1)}>
+              <button
+                type="button"
+                className="button button--quiet"
+                disabled={position === 0}
+                onClick={() => {
+                  change(moveItem(design, position, position - 1), `Moved to position ${position}`)
+                  setSelected(position - 1)
+                }}
+              >
                 Move earlier
               </button>
               <button
                 type="button"
                 className="button button--quiet"
-                disabled={item.position === project.items.length - 1}
-                onClick={() => void move(item.position, item.position + 1)}
+                disabled={position === design.items.length - 1}
+                onClick={() => {
+                  change(moveItem(design, position, position + 1), `Moved to position ${position + 2}`)
+                  setSelected(position + 1)
+                }}
               >
                 Move later
               </button>
+              <button type="button" className="button button--quiet" onClick={() => setReplacing(true)}>
+                Replace…
+              </button>
             </div>
-            <div className="library__source-actions">
-              <button type="button" className="button button--quiet" aria-label="Show more of the left" onClick={() => pan(-PAN_STEP, 0)}>
+            {/* Swap trades places with any other photo directly, without stepping one place at a time. */}
+            <div className="library__source-actions" role="group" aria-label={`Swap photo ${position + 1} with`}>
+              {design.items.map((_, other) =>
+                other === position ? null : (
+                  <button
+                    key={other}
+                    type="button"
+                    className="button button--quiet"
+                    aria-label={`Swap with photo ${other + 1}`}
+                    onClick={() => {
+                      change(swapItems(design, position, other), `Swapped photos ${position + 1} and ${other + 1}`)
+                      setSelected(other)
+                    }}
+                  >
+                    ⇄ {other + 1}
+                  </button>
+                ),
+              )}
+            </div>
+            {replacing ? (
+              <ReplacePhoto
+                position={position}
+                exclude={design.items.map((i) => i.assetId)}
+                onCancel={() => setReplacing(false)}
+                onChoose={(assetId) => {
+                  setReplacing(false)
+                  change(replaceItem(design, position, assetId), `Replaced photo ${position + 1}`)
+                }}
+              />
+            ) : null}
+
+            <fieldset className="studio__choice">
+              <legend>Fit</legend>
+              <label className="library__check">
+                <input type="radio" name="fit" checked={item.fit === 'fill'} onChange={() => change(updateItem(design, position, { fit: 'fill' }), 'Photo fills its place')} />
+                <span>Fill the space (crops the photo)</span>
+              </label>
+              <label className="library__check">
+                <input type="radio" name="fit" checked={item.fit === 'fit'} onChange={() => change(updateItem(design, position, { fit: 'fit' }), 'Whole photo shown')} />
+                <span>Show the whole photo</span>
+              </label>
+            </fieldset>
+
+            {/* Crop controls only mean something when the photo fills its place. */}
+            <div className="library__source-actions" role="group" aria-label="Crop">
+              <button type="button" className="button button--quiet" disabled={item.fit === 'fit'} aria-label="Show more of the left" onClick={() => pan(-PAN_STEP, 0)}>
                 ←
               </button>
-              <button type="button" className="button button--quiet" aria-label="Show more of the top" onClick={() => pan(0, -PAN_STEP)}>
+              <button type="button" className="button button--quiet" disabled={item.fit === 'fit'} aria-label="Show more of the top" onClick={() => pan(0, -PAN_STEP)}>
                 ↑
               </button>
-              <button type="button" className="button button--quiet" aria-label="Show more of the bottom" onClick={() => pan(0, PAN_STEP)}>
+              <button type="button" className="button button--quiet" disabled={item.fit === 'fit'} aria-label="Show more of the bottom" onClick={() => pan(0, PAN_STEP)}>
                 ↓
               </button>
-              <button type="button" className="button button--quiet" aria-label="Show more of the right" onClick={() => pan(PAN_STEP, 0)}>
+              <button type="button" className="button button--quiet" disabled={item.fit === 'fit'} aria-label="Show more of the right" onClick={() => pan(PAN_STEP, 0)}>
                 →
               </button>
-              <button type="button" className="button button--quiet" disabled={item.crop.zoom <= 1} onClick={() => zoom(-ZOOM_STEP)}>
+              <button type="button" className="button button--quiet" disabled={item.fit === 'fit' || item.crop.zoom <= 1} onClick={() => zoom(-ZOOM_STEP)}>
                 Zoom out
               </button>
-              <button type="button" className="button button--quiet" disabled={item.crop.zoom >= MAX_ZOOM} onClick={() => zoom(ZOOM_STEP)}>
+              <button type="button" className="button button--quiet" disabled={item.fit === 'fit' || item.crop.zoom >= MAX_ZOOM} onClick={() => zoom(ZOOM_STEP)}>
                 Zoom in
               </button>
-              <button type="button" className="button button--quiet" onClick={() => void setCrop(item, DEFAULT_CROP)}>
+              <button type="button" className="button button--quiet" disabled={item.fit === 'fit'} onClick={() => setCrop(DEFAULT_CROP)}>
                 Reset crop
               </button>
             </div>
@@ -331,7 +397,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           <ExportPanel
             projectId={projectId}
             blocked={unavailable.length > 0}
-            summary={`JPEG, ${sizeOf(project.format)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
+            summary={`JPEG, ${sizeOf(design.format)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
           />
 
           <button type="button" className="button button--quiet" onClick={() => setConfirmDelete(true)}>

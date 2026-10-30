@@ -1,5 +1,5 @@
 /**
- * A project's own settings on top of its template (background, margin, gutter). Stored as versioned JSON and
+ * A project's own settings on top of its template (background, margin, gutter, photo border). Stored as versioned JSON and
  * checked with this schema whenever it is written or read, so a damaged or unknown value never reaches the drawing code.
  * Only settings the person changed are stored; everything else comes from the template's defaults.
  */
@@ -8,6 +8,9 @@ import { z } from 'zod'
 
 /** Bump when the stored shape changes, and teach `readParams` to upgrade the older shape. */
 export const PARAMS_VERSION = 1
+
+/** The widest photo border, in reference pixels. */
+export const MAX_BORDER = 60
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, 'Colours are stored as #rrggbb')
 
@@ -19,6 +22,9 @@ export const ParamsSchema = z
     background: hexColor.optional(),
     margin: z.number().min(0).max(300).optional(),
     gutter: z.number().min(0).max(300).optional(),
+    // A frame drawn around each photo, inside its place, so the layout's geometry never moves.
+    borderWidth: z.number().min(0).max(MAX_BORDER).optional(),
+    borderColor: hexColor.optional(),
   })
   .strict()
 export type Params = z.infer<typeof ParamsSchema>
@@ -28,10 +34,13 @@ export interface ResolvedParams {
   background: string
   margin: number
   gutter: number
+  borderWidth: number
+  borderColor: string
 }
 
-/** The two background colours offered so far; S2 adds a free colour choice. */
-export const BACKGROUNDS = { cream: '#f8f0e8', white: '#ffffff' } as const
+/** Named colours offered as one-click choices for the background and the border; any other colour can be picked too. */
+export const BACKGROUNDS = { cream: '#f8f0e8', white: '#ffffff', sand: '#e6d8c6', charcoal: '#2f2b2c' } as const
+export const BORDER_COLORS = { white: '#ffffff', cream: '#f8f0e8', charcoal: '#2f2b2c' } as const
 
 export const DEFAULT_PARAMS: Params = { v: PARAMS_VERSION }
 

@@ -25,9 +25,8 @@ import {
   deleteProject,
   getProject,
   listProjects,
-  reorderProject,
-  setItemCrop,
-  updateProject,
+  renameProject,
+  setDesign,
 } from '../catalog/repositories/projects'
 import { saveReview, undoReview } from '../catalog/repositories/review'
 import { addToSet, nearbyPhotos, removeFromSet, ungroupSet } from '../catalog/repositories/set-edits'
@@ -97,17 +96,13 @@ export function createHandlers({ db, library, exports, paths }: HandlerContext):
     'projects:list': () => listProjects(db),
     'projects:get': ({ projectId }) => getProject(db, projectId),
     'projects:create': (input) => createProject(db, input),
-    'projects:update': (input) => {
-      updateProject(db, withoutUndefined(input))
+    'projects:rename': (input) => {
+      renameProject(db, input)
       return getProject(db, input.projectId)
     },
-    'projects:reorder': (input) => {
-      reorderProject(db, input)
+    'projects:setDesign': (input) => {
+      setDesign(db, input)
       return getProject(db, input.projectId)
-    },
-    'projects:setCrop': (input) => {
-      setItemCrop(db, input)
-      return { saved: true as const }
     },
     'projects:delete': ({ projectId }) => {
       deleteProject(db, projectId)

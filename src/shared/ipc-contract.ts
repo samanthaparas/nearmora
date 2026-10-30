@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import { FORMAT_IDS, type FormatId } from './studio/formats'
+import { DesignSchema } from './studio/design'
 import { ParamsSchema } from './studio/params'
 
 const id = z.uuid()
@@ -304,18 +305,9 @@ export const commands = {
     input: z.object({ templateId, format, assetIds: z.array(id).min(2).max(10) }),
     output: ProjectDetail,
   },
-  'projects:update': {
-    input: z.object({
-      projectId: id,
-      title: z.string().trim().min(1).max(120).optional(),
-      templateId: templateId.optional(),
-      format: format.optional(),
-      params: ParamsSchema.optional(),
-    }),
-    output: ProjectDetail,
-  },
-  'projects:reorder': { input: z.object({ projectId: id, assetIds: z.array(id).min(2).max(10) }), output: ProjectDetail },
-  'projects:setCrop': { input: z.object({ projectId: id, position: count, crop }), output: z.object({ saved: z.literal(true) }) },
+  'projects:rename': { input: z.object({ projectId: id, title: z.string().trim().min(1).max(120) }), output: ProjectDetail },
+  // Every Quick edit, undo, redo and reset saves the project's whole design in one step.
+  'projects:setDesign': { input: z.object({ projectId: id, design: DesignSchema }), output: ProjectDetail },
   'projects:delete': { input: z.object({ projectId: id }), output: z.object({ deleted: z.literal(true) }) },
   // Export (AC7, AC8). Main opens the destination picker; nothing is written until every check passes.
   'export:start': {

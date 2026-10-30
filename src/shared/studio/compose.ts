@@ -24,6 +24,8 @@ export interface Composition {
   height: number
   background: string
   mode: Mode
+  /** The frame around every photo, in canvas pixels (width 0 means none). */
+  border: { width: number; color: string }
   /** How many output files: one for a collage, one per slide for a carousel. */
   canvasCount: number
   elements: PhotoElement[]
@@ -45,6 +47,8 @@ export function resolveParams(template: TemplateDefinition, params: Params): Res
     background: params.background ?? BACKGROUNDS.cream,
     margin: params.margin ?? template.defaults.margin,
     gutter: params.gutter ?? template.defaults.gutter,
+    borderWidth: params.borderWidth ?? 0,
+    borderColor: params.borderColor ?? '#ffffff',
   }
 }
 
@@ -61,6 +65,7 @@ export function compose(input: ComposeInput): Composition {
     height,
     background: resolved.background,
     mode: template.mode,
+    border: { width: resolved.borderWidth * scale, color: resolved.borderColor },
     canvasCount: slots.reduce((most, slot) => Math.max(most, slot.canvas + 1), 0),
     elements: slots.slice(0, input.photoCount).map((slot, index) => ({ id: `photo-${index}`, type: 'photo', slot: index, canvas: slot.canvas, rect: slot.rect })),
   }
