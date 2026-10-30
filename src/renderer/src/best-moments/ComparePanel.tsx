@@ -1,10 +1,12 @@
 /**
  * One side of the compare view: a large preview with zoom and pan shared with the other side, so the same detail
- * is shown in both photos. Falls back to the thumbnail when the original is offline. Favorite and Remove sit below.
+ * is shown in both photos; a pinch or mouse wheel over either photo zooms both. Falls back to the thumbnail when the
+ * original is offline. Favorite and Remove sit below.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { CommandOutput } from '@shared/ipc-contract'
+import { useWheelZoom } from '../wheel-zoom'
 
 export type Member = CommandOutput<'sets:get'>['members'][number]
 
@@ -22,11 +24,13 @@ export const describeMember = (m: Member): string =>
 // The caption already says "Photo A", so it shows just the date and time.
 const captionTime = (m: Member): string => `${m.capturedAt === null ? 'No date' : dateTime.format(m.capturedAt)}${m.offline ? ' · offline' : ''}`
 
-export function ComparePanel({ member, label, view, onPan, favorite, onToggleFavorite, onRemove, hidden = false }: {
+export function ComparePanel({ member, label, view, onPan, onZoom, favorite, onToggleFavorite, onRemove, hidden = false }: {
   member: Member
   label: string
   view: View
   onPan: (dx: number, dy: number) => void
+  /** Pinch or wheel: how much to zoom (above 1 zooms in). */
+  onZoom: (factor: number) => void
   favorite: boolean
   onToggleFavorite: () => void
   onRemove: () => void
@@ -35,11 +39,14 @@ export function ComparePanel({ member, label, view, onPan, favorite, onToggleFav
   // The large preview may not exist (offline original); then the thumbnail is used instead.
   const [usePreview, setUsePreview] = useState(true)
   const [dragFrom, setDragFrom] = useState<{ x: number; y: number } | null>(null)
+  const frame = useRef<HTMLDivElement>(null)
+  useWheelZoom(frame, (factor) => onZoom(factor))
   const src = usePreview ? `nm-media://preview/${member.assetId}` : `nm-media://thumb/${member.assetId}`
 
   return (
     <figure className="compare__panel" hidden={hidden} aria-label={label}>
       <div
+        ref={frame}
         className="compare__frame"
         // Drag to pan when zoomed in. Keyboard panning lives on the zoom controls (arrow keys).
         onPointerDown={(e) => {

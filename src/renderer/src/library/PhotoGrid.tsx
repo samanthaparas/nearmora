@@ -1,7 +1,8 @@
 /**
  * The photo grid, virtualized: only the rows on screen (plus a few) exist in the page, however many photos there
  * are, and more are fetched page by page as you scroll. It's shared by the Library, moments and albums: each passes
- * its own way of fetching a page, and may wrap each photo in controls (pick a cover, select, rearrange).
+ * its own way of fetching a page, and may wrap each photo in controls (pick a cover, select, rearrange). Where it's
+ * offered, each photo has a one-click favorite star.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
@@ -48,7 +49,7 @@ export function albumFetcher(albumId: string): FetchPage {
   }
 }
 
-export function PhotoGrid({ fetchPage, refreshToken, label, renderCell, onTotal }: {
+export function PhotoGrid({ fetchPage, refreshToken, label, renderCell, onTotal, onToggleFavorite }: {
   /** A new function (new filters, another album) starts again from the top. */
   fetchPage: FetchPage
   /** Changes when the catalog may have changed, so the photos already loaded are fetched again in place. */
@@ -57,6 +58,8 @@ export function PhotoGrid({ fetchPage, refreshToken, label, renderCell, onTotal 
   /** Wraps a photo's image in controls; by default the image is shown as is. */
   renderCell?: (photo: Photo, index: number, image: ReactNode) => ReactNode
   onTotal?: (total: number) => void
+  /** Saves a photo's new favorite state; resolves true if it was saved. Shows a star on each photo when given. */
+  onToggleFavorite?: (photo: Photo, favorite: boolean) => Promise<boolean>
 }) {
   const [photos, setPhotos] = useState<Photo[]>([])
   const [total, setTotal] = useState(0)
@@ -118,6 +121,13 @@ export function PhotoGrid({ fetchPage, refreshToken, label, renderCell, onTotal 
     }
     loading.current = false
   }, [next, fetchPage])
+
+  // One click on the star: saved in main, then only that photo is updated here, so the grid doesn't reload.
+  async function toggleFavorite(photo: Photo) {
+    if (!onToggleFavorite) return
+    const favorite = !photo.favorite
+    if (await onToggleFavorite(photo, favorite)) setPhotos((list) => list.map((p) => (p.id === photo.id ? { ...p, favorite } : p)))
+  }
 
   // Column count follows the available width, like a CSS auto-fill grid.
   useLayoutEffect(() => {
@@ -184,7 +194,17 @@ export function PhotoGrid({ fetchPage, refreshToken, label, renderCell, onTotal 
                   Offline
                 </span>
               ) : null}
-              {photo.favorite ? (
+              {onToggleFavorite && !renderCell ? (
+                <button
+                  type="button"
+                  className="library__star"
+                  aria-pressed={photo.favorite}
+                  aria-label={`Favorite: ${photo.capturedAt === null ? 'photo' : `photo from ${dateFormat.format(photo.capturedAt)}`}`}
+                  onClick={() => void toggleFavorite(photo)}
+                >
+                  {photo.favorite ? '★' : '☆'}
+                </button>
+              ) : photo.favorite ? (
                 <span className="library__fav" aria-hidden="true">
                   ★ Favorite
                 </span>

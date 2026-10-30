@@ -69,7 +69,7 @@ test('after a restart the photos are still there, without rescanning', async () 
   await app.close()
 })
 
-test('any photo can be added to Favorites from the Library, with Undo, and removed again', async () => {
+test('any photo can be added to Favorites from the Library: one-click star, or several at once with Undo', async () => {
   const before = fingerprintFolder(folder.root)
   const { app } = await launchApp(profileDir)
   const page = await app.firstWindow()
@@ -97,8 +97,19 @@ test('any photo can be added to Favorites from the Library, with Undo, and remov
   await nav('Favorites')
   await expect(page.getByRole('list', { name: 'Favorites, 1 in total' })).toBeVisible()
 
-  // Removing it along with a photo that wasn't a favorite says so.
   await nav('Library')
+  // The star on each photo is one click, and a second click takes it back.
+  const star = page.getByRole('button', { name: /^Favorite: / })
+  await page.locator('.library__cell').nth(1).hover() // the star shows on hover, as a person would see it
+  await expect(star.nth(1)).toHaveCSS('opacity', '1')
+  await star.nth(1).click()
+  await expect(star.nth(1)).toHaveAttribute('aria-pressed', 'true')
+  await expect(favoriteImages).toHaveCount(2)
+  await star.nth(1).click()
+  await expect(star.nth(1)).toHaveAttribute('aria-pressed', 'false')
+  await expect(favoriteImages).toHaveCount(1)
+
+  // Removing it along with a photo that wasn't a favorite says so.
   await page.getByRole('button', { name: 'Select photos' }).click()
   await pick.nth(0).click()
   await pick.nth(1).click()

@@ -1,11 +1,12 @@
 /**
  * Draws one output canvas (a collage, or one carousel slide) with the shared layout math, so the preview is
  * computed exactly as the export will be (AC7). Uses the large preview image, or the thumbnail when that's
- * not available.
+ * not available. A pinch or mouse wheel over a photo zooms that photo.
  */
 
 import { useEffect, useRef } from 'react'
 import { BACKGROUND_COLOR, CANVAS, placements, sourceRect, type Aspect, type Background, type Crop, type ProjectKind } from '@shared/layout'
+import { useWheelZoom } from '../wheel-zoom'
 
 export interface CanvasItem {
   assetId: string
@@ -31,7 +32,7 @@ function loadImage(assetId: string): Promise<HTMLImageElement> {
   return pending
 }
 
-export function StudioCanvas({ kind, aspect, background, items, canvasIndex, displayWidth, highlight, label }: {
+export function StudioCanvas({ kind, aspect, background, items, canvasIndex, displayWidth, highlight, label, onWheelZoom }: {
   kind: ProjectKind
   aspect: Aspect
   background: Background
@@ -41,11 +42,28 @@ export function StudioCanvas({ kind, aspect, background, items, canvasIndex, dis
   /** Position of the photo being edited, outlined so it's clear what the controls change. */
   highlight: number | null
   label: string
+  /** Pinch or wheel over a photo: its position, and how much to zoom (above 1 zooms in). */
+  onWheelZoom?: (position: number, factor: number) => void
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const size = CANVAS[aspect]
   const scale = displayWidth / size.width
   const displayHeight = size.height * scale
+
+  // Finds the photo under the pointer, in output pixels; over the margin or a gap the page scrolls instead.
+  useWheelZoom(ref, (factor, event) => {
+    const canvas = ref.current
+    if (!onWheelZoom || !canvas) return false
+    const box = canvas.getBoundingClientRect()
+    const x = ((event.clientX - box.left) * size.width) / box.width
+    const y = ((event.clientY - box.top) * size.height) / box.height
+    const hit = placements(kind, aspect, items.length).findIndex(
+      (p) => p.canvas === canvasIndex && x >= p.cell.x && x <= p.cell.x + p.cell.width && y >= p.cell.y && y <= p.cell.y + p.cell.height,
+    )
+    if (hit < 0) return false
+    onWheelZoom(hit, factor)
+    return true
+  })
 
   useEffect(() => {
     const canvas = ref.current

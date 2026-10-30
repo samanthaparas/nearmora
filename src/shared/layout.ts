@@ -4,16 +4,24 @@
  */
 
 export type ProjectKind = 'collage_2' | 'collage_4' | 'carousel'
-export type Aspect = '1:1' | '4:5'
+export type Aspect = '1:1' | '4:5' | '5:4'
 export type Background = 'cream' | 'white'
 
 /** Bump when any rule below changes, so saved projects record which layout they were made with. */
 export const LAYOUT_VERSION = 1
 
-/** Output size in pixels (blueprint: square 1080×1080, portrait 1080×1350). */
+/** Output size in pixels (blueprint: square 1080×1080, portrait 1080×1350; landscape 1350×1080 is portrait turned sideways). */
 export const CANVAS: Record<Aspect, { width: number; height: number }> = {
   '1:1': { width: 1080, height: 1080 },
   '4:5': { width: 1080, height: 1350 },
+  '5:4': { width: 1350, height: 1080 },
+}
+
+/** How each shape is named on screen, with its size. */
+export const ASPECT_LABEL: Record<Aspect, string> = {
+  '1:1': 'Square (1080 × 1080)',
+  '4:5': 'Portrait (1080 × 1350)',
+  '5:4': 'Landscape (1350 × 1080)',
 }
 
 export const BACKGROUND_COLOR: Record<Background, string> = { cream: '#f8f0e8', white: '#ffffff' }
