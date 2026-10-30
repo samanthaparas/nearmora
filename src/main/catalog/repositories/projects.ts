@@ -185,10 +185,19 @@ function parseStoredParams(json: string): Params {
   }
 }
 
-/** Title, format and settings. Settings are replaced as a whole, after checking them against the schema. */
-export function updateProject(db: Catalog, input: { projectId: string; title?: string; format?: string; params?: Params }): void {
+/**
+ * Title, layout, format and settings. A new layout must take the project's number of photos; it starts at its newest
+ * version, and the photos keep their order and crops. Settings are replaced as a whole, after checking them.
+ */
+export function updateProject(db: Catalog, input: { projectId: string; title?: string; templateId?: string; format?: string; params?: Params }): void {
   db.transaction(() => {
-    getProject(db, input.projectId)
+    const current = getProject(db, input.projectId)
+    if (input.templateId !== undefined) {
+      const template = newestTemplate(input.templateId)
+      const count = current.items.length
+      if (count < template.photos.min || count > template.photos.max) throw new CatalogError('INVALID_INPUT', `${template.name} doesn’t take ${count} photos`)
+      db.prepare('UPDATE project SET template_id = ?, template_version = ? WHERE id = ?').run(template.id, template.version, input.projectId)
+    }
     if (input.title !== undefined) {
       const title = Title.safeParse(input.title)
       if (!title.success) throw new CatalogError('INVALID_INPUT', 'Project titles need 1–120 characters')

@@ -73,3 +73,72 @@
   flex-direction: column;
   gap: var(--nm-space-1);
 }
+
+/* The template picker: compact tiles, each a layout drawing and its name, grouped by photo count. */
+.studio__templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nm-space-2) var(--nm-space-4);
+  margin-bottom: var(--nm-space-3);
+}
+
+.studio__template-title {
+  margin: 0 0 var(--nm-space-1);
+  font-size: var(--nm-text-small);
+  font-weight: 600;
+}
+
+.studio__template-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nm-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio__template {
+  display: flex;
+  align-items: center;
+  gap: var(--nm-space-1);
+  min-height: var(--nm-target-min);
+  padding: 4px var(--nm-space-1) 4px 4px;
+  border: 1px solid var(--nm-text-muted);
+  border-radius: var(--nm-radius-control);
+  background: var(--nm-surface-raised);
+  color: var(--nm-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio__template:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.studio__template[aria-pressed='true'] {
+  outline: 3px solid var(--nm-plum);
+  outline-offset: 1px;
+}
+
+.studio__template-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+
+/* Carousels are drawn as two slides, so their icon is wider. */
+.studio__template-icon[viewBox^='0 0 2'] {
+  width: 84px;
+}
+
+.studio__template-canvas {
+  fill: var(--nm-cream);
+  stroke: var(--nm-text-muted);
+  stroke-width: 24;
+}
+
+.studio__template-photo {
+  fill: var(--nm-lilac);
+}

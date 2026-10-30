@@ -89,6 +89,23 @@ describe('editing and restoring a draft (AC6)', () => {
   })
 })
 
+describe('changing a project’s layout', () => {
+  it('switches to another layout for the same number of photos, keeping order and crops; refuses one that doesn’t fit', async () => {
+    const { db, assets } = await library()
+    const project = createProject(db, { templateId: 'quartet-classic-grid', format: 'portrait', assetIds: assets.slice(0, 4) })
+    setItemCrop(db, { projectId: project.id, position: 2, crop: { cx: 0.2, cy: 0.8, zoom: 3 } })
+    updateProject(db, { projectId: project.id, templateId: 'quartet-lead-three' })
+    const switched = getProject(db, project.id)
+    expect(switched).toMatchObject({ templateId: 'quartet-lead-three', templateVersion: 1, title: 'Classic grid' })
+    expect(switched.items.map((i) => i.assetId)).toEqual(assets.slice(0, 4))
+    expect(switched.items[2]!.crop).toEqual({ cx: 0.2, cy: 0.8, zoom: 3 })
+    // A two-photo layout can't hold four photos, and an unknown layout is refused; nothing changes either way.
+    expect(codeOf(() => updateProject(db, { projectId: project.id, templateId: 'pair-stacked' }))).toBe('INVALID_INPUT')
+    expect(codeOf(() => updateProject(db, { projectId: project.id, templateId: 'no-such-layout' }))).toBe('INVALID_INPUT')
+    expect(getProject(db, project.id).templateId).toBe('quartet-lead-three')
+  })
+})
+
 describe('photos that can’t be reached (AC6)', () => {
   it('names each unavailable photo by file and folder, while the draft stays editable', async () => {
     const { db, assets, sourceId } = await library()

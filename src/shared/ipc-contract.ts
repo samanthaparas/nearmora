@@ -305,7 +305,13 @@ export const commands = {
     output: ProjectDetail,
   },
   'projects:update': {
-    input: z.object({ projectId: id, title: z.string().trim().min(1).max(120).optional(), format: format.optional(), params: ParamsSchema.optional() }),
+    input: z.object({
+      projectId: id,
+      title: z.string().trim().min(1).max(120).optional(),
+      templateId: templateId.optional(),
+      format: format.optional(),
+      params: ParamsSchema.optional(),
+    }),
     output: ProjectDetail,
   },
   'projects:reorder': { input: z.object({ projectId: id, assetIds: z.array(id).min(2).max(10) }), output: ProjectDetail },

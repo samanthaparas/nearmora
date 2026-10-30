@@ -27,7 +27,7 @@ References: the two-photo and four-photo concept boards and their guides (owner'
 |---|---|---|
 | **S1** | Versioned composition schema; template definitions; resolver; preview and export drawing from one composition; schema v5 migration of existing projects; first templates: Equal split, Stacked, Classic grid, carousel | Existing projects open and export identically; new projects can start from the three templates |
 | **S2** | Quick edits: replace photo, swap, fit or fill, background colour, gutter, margin, border width and colour, undo and redo, reset to template | Every Quick edit is undoable and survives restart |
-| **S3** | Remaining everyday layouts (8 pairs, 10 quartets); social presets (square, portrait, vertical, wide) and print presets with an effective-resolution warning | All 18 everyday layouts are selectable and exported correctly at every preset |
+| **S3** | Remaining everyday layouts (8 pairs, 10 quartets) — done first, as S3a, at the owner's request; then social presets (square, portrait, vertical, wide) and print presets with an effective-resolution warning | All 18 everyday layouts are selectable and exported correctly at every preset |
 | **S4** | Playful templates: original decorations (own SVG artwork, provenance documented), captions, masks (circle, arch, torn edge, film, ticket); export compositor spike | Each playful layout is drawn the same in preview and export |
 | **S5** | Seamless carousel: 2–3 slides, boundary guides, slide previews, master-and-slices export | PNG slices reassemble the master exactly |
 | **S6** | Customize and Advanced levels: proportions, rounding, rotation, overlap, lock, hide, move and resize with numeric controls and snapping, layers, add/remove slots, "My templates" | Level switches keep work; custom templates survive restart |
@@ -45,12 +45,12 @@ Status: ✅ implemented · 🟡 partly implemented · ⬜ pending
 |---|---|---|---|
 | 1 | Equal split | ✅ S1 | Was the original "two-photo collage" |
 | 2 | Stacked | ✅ S1 | |
-| 3 | Wide gutter | ⬜ S3 | |
-| 4 | Quiet frame | ⬜ S3 | |
-| 5 | Tall + detail | ⬜ S3 | |
-| 6 | Landscape pair | ⬜ S3 | |
-| 7 | Offset pair | ⬜ S3 | |
-| 8 | Full bleed pair | ⬜ S3 | |
+| 3 | Wide gutter | ✅ S3a | |
+| 4 | Quiet frame | ✅ S3a | |
+| 5 | Tall + detail | ✅ S3a | |
+| 6 | Landscape pair | ✅ S3a | |
+| 7 | Offset pair | ✅ S3a | |
+| 8 | Full bleed pair | ✅ S3a | |
 
 ### Two-photo, playful
 
@@ -61,15 +61,15 @@ Postcards, Film night, Torn pages, Window light, Love letter, Colorblock, Scrapb
 | # | Layout | Status | Notes |
 |---|---|---|---|
 | 1 | Classic grid | ✅ S1 | Was the original "four-photo collage" |
-| 2 | Gallery mat | ⬜ S3 | |
-| 3 | Four across | ⬜ S3 | |
-| 4 | Four stories | ⬜ S3 | |
-| 5 | Lead + three | ⬜ S3 | |
-| 6 | Top story | ⬜ S3 | |
-| 7 | Quiet columns | ⬜ S3 | |
-| 8 | Offset grid | ⬜ S3 | |
-| 9 | Wide + tall | ⬜ S3 | |
-| 10 | Edge to edge | ⬜ S3 | |
+| 2 | Gallery mat | ✅ S3a | |
+| 3 | Four across | ✅ S3a | Leaves open space on square and portrait canvases, as on the board: four tall photos in a row can only be so tall |
+| 4 | Four stories | ✅ S3a | |
+| 5 | Lead + three | ✅ S3a | |
+| 6 | Top story | ✅ S3a | |
+| 7 | Quiet columns | ✅ S3a | |
+| 8 | Offset grid | ✅ S3a | |
+| 9 | Wide + tall | ✅ S3a | |
+| 10 | Edge to edge | ✅ S3a | |
 
 ### Four-photo, playful
 
