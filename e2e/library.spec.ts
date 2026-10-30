@@ -48,7 +48,7 @@ test('adding a folder scans it, shows thumbnails, explains skipped files and cha
   const grid = page.getByRole('list', { name: `Photos, ${folder.expected.distinctPhotos} in total` })
   await expect(grid).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText(`${folder.expected.distinctPhotos} photos · 1 identical copy`, { exact: false })).toBeVisible()
-  await expect(page.getByText('4 files were skipped: 2 aren’t JPEGs or PNGs; 2 are damaged or couldn’t be decoded.', { exact: false })).toBeVisible()
+  await expect(page.getByText('4 files were skipped: 2 aren’t JPEG or PNG photos (videos, for example); 2 are damaged or couldn’t be decoded.', { exact: false })).toBeVisible()
   await expect.poll(() => loadedThumbnails(page)).toBe(folder.expected.distinctPhotos)
   await expect(page.getByRole('img', { name: /Photo from/ }).first()).toBeVisible()
 

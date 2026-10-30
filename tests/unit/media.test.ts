@@ -73,10 +73,13 @@ describe('scan wording', () => {
 
   it('explains each reason, with singular and plural forms', () => {
     expect(describeSkipped({ ...zero, found: 4, unsupported: 1, corrupt: 2, unreadable: 1 })).toBe(
-      '4 files were skipped: 1 isn’t a JPEG or PNG; 2 are damaged or couldn’t be decoded; 1 couldn’t be read (check folder permissions). Skipped files are left exactly as they are.',
+      '4 files were skipped: 1 isn’t a JPEG or PNG photo (videos, for example); 2 are damaged or couldn’t be decoded; 1 couldn’t be read (check folder permissions). Skipped files are left exactly as they are.',
     )
     expect(describeSkipped({ ...zero, found: 1, tooLarge: 1 })).toBe(
-      '1 file was skipped: 1 is too large to open safely. Skipped files are left exactly as they are.',
+      '1 file was skipped: 1 is a photo too large to open safely. Skipped files are left exactly as they are.',
+    )
+    expect(describeSkipped({ ...zero, found: 5, unsupported: 3, tooLarge: 2 })).toBe(
+      '5 files were skipped: 3 aren’t JPEG or PNG photos (videos, for example); 2 are photos too large to open safely. Skipped files are left exactly as they are.',
     )
   })
 

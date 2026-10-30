@@ -52,4 +52,4 @@ One run:
 | Keyboard-only journeys | Album rearranging (R3c), Studio crop and reorder (R5), the unsaved-changes dialog (R4), all by keyboard | [e2e] |
 | Quit with unsaved picks | Closing asks first; "Keep reviewing" keeps the window and the picks, "Quit without saving" closes | [e2e] |
 | VoiceOver | **Pending:** owner, `voiceover-checklist.md` | [human] |
-| Passes on GitHub's macOS runner | **Pending:** this PR's CI run | [ci] |
+| Passes on GitHub's macOS runner | Passed: [run 40820391445](https://github.com/samanthaparas/nearmora/actions/runs/40820391445) | [ci] |

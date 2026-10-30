@@ -128,6 +128,16 @@ describe('rescans, cancelling and missing files (AC2)', () => {
     expect(counts.indexed + counts.tooLarge + counts.unsupported + counts.corrupt).toBe(counts.found)
   })
 
+  // A phone backup has videos far bigger than the limit; they must be reported as "not a photo", not "too large".
+  it('counts a big non-photo file as unsupported, not too large', async () => {
+    const { deps, sourceId, folder } = await setup()
+    const limit = 1_000_000
+    writeFileSync(join(folder.root, 'clip.mp4'), Buffer.alloc(limit + 1))
+    const { counts } = await scanSource({ ...deps, maxFileBytes: limit }, sourceId)
+    expect(counts.unsupported).toBe(folder.expected.unsupported + 1)
+    expect(counts.tooLarge).toBe(0)
+  })
+
   it('marks a folder that is no longer there as disconnected, not empty', async () => {
     const { db, deps, sourceId, folder } = await setup()
     await scanSource(deps, sourceId)

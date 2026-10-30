@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import type { Catalog } from '../../src/main/catalog/database'
 import { recordAssetLocation } from '../../src/main/catalog/repositories/assets'
 import { listMoments, updateMoment } from '../../src/main/catalog/repositories/moments'
-import { groupByGap, groupInSql, MOMENT_GAP_MS, regroupMoments } from '../../src/main/library/moments'
+import { groupByGap, groupInSql, MOMENT_GAP_MS, partOfDay, regroupMoments } from '../../src/main/library/moments'
 import { codeOf, fakeSha, openTestCatalog, seedSource, tempProfile } from './helpers'
 
 const HOUR = 60 * 60 * 1000
@@ -74,6 +74,31 @@ describe('grouping photos into moments', () => {
 
     expect(ids(groupInSql(db))).toEqual(ids(reference))
     expect(reference.length).toBeGreaterThan(50)
+  })
+})
+
+describe('moment titles', () => {
+  // Local times, because the part of the day follows the computer's clock, as the person sees it.
+  const at = (day: number, hour: number) => new Date(2026, 9, day, hour, 30).getTime()
+
+  it('adds the part of the day only when two moments share a date', async () => {
+    const { db, sourceId } = await catalog()
+    seedAt(db, sourceId, [at(24, 15), at(26, 1), at(26, 10), at(26, 19), at(26, 20)])
+    regroupMoments(db, { formatTitle: (start) => `Oct ${new Date(start).getDate()}` })
+    const titles = listMoments(db)
+      .map((m) => m.autoTitle)
+      .sort()
+    expect(titles).toEqual(['Oct 24', 'Oct 26 · early hours', 'Oct 26 · evening', 'Oct 26 · morning'])
+  })
+
+  it('never gives two same-day moments the same part of the day', () => {
+    // Moments start more than 8 hours apart; check every start minute of a day against one 8 h 1 min later.
+    for (let minute = 0; minute < 16 * 60; minute++) {
+      const first = new Date(2026, 9, 26, 0, minute).getTime()
+      const second = first + 8 * HOUR + 60_000
+      if (new Date(second).getDate() !== 26) continue
+      expect(partOfDay(second)).not.toBe(partOfDay(first))
+    }
   })
 })
 
