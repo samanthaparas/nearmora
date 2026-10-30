@@ -46,6 +46,7 @@ const LibraryItem = z.object({
   capturedAt: z.number().int().nullable(),
   /** Only reachable through a disconnected folder: the cached thumbnail shows, the original can't be opened. */
   offline: z.boolean(),
+  favorite: z.boolean(),
 })
 const reviewStatus = z.enum(['unreviewed', 'deferred', 'reviewed'])
 const revision = z.number().int().nonnegative()
@@ -214,6 +215,11 @@ export const commands = {
   'albums:addPhotos': {
     input: z.object({ albumId: id, assetIds: z.array(id).min(1).max(500) }),
     output: z.object({ added: count, undoId: z.number().int().positive() }),
+  },
+  // Favorite or unfavorite photos chosen in the Library; returns only the ones whose state changed (for Undo).
+  'favorites:set': {
+    input: z.object({ assetIds: z.array(id).min(1).max(500), favorite: z.boolean() }),
+    output: z.object({ changed: z.array(id) }),
   },
   'albums:removePhoto': {
     input: z.object({ albumId: id, assetId: id }),

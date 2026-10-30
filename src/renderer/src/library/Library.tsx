@@ -1,6 +1,6 @@
 /**
  * The Library screen: add a photo folder, follow its scan, browse "Your moments" and Albums, search and filter,
- * select photos to add to an album, and scroll every photo in a virtualized grid. Thumbnails load from
+ * select photos to add to an album or to Favorites, and scroll every photo in a virtualized grid. Thumbnails load from
  * nm-media:// by picture id; this screen never sees a file path.
  */
 
@@ -40,6 +40,8 @@ export function Library() {
   const [albumUndo, setAlbumUndo] = useState<AlbumUndo | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
   const [total, setTotal] = useState<number | null>(null)
+  // The last Favorites change, with exactly the photos it changed, so Undo puts only those back.
+  const [favoriteUndo, setFavoriteUndo] = useState<{ message: string; changed: string[]; favorite: boolean } | null>(null)
 
   const loadMoments = useCallback(() => {
     void window.nearmora.listMoments().then((result) => {
@@ -104,6 +106,34 @@ export function Library() {
     })
     stopSelecting()
     loadAlbums()
+  }
+
+  // Any photo can become a favorite here, not only ones Best Moments grouped into a set.
+  async function favoriteSelected(favorite: boolean) {
+    const result = await window.nearmora.setFavorites({ assetIds: [...selected], favorite })
+    if (!result.ok) {
+      setNotice('Favorites couldn’t be changed. Nothing was changed.')
+      return
+    }
+    const { changed } = result.data
+    const already = selected.size - changed.length
+    const photos = (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'}`
+    setFavoriteUndo({
+      message: `${favorite ? 'Added' : 'Removed'} ${photos(changed.length)} ${favorite ? 'to' : 'from'} Favorites.${
+        already > 0 ? ` ${photos(already)} ${favorite ? (already === 1 ? 'was already' : 'were already') : already === 1 ? 'wasn’t' : 'weren’t'} in Favorites.` : ''
+      }`,
+      changed,
+      favorite,
+    })
+    stopSelecting()
+    setRefreshToken((n) => n + 1)
+  }
+
+  async function undoFavorites() {
+    if (!favoriteUndo) return
+    if (favoriteUndo.changed.length > 0) await window.nearmora.setFavorites({ assetIds: favoriteUndo.changed, favorite: !favoriteUndo.favorite })
+    setFavoriteUndo(null)
+    setRefreshToken((n) => n + 1)
   }
 
   // In select mode each photo is a toggle button; aria-pressed tells assistive tech whether it's selected.
@@ -197,6 +227,19 @@ export function Library() {
         }}
       />
 
+      <div className="library__undo" aria-live="polite">
+        {favoriteUndo ? (
+          <>
+            <span>{favoriteUndo.message}</span>
+            {favoriteUndo.changed.length > 0 ? (
+              <button type="button" className="button button--quiet" onClick={() => void undoFavorites()}>
+                Undo
+              </button>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+
       {openAlbum ? (
         <AlbumView
           key={openAlbum.id}
@@ -241,6 +284,12 @@ export function Library() {
                 </p>
                 <button type="button" className="button button--secondary" disabled={selected.size === 0} onClick={() => setAddingToAlbum(true)}>
                   Add to album…
+                </button>
+                <button type="button" className="button button--secondary" disabled={selected.size === 0} onClick={() => void favoriteSelected(true)}>
+                  ★ Add to Favorites
+                </button>
+                <button type="button" className="button button--quiet" disabled={selected.size === 0} onClick={() => void favoriteSelected(false)}>
+                  Remove from Favorites
                 </button>
                 <button type="button" className="button button--quiet" onClick={stopSelecting}>
                   Done selecting

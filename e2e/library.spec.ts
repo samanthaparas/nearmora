@@ -69,6 +69,46 @@ test('after a restart the photos are still there, without rescanning', async () 
   await app.close()
 })
 
+test('any photo can be added to Favorites from the Library, with Undo, and removed again', async () => {
+  const before = fingerprintFolder(folder.root)
+  const { app } = await launchApp(profileDir)
+  const page = await app.firstWindow()
+  const nav = (name: string) => page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name }).click()
+  const favoriteImages = page.getByRole('img', { name: /, favorite/ })
+  await expect(page.getByRole('list', { name: `Photos, ${folder.expected.distinctPhotos} in total` })).toBeVisible()
+  await expect(favoriteImages).toHaveCount(0)
+
+  // Select two photos and add them; the grid marks them, and Undo takes back exactly that change.
+  await page.getByRole('button', { name: 'Select photos' }).click()
+  const pick = page.getByRole('button', { name: /^Select:/ })
+  await pick.nth(0).click()
+  await pick.nth(1).click()
+  await page.getByRole('button', { name: '★ Add to Favorites' }).click()
+  await expect(page.getByText('Added 2 photos to Favorites.')).toBeVisible()
+  await expect(favoriteImages).toHaveCount(2)
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(favoriteImages).toHaveCount(0)
+
+  // Add one, and it shows up in Favorites.
+  await page.getByRole('button', { name: 'Select photos' }).click()
+  await pick.nth(0).click()
+  await page.getByRole('button', { name: '★ Add to Favorites' }).click()
+  await expect(favoriteImages).toHaveCount(1)
+  await nav('Favorites')
+  await expect(page.getByRole('list', { name: 'Favorites, 1 in total' })).toBeVisible()
+
+  // Removing it along with a photo that wasn't a favorite says so.
+  await nav('Library')
+  await page.getByRole('button', { name: 'Select photos' }).click()
+  await pick.nth(0).click()
+  await pick.nth(1).click()
+  await page.getByRole('button', { name: 'Remove from Favorites' }).click()
+  await expect(page.getByText('Removed 1 photo from Favorites. 1 photo wasn’t in Favorites.')).toBeVisible()
+  await expect(favoriteImages).toHaveCount(0)
+  await app.close()
+  expect(fingerprintFolder(folder.root)).toEqual(before)
+})
+
 test('an unplugged folder shows offline photos, then reconnects after verification', async () => {
   const before = fingerprintFolder(folder.root)
   const parked = `${folder.root}-unplugged`

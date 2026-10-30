@@ -26,10 +26,10 @@ const GAP = 8
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' })
 
-// Alt text: the photos have no captions, so describe what we know (the date, and whether it's offline).
+// Alt text: the photos have no captions, so describe what we know (the date, and whether it's a favorite or offline).
 export function altFor(photo: Photo): string {
   const base = photo.capturedAt === null ? 'Photo' : `Photo from ${dateFormat.format(photo.capturedAt)}`
-  return photo.offline ? `${base}, offline` : base
+  return `${base}${photo.favorite ? ', favorite' : ''}${photo.offline ? ', offline' : ''}`
 }
 
 /** Page fetcher for the Library and moments: date order, with search and filters. */
@@ -182,6 +182,11 @@ export function PhotoGrid({ fetchPage, refreshToken, label, renderCell, onTotal 
               {photo.offline ? (
                 <span className="library__badge" aria-hidden="true">
                   Offline
+                </span>
+              ) : null}
+              {photo.favorite ? (
+                <span className="library__fav" aria-hidden="true">
+                  ★ Favorite
                 </span>
               ) : null}
             </li>
