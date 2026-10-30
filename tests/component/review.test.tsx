@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
  * Component tests for the Best Moments review controls (React Testing Library, simulated browser):
- * the unsaved-changes dialog's keyboard behaviour and focus handling, the favorite toggle, the offline image
- * fallback, and the favorites draft logic. These are the details a screen-reader or keyboard user relies on.
+ * the unsaved-changes dialog's keyboard behaviour and focus handling, the favorite toggle, pinch and wheel zoom, the
+ * offline image fallback, and the favorites draft logic. These are the details a screen-reader or keyboard user relies on.
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -74,7 +74,19 @@ describe('the unsaved-changes dialog', () => {
 })
 
 describe('a compare panel', () => {
-  const props = { member, label: 'Photo A', view: FIT, onPan: () => {}, onRemove: () => {} }
+  const props = { member, label: 'Photo A', view: FIT, onPan: () => {}, onZoom: () => {}, onRemove: () => {} }
+
+  it('zooms on a pinch or mouse wheel over the photo, instead of scrolling the page', () => {
+    const onZoom = vi.fn()
+    render(<ComparePanel {...props} onZoom={onZoom} favorite={false} onToggleFavorite={() => {}} />)
+    const frame = screen.getByRole('img').parentElement!
+    // Wheel away from you (negative deltaY) or pinch open zooms in; towards you zooms out.
+    expect(fireEvent.wheel(frame, { deltaY: -100 })).toBe(false) // false: the page's own scrolling was stopped
+    expect(fireEvent.wheel(frame, { deltaY: 5, ctrlKey: true })).toBe(false)
+    expect(onZoom).toHaveBeenCalledTimes(2)
+    expect(onZoom.mock.calls[0]![0]).toBeGreaterThan(1)
+    expect(onZoom.mock.calls[1]![0]).toBeLessThan(1)
+  })
 
   it('has a favorite toggle whose pressed state and text both change', async () => {
     const onToggleFavorite = vi.fn()

@@ -12,7 +12,7 @@ import type { Catalog } from '../database'
 import { CatalogError, isConstraintError } from '../errors'
 
 const Kind = z.enum(['collage_2', 'collage_4', 'carousel'])
-const AspectSchema = z.enum(['1:1', '4:5'])
+const AspectSchema = z.enum(['1:1', '4:5', '5:4'])
 const BackgroundSchema = z.enum(['cream', 'white'])
 const Title = z.string().trim().min(1).max(120)
 const CropSchema = z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1), zoom: z.number().min(1).max(MAX_ZOOM) })

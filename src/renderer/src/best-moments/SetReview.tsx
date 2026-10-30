@@ -198,6 +198,7 @@ export function SetReview({ setId, onLeave, onNext, onChanged }: {
       label={label}
       view={view}
       onPan={pan}
+      onZoom={zoom}
       favorite={draft.has(m.assetId)}
       onToggleFavorite={() => setDraft((d) => toggleFavorite(d, m.assetId))}
       onRemove={() => void removeMember(m)}

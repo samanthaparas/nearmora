@@ -1,12 +1,12 @@
 /**
- * Editing one Memory Studio project (AC6): title, square or portrait, cream or white background, the order of
+ * Editing one Memory Studio project (AC6): title, square, portrait or landscape, cream or white background, the order of
  * photos, and each photo's crop position and zoom, all by buttons or keyboard. Every change is saved at once.
  * Photos that can't be reached are named, so nobody discovers it only at export time.
  */
 
-import { useCallback, useEffect, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { CommandOutput } from '@shared/ipc-contract'
-import { canvasCount, clampCrop, DEFAULT_CROP, MAX_ZOOM, placements, type Aspect, type Background, type Crop } from '@shared/layout'
+import { ASPECT_LABEL, CANVAS, canvasCount, clampCrop, DEFAULT_CROP, MAX_ZOOM, placements, type Aspect, type Background, type Crop } from '@shared/layout'
 import { ExportPanel } from './ExportPanel'
 import { StudioCanvas } from './StudioCanvas'
 
@@ -20,12 +20,16 @@ const ZOOM_STEP = 0.25
 const describeCrop = (crop: Crop) =>
   `${Math.round(crop.cx * 100)}% across, ${Math.round(crop.cy * 100)}% down, zoom ${Math.round(crop.zoom * 100)}%`
 
+// "1350 × 1080": the output size for a shape, as shown on screen.
+const sizeOf = (aspect: Aspect): string => `${CANVAS[aspect].width} × ${CANVAS[aspect].height}`
 export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: string; onClose: () => void; onDeleted: () => void }) {
   const [project, setProject] = useState<Project | null>(null)
   const [selected, setSelected] = useState(0)
   const [titleDraft, setTitleDraft] = useState('')
   const [status, setStatus] = useState<string>('All changes saved')
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // A pinch sends many small zoom steps; the preview follows each one, and only the last is saved.
+  const pendingZoom = useRef<{ timer: number; position: number; crop: Crop } | null>(null)
 
   // State is set in the promise callback, after main replies, never synchronously inside an effect.
   const load = useCallback(
@@ -40,6 +44,16 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   useEffect(() => {
     void load()
   }, [load])
+  // Leaving the editor mid-pinch still saves the last zoom.
+  useEffect(
+    () => () => {
+      const pending = pendingZoom.current
+      if (!pending) return
+      window.clearTimeout(pending.timer)
+      void window.nearmora.setProjectCrop({ projectId, position: pending.position, crop: pending.crop })
+    },
+    [projectId],
+  )
 
   if (!project) return <p>{status === 'All changes saved' ? 'Opening project…' : status}</p>
   const item = project.items[selected] ?? project.items[0]!
@@ -73,6 +87,27 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
     const result = await window.nearmora.setProjectCrop({ projectId, position: target.position, crop })
     setStatus(result.ok ? `Crop: ${describeCrop(crop)}. All changes saved.` : 'That crop couldn’t be saved. Nothing was changed.')
   }
+  // Pinch or wheel over a photo: selects it and zooms it right away, then saves once the gesture pauses.
+  function wheelZoom(position: number, factor: number) {
+    setSelected(position)
+    setProject((p) => {
+      if (!p) return p
+      const target = p.items.find((i) => i.position === position)
+      if (!target) return p
+      const cell = placements(p.kind, p.aspect, p.items.length)[position]!.cell
+      const next = { ...target.crop, zoom: Math.min(MAX_ZOOM, Math.max(1, target.crop.zoom * factor)) }
+      const crop = target.width && target.height ? clampCrop({ width: target.width, height: target.height }, cell, next) : next
+      if (pendingZoom.current) window.clearTimeout(pendingZoom.current.timer)
+      const timer = window.setTimeout(() => {
+        pendingZoom.current = null
+        void window.nearmora.setProjectCrop({ projectId, position, crop }).then((result) => {
+          setStatus(result.ok ? `Crop: ${describeCrop(crop)}. All changes saved.` : 'That crop couldn’t be saved. Nothing was changed.')
+        })
+      }, 300)
+      pendingZoom.current = { timer, position, crop }
+      return { ...p, items: p.items.map((i) => (i.position === position ? { ...i, crop } : i)) }
+    })
+  }
   const pan = (dx: number, dy: number) => void setCrop(item, { ...item.crop, cx: item.crop.cx + dx, cy: item.crop.cy + dy })
   const zoom = (delta: number) => void setCrop(item, { ...item.crop, zoom: Math.min(MAX_ZOOM, Math.max(1, item.crop.zoom + delta)) })
 
@@ -98,10 +133,11 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
       canvasIndex={canvasIndex}
       displayWidth={width}
       highlight={item.position}
+      onWheelZoom={wheelZoom}
       label={
         project.kind === 'carousel'
           ? `Preview of slide ${canvasIndex + 1} of ${slides}`
-          : `Preview: ${KIND_NAMES[project.kind].toLowerCase()}, ${project.aspect === '1:1' ? 'square' : 'portrait'}, ${project.background} background`
+          : `Preview: ${KIND_NAMES[project.kind].toLowerCase()}, ${ASPECT_LABEL[project.aspect].split(' ')[0]!.toLowerCase()}, ${project.background} background`
       }
     />
   )
@@ -116,7 +152,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           {project.title}
         </h2>
         <p className="review__note">
-          {KIND_NAMES[project.kind]} · {project.items.length} photos · {project.aspect === '1:1' ? '1080 × 1080' : '1080 × 1350'}
+          {KIND_NAMES[project.kind]} · {project.items.length} photos · {sizeOf(project.aspect)}
           {project.kind === 'carousel' ? ` · ${slides} slides` : ''}
         </p>
       </div>
@@ -166,10 +202,10 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
 
           <fieldset className="studio__choice">
             <legend>Shape</legend>
-            {(['1:1', '4:5'] as const).map((value) => (
+            {(['1:1', '4:5', '5:4'] as const).map((value) => (
               <label key={value} className="library__check">
                 <input type="radio" name="aspect" checked={project.aspect === value} onChange={() => void settings({ aspect: value }, 'Shape changed')} />
-                <span>{value === '1:1' ? 'Square (1080 × 1080)' : 'Portrait (1080 × 1350)'}</span>
+                <span>{ASPECT_LABEL[value]}</span>
               </label>
             ))}
           </fieldset>
@@ -253,7 +289,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           <ExportPanel
             projectId={projectId}
             blocked={unavailable.length > 0}
-            summary={`JPEG, ${project.aspect === '1:1' ? '1080 × 1080' : '1080 × 1350'} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
+            summary={`JPEG, ${sizeOf(project.aspect)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
           />
 
           <button type="button" className="button button--quiet" onClick={() => setConfirmDelete(true)}>

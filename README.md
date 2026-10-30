@@ -39,13 +39,14 @@ src/
     library/         Adding, scanning, reconnecting and removing folders, date moments, similar-photo sets, thumbnail cache, storage
     studio/          Export: checks, staged rendering, verification, finalizing and crash recovery
     catalog/         The SQLite catalog: opening, migrations, backup/restore
-      migrations/      Numbered schema changes (.sql), applied in order
+      migrations/      Numbered schema changes (.sql), applied in order (v4 adds landscape projects)
       repositories/    Reading and writing sources, pictures, favorites, albums, sets and review choices
     ipc/             The checkpoint for every request the UI makes
     security/        CSP, app:// and nm-media:// serving, navigation and permission guards
   preload/         Builds window.nearmora, the UI's only bridge to the main process
   renderer/        The UI (React). Sandboxed: no Node.js, no file access
     src/styles/      Design tokens (colors, fonts, spacing) and base styles
+    src/wheel-zoom.ts Pinch and mouse-wheel zoom, shared by Memory Studio and Best Moments
     src/library/     The Library and Sources screens: folders and scans, moments, albums, search and filters, virtualized grid
     src/best-moments/ The Best Moments screen: queue, compare view, choosing favorites, corrections, unsaved-changes dialog
     src/studio/      Favorites and Memory Studio: projects, the canvas preview, order and crop controls, export panel

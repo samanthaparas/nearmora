@@ -11,7 +11,8 @@ import { CatalogError, MigrationError } from '../../src/main/catalog/errors'
 import { MIGRATIONS, type Migration } from '../../src/main/catalog/migrations'
 import { latestVersion, readSchemaVersion } from '../../src/main/catalog/migrate'
 import { createAlbum, listAlbums } from '../../src/main/catalog/repositories/albums'
-import { openTestCatalog, tempProfile } from './helpers'
+import { createProject, deleteProject, getProject, setItemCrop, updateProject } from '../../src/main/catalog/repositories/projects'
+import { openTestCatalog, seedAssets, seedSource, tempProfile } from './helpers'
 
 const v1 = MIGRATIONS[0]!
 const v2 = MIGRATIONS[1]!
@@ -136,5 +137,31 @@ describe('migrating an existing catalog', () => {
     const { catalogFile } = tempProfile()
     const gap: Migration = { version: 3, name: 'gap', sql: '' }
     await expect(openTestCatalog(catalogFile, { migrations: [v1, gap] })).rejects.toThrow(/out of order/)
+  })
+})
+
+describe('schema v4: landscape projects', () => {
+  it('keeps every existing project, photo and crop, allows landscape, and still deletes items with their project', async () => {
+    const { catalogFile, backupDir } = tempProfile()
+    const old = await openTestCatalog(catalogFile, { migrations: MIGRATIONS.slice(0, 3) })
+    const assets = seedAssets(old, seedSource(old).sourceId, 2)
+    const project = createProject(old, { kind: 'collage_2', aspect: '4:5', background: 'white', assetIds: assets, title: 'Before v4' })
+    setItemCrop(old, { projectId: project.id, position: 1, crop: { cx: 0.3, cy: 0.7, zoom: 2 } })
+    const before = getProject(old, project.id)
+    expect(() => old.prepare(`UPDATE project SET aspect = '5:4'`).run()).toThrow(/CHECK/)
+    old.close()
+
+    const db = await openTestCatalog(catalogFile, { backupDir })
+    expect(readSchemaVersion(db)).toBe(4)
+    expect(getProject(db, project.id)).toEqual(before)
+    updateProject(db, { projectId: project.id, aspect: '5:4' })
+    expect(getProject(db, project.id).aspect).toBe('5:4')
+    // The item table points at the new project table, so deleting a project still removes its items (and only those).
+    expect(db.prepare('PRAGMA foreign_key_list(project_item)').all()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ table: 'project', on_delete: 'CASCADE' })]),
+    )
+    deleteProject(db, project.id)
+    expect(db.prepare('SELECT COUNT(*) AS n FROM project_item').get()).toEqual({ n: 0 })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM asset').get()).toEqual({ n: 2 })
   })
 })

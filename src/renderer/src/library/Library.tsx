@@ -108,6 +108,13 @@ export function Library() {
     loadAlbums()
   }
 
+  // The star on each photo: one click, no selecting. Saved straight away; clicking again takes it back.
+  async function toggleFavorite(photo: Photo, favorite: boolean): Promise<boolean> {
+    const result = await window.nearmora.setFavorites({ assetIds: [photo.id], favorite })
+    if (!result.ok) setNotice('That photo’s favorite couldn’t be changed. Nothing was changed.')
+    return result.ok
+  }
+
   // Any photo can become a favorite here, not only ones Best Moments grouped into a set.
   async function favoriteSelected(favorite: boolean) {
     const result = await window.nearmora.setFavorites({ assetIds: [...selected], favorite })
@@ -329,6 +336,7 @@ export function Library() {
             refreshToken={refreshToken}
             label={openMoment ? 'Photos in this moment' : 'Photos'}
             onTotal={setTotal}
+            onToggleFavorite={toggleFavorite}
             {...(selecting ? { renderCell: renderSelectable } : choosingCover ? { renderCell: renderCover } : {})}
           />
         </>

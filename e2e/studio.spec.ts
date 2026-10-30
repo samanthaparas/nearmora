@@ -125,3 +125,35 @@ test('deleting a project asks first, and the photos stay', async () => {
   await expect(page.getByRole('list', { name: 'Favorites, 5 in total' })).toBeVisible()
   await app.close()
 })
+
+test('a landscape collage, and a mouse wheel over a photo zooms that photo and saves it', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  await pick.nth(0).click()
+  await pick.nth(1).click()
+  await page.getByRole('button', { name: /Two-photo collage/ }).click()
+
+  await page.getByLabel('Landscape (1350 × 1080)').click()
+  await expect(page.getByLabel('Landscape (1350 × 1080)')).toBeChecked()
+  await expect(page.getByRole('img', { name: /Preview: two-photo collage, landscape, cream background/ })).toBeVisible()
+  await expect(page.getByText('JPEG, 1350 × 1080 pixels, 1 file')).toBeVisible()
+
+  // Wheel over the right-hand photo: it becomes the photo being adjusted, and zooms in.
+  const canvas = page.getByRole('img', { name: /Preview: two-photo collage/ })
+  const box = (await canvas.boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.75, box.y + box.height / 2)
+  await page.mouse.wheel(0, -200)
+  await expect.poll(() => cropNote(page)).toContain('Photo 2 of 2')
+  await expect.poll(() => cropNote(page)).not.toContain('zoom 100%')
+  await expect(page.getByText('All changes saved', { exact: false })).toBeVisible()
+  const zoomed = await cropNote(page)
+
+  // Saved: reopening the project shows the same crop.
+  await page.getByRole('button', { name: '← All projects' }).click()
+  await page.getByRole('button', { name: /Two-photo collage/ }).first().click()
+  await page.getByRole('button', { name: 'Adjust photo 2' }).click()
+  expect(await cropNote(page)).toBe(zoomed)
+  await app.close()
+})

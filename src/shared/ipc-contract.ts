@@ -54,7 +54,7 @@ const revision = z.number().int().nonnegative()
 const Stale = z.object({ status: z.literal('stale') })
 
 const projectKind = z.enum(['collage_2', 'collage_4', 'carousel'])
-const aspect = z.enum(['1:1', '4:5'])
+const aspect = z.enum(['1:1', '4:5', '5:4'])
 const background = z.enum(['cream', 'white'])
 const crop = z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1), zoom: z.number().min(1).max(4) })
 const ProjectSummary = z.object({
