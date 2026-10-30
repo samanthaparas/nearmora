@@ -141,7 +141,14 @@ test('a landscape collage, and a mouse wheel over a photo zooms that photo and s
   await expect(page.getByText('JPEG, 1350 × 1080 pixels, 1 file')).toBeVisible()
 
   // Wheel over the right-hand photo: it becomes the photo being adjusted, and zooms in.
+  // The preview takes its new shape a moment after the label changes, and may sit outside the window on a small
+  // screen: bring it into view and wait for landscape proportions before pointing at it.
   const canvas = page.getByRole('img', { name: /Preview: two-photo collage/ })
+  await canvas.scrollIntoViewIfNeeded()
+  await expect.poll(async () => {
+    const b = await canvas.boundingBox()
+    return b ? Math.round((b.width / b.height) * 100) : 0
+  }).toBe(125)
   const box = (await canvas.boundingBox())!
   await page.mouse.move(box.x + box.width * 0.75, box.y + box.height / 2)
   await page.mouse.wheel(0, -200)
