@@ -4,7 +4,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import sharp from 'sharp'
 
@@ -18,20 +18,36 @@ export function createDiskImage(workDir: string, sizeMb: number, name: string): 
     mount,
     attach: () => execFileSync('hdiutil', ['attach', image, '-nobrowse', '-mountpoint', mount], { stdio: 'ignore' }),
     /**
-     * Ejects, retrying while macOS reports the volume busy ("resource busy", status 16), which happens when the
-     * image library still holds a file open or the system is briefly indexing the new volume.
+     * Ejects, retrying for up to about 30 seconds while macOS reports the volume busy (the image library still holds
+     * a file open, or Spotlight is briefly indexing the new volume). Alternates hdiutil with diskutil's forced unmount,
+     * and stops as soon as the volume is no longer mounted, even if the command that unmounted it reported an error.
      */
     eject: async () => {
       sharp.cache(false) // libvips caches open files; release them so nothing keeps the volume busy
-      for (let attempt = 1; ; attempt++) {
+      const commands: Array<[string, string[]]> = [
+        ['hdiutil', ['detach', mount, '-force']],
+        ['diskutil', ['unmount', 'force', mount]],
+      ]
+      let lastError: unknown
+      for (let attempt = 0; attempt < 30; attempt++) {
+        if (!isMounted(mount)) return
+        const [command, args] = commands[attempt % commands.length]!
         try {
-          execFileSync('hdiutil', ['detach', mount, '-force'], { stdio: 'ignore' })
-          return
+          execFileSync(command, args, { stdio: 'ignore' })
         } catch (error: unknown) {
-          if (attempt >= 10) throw error
-          await new Promise((resolve) => setTimeout(resolve, 500))
+          lastError = error
         }
+        if (!isMounted(mount)) return
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
+      throw new Error(`Could not eject the test volume at ${mount}`, { cause: lastError })
     },
   }
+}
+
+// Whether anything is mounted at this folder, read from the system's mount table (the temp folder is a symlink, so
+// both its spellings are checked).
+function isMounted(mount: string): boolean {
+  const table = execFileSync('mount', { encoding: 'utf8' })
+  return [mount, realpathSync(mount)].some((path) => table.includes(` on ${path} (`))
 }
