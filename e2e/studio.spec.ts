@@ -343,6 +343,8 @@ test('playful pairs: picked from their own group, with an editable caption that 
   await expect(caption).toHaveValue('Good food, happier people')
   await caption.fill('Lisbon, last June')
   await expect(page.getByText('Caption changed. All changes saved.')).toBeVisible()
+  // Typing within 300 ms of the last change joins the same undo step; wait for this one to stand on its own.
+  await page.waitForTimeout(400)
   await expect(page.getByRole('img', { name: /caption “Lisbon, last June”$/ })).toBeVisible()
   // A character the handwriting font can't draw is named, not silently shown as a box.
   await caption.fill('Lisbon ♡')
@@ -382,7 +384,8 @@ test('captions wrap and keep the line breaks typed, the same after a restart', a
   await note.pressSequentially('Lisbon')
   await note.press('Enter')
   await note.pressSequentially('the long way home')
-  await expect(page.getByText('Note changed. All changes saved.')).toBeVisible()
+  // Close as soon as the preview shows the last letter, well inside the 300 ms that groups typing into one undo step:
+  // every change is saved as it happens, so nothing typed is lost by quitting quickly (a failure seen on CI).
   await expect(page.getByRole('img', { name: /caption “Lisbon, the long way home”$/ })).toBeVisible()
   await app.close()
 
