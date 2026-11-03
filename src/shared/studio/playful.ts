@@ -9,10 +9,10 @@ import type { Rect } from '../layout'
 import { art, arch, ART, circle, COLORS, filledArt, grow, polygon, roundedRect, ticket, torn, type Decor } from './scene'
 import type { Slot, TemplateDefinition } from './templates'
 
-type Size = { width: number; height: number }
-type Spacing = { margin: number; gutter: number }
+export type Size = { width: number; height: number }
+export type Spacing = { margin: number; gutter: number }
 
-const inner = (canvas: Size, spacing: Spacing): Rect => ({
+export const inner = (canvas: Size, spacing: Spacing): Rect => ({
   x: spacing.margin,
   y: spacing.margin,
   width: canvas.width - 2 * spacing.margin,
@@ -20,7 +20,7 @@ const inner = (canvas: Size, spacing: Spacing): Rect => ({
 })
 
 // How far a rectangle sticks out past its own edges, sideways and up/down, once turned by `degrees`.
-function overhang(width: number, height: number, degrees: number): { x: number; y: number } {
+export function overhang(width: number, height: number, degrees: number): { x: number; y: number } {
   const t = (Math.abs(degrees) * Math.PI) / 180
   return {
     x: (width * Math.cos(t) + height * Math.sin(t) - width) / 2,
@@ -28,12 +28,12 @@ function overhang(width: number, height: number, degrees: number): { x: number; 
   }
 }
 
-const tall = (canvas: Size) => canvas.height >= canvas.width * 0.9
+export const tall = (canvas: Size) => canvas.height >= canvas.width * 0.9
 
 // ---- Postcards: two tilted prints on white cards, a handwritten caption and a postmark. ----
 
 const POSTCARD_TILT = [-4, 5] as const
-const CARD_PAD = 0.04 // of the photo's width
+export const CARD_PAD = 0.04 // of the photo's width
 
 // Two photo cards placed diagonally (stacked on tall canvases, side by side otherwise), with `band` (a share of the
 // shorter side) kept free for a caption. Shared by Postcards, Scrapbook and Colorblock.
@@ -124,7 +124,7 @@ function filmGeometry(canvas: Size, spacing: Spacing) {
 }
 
 // The strip with its sprocket holes cut out (even-odd fill), so the background shows through whatever its colour.
-function filmStrip(strip: Rect, down: boolean, across: number): string {
+export function filmStrip(strip: Rect, down: boolean, across: number): string {
   const band = 0.12 * across
   const length = down ? strip.height : strip.width
   const pitch = band * 1.05
@@ -394,6 +394,25 @@ const colorblock: TemplateDefinition = {
 
 const SCRAPBOOK_TILT = [-3, 4] as const
 
+/**
+ * A strip of see-through tape across the middle of a card's top edge, turned with the card plus `extra` degrees.
+ * `pad` is the card's border around the photo. Shared by Scrapbook and the Travel scrapbook quartet.
+ */
+export function tape(photo: Rect, pad: number, tilt: number, color: string, extra: number): Decor {
+  const t = (tilt * Math.PI) / 180
+  const reach = photo.height / 2 + pad
+  const length = photo.width * 0.3
+  const depth = photo.width * 0.075
+  return {
+    type: 'shape',
+    canvas: 0,
+    d: `M${-length / 2} ${-depth / 2}H${length / 2}V${depth / 2}H${-length / 2}Z`,
+    fill: color,
+    opacity: 0.85,
+    at: { x: photo.x + photo.width / 2 + reach * Math.sin(t), y: photo.y + photo.height / 2 - reach * Math.cos(t), rotate: tilt + extra, scale: 1 },
+  }
+}
+
 const scrapbook: TemplateDefinition = {
   id: 'pair-scrapbook',
   version: 1,
@@ -414,22 +433,7 @@ const scrapbook: TemplateDefinition = {
   decor(canvas, spacing) {
     const { a, b, unit, box } = postcardGeometry(canvas, spacing, 0.08, SCRAPBOOK_TILT)
     const pad = a.width * CARD_PAD
-    // A strip of tape across the middle of each card's top edge, turned with the card plus a little more.
-    const tape = (photo: Rect, tilt: number, color: string, extra: number): Decor => {
-      const t = (tilt * Math.PI) / 180
-      const reach = photo.height / 2 + pad
-      const length = photo.width * 0.3
-      const depth = photo.width * 0.075
-      return {
-        type: 'shape',
-        canvas: 0,
-        d: `M${-length / 2} ${-depth / 2}H${length / 2}V${depth / 2}H${-length / 2}Z`,
-        fill: color,
-        opacity: 0.85,
-        at: { x: photo.x + photo.width / 2 + reach * Math.sin(t), y: photo.y + photo.height / 2 - reach * Math.cos(t), rotate: tilt + extra, scale: 1 },
-      }
-    }
-    const over: Decor[] = [tape(a, SCRAPBOOK_TILT[0], COLORS.blush, -6), tape(b, SCRAPBOOK_TILT[1], COLORS.sage, 5)]
+    const over: Decor[] = [tape(a, pad, SCRAPBOOK_TILT[0], COLORS.blush, -6), tape(b, pad, SCRAPBOOK_TILT[1], COLORS.sage, 5)]
     over.push(filledArt(0, ART.heart, box.x + box.width - 0.05 * unit, box.y + 0.05 * unit, 0.045 * unit, COLORS.blush))
     over.push(art(0, ART.sprig, box.x + 0.07 * unit, box.y + box.height - 0.09 * unit, 0.15 * unit, COLORS.plum, -10))
     return { under: [], over }

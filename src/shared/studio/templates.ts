@@ -6,6 +6,7 @@
 
 import type { Rect } from '../layout'
 import { PLAYFUL_TEMPLATES } from './playful'
+import { PLAYFUL_QUARTETS } from './playful-quartets'
 import type { Decor } from './scene'
 
 /** Single: one image. Carousel: one image per photo, in order. (Seamless carousels arrive in phase S5.) */
@@ -357,6 +358,7 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
       Array.from({ length: photoCount }, (_, index) => ({ canvas: index, rect: { x: 0, y: 0, width: canvas.width, height: canvas.height } })),
   },
   ...PLAYFUL_TEMPLATES,
+  ...PLAYFUL_QUARTETS,
 ]
 
 /** A template by id and version, or undefined if this version of the app doesn't know it. */
