@@ -123,6 +123,24 @@ test('a carousel gets one preview per slide, and offline photos are named before
   await app.close()
 })
 
+test('choosing Memory Studio in the sidebar from an open project goes back to the project list, with the edit kept', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  await nav(page, 'Memory Studio')
+  const cards = page.locator('.moments__card')
+  const count = await cards.count()
+  await cards.first().click()
+  await expect(page.getByRole('button', { name: '← All projects' })).toBeVisible()
+  await page.getByLabel('Width', { exact: true }).fill('321')
+  await nav(page, 'Memory Studio')
+  await expect(page.getByRole('button', { name: '← All projects' })).toHaveCount(0)
+  await expect(cards).toHaveCount(count)
+  // Reopening shows the change made just before leaving.
+  await cards.first().click()
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('321')
+  await app.close()
+})
+
 test('deleting a project asks first, and the photos stay', async () => {
   const { app } = await launchApp(profile)
   const page = await app.firstWindow()

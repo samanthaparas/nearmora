@@ -57,4 +57,4 @@ Earlier phases' own tests (S1–S6) still pass. The full suite for this change w
 
 ## Noticed, not changed here
 
-- Choosing "Memory Studio" in the sidebar while a project is open keeps that project open; "← All projects" returns to the list. This is long-standing behaviour, not something S7 introduced. It may be worth making the sidebar return to the list.
+- Choosing "Memory Studio" in the sidebar while a project is open keeps that project open; "← All projects" returns to the list. This is long-standing behaviour, not something S7 introduced. It may be worth making the sidebar return to the list. *Fixed afterwards:* choosing Memory Studio in the sidebar now always shows the project list.
