@@ -4,9 +4,9 @@
  * Run with --self-test it instead checks the native libraries and exits (used by CI on packaged builds).
  */
 
-import { chmodSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { app, BrowserWindow, dialog } from 'electron'
+import { chmodSync, mkdirSync, renameSync } from 'node:fs'
+import { basename, join } from 'node:path'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import { EVENT_CHANNEL } from '@shared/ipc-channels'
 import { replaceCatalogFile } from './catalog/backup'
 import { openCatalog, type Catalog } from './catalog/database'
@@ -85,6 +85,19 @@ function appDataPaths() {
   const thumbnailsDir = join(appDataDir, 'thumbnails')
   mkdirSync(thumbnailsDir, { recursive: true })
   return { appDataDir, thumbnailsDir, catalogFile: join(appDataDir, 'catalog.sqlite'), backupDir: join(appDataDir, 'backups') }
+}
+
+/**
+ * How Clean up moves a file to the Trash: the macOS Trash, through Electron. End-to-end tests point it at a stand-in
+ * Trash folder instead, so tests never put anything in the real Trash; honoured only in unpackaged builds.
+ */
+function trashStep(): (path: string) => Promise<void> {
+  const testTrash = !app.isPackaged ? process.env['NEARMORA_TEST_TRASH_DIR'] : undefined
+  if (!testTrash) return (path) => shell.trashItem(path)
+  return (path) => {
+    renameSync(path, join(testTrash, `${Date.now()}-${basename(path)}`))
+    return Promise.resolve()
+  }
 }
 
 // Opens the catalog, or explains why it can't and returns undefined so the app quits without touching anything.
@@ -173,7 +186,11 @@ function startApp(): void {
       thumbnail: (assetId) => thumbnailPathForAsset(db, paths.thumbnailsDir, assetId),
       preview: createPreviewResolver({ db, previewsDir, makePreview: (request) => worker.preview(request) }),
     })
-    registerIpc(createHandlers({ db, library, exports, paths: { catalogFile: paths.catalogFile, thumbnailsDir: paths.thumbnailsDir, previewsDir } }), (url) => isTrustedRendererUrl(url, trustedOrigins))
+    const removal = { db, appDataDir: paths.appDataDir, thumbnailsDir: paths.thumbnailsDir, previewsDir, trash: trashStep() }
+    registerIpc(
+      createHandlers({ db, library, exports, removal, paths: { catalogFile: paths.catalogFile, thumbnailsDir: paths.thumbnailsDir, previewsDir } }),
+      (url) => isTrustedRendererUrl(url, trustedOrigins),
+    )
 
     createMainWindow()
 

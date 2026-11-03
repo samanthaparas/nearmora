@@ -52,7 +52,7 @@ async function readSignature(path: string): Promise<Uint8Array> {
 }
 
 // Streams the file through SHA-256 so even a large photo never has to fit in memory at once.
-function sha256File(path: string): Promise<Buffer> {
+export function sha256File(path: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256')
     createReadStream(path, { flags: 'r' })

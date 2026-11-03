@@ -143,6 +143,7 @@ Main changes from Blueprint §13:
 | **R4** Best Moments | R3b | Exact groups, dHash + time-window candidates, manual correction, compare view, multi-favorite, decide later, save/undo, unsaved-changes guard, narrow-width A/B tabs, zoom/pan | 2.5–3 |
 | **R5** Studio Lite + export | R4 | Projects, two templates, carousel, keyboard crop/reorder, shared layout math, export pipeline, metadata stripping, staged finalize, recovery | 3 |
 | **R6** Beta hardening | R1–R5 | Profiling against budgets, VoiceOver pass, network-off test, signing/notarization, release checklist | 1.5–2 |
+| **C1** Clean up *(added 2026-11-03 by the owner; before Studio S4c)* | R4 | Mark photos "Don't need"; a Duplicates view that keeps one copy; a Review and remove screen: Move to Trash (default) or Delete forever (separately confirmed); identity re-check and folder-scope checks before any removal; a local record of what was removed (ADR-0019) | 2 |
 | **R7** Website | validated core | Next.js marketing site | 1.5 |
 | **R8** Docker | R7 | Containerize the site; optional Postgres exercise | 1 |
 
@@ -346,6 +347,8 @@ All inputs are IDs or small validated values. No command accepts a path from the
 Events main → renderer (one channel, discriminated union): scan progress, job status, source status changes.
 
 Explicitly absent: any delete/trash/move/rename/write-metadata of originals; any generic `readFile`, `openExternal` with arbitrary URLs, or shell command.
+
+*Amended 2026-11-03 (C1, ADR-0019):* the bridge gains removal by catalogue id only (never by path): Move to Trash, and Delete forever, which the main process confirms in a native dialog the UI can't skip. Move, rename, metadata writes, generic file access and shell commands remain absent.
 
 ### 6.6 Media pipeline boundaries
 

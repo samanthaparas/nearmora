@@ -60,6 +60,11 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'export:reveal': () => ({ shown: false }),
     'settings:storage': () => ({ catalogBytes: 0, thumbnails: { files: 0, bytes: 0 }, previews: { files: 0, bytes: 0 } }),
     'settings:clearCache': () => ({ removed: 0, rescanning: 0 }),
+    'cleanup:mark': () => ({ changed: [] }),
+    'cleanup:unneeded': () => ({ items: [], total: 0 }),
+    'cleanup:duplicates': () => ({ groups: [], total: 0 }),
+    'cleanup:remove': () => ({ status: 'cancelled' }),
+    'cleanup:history': () => [],
     ...overrides,
   }
   const logError = vi.fn()
@@ -112,6 +117,24 @@ describe('IPC router', () => {
       error: { code: 'INVALID_INPUT' },
     })
     expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('only removes photos named by catalogue id, never by path, and never an empty request', async () => {
+    const handler = vi.fn(() => ({ status: 'cancelled' as const }))
+    const { dispatch } = makeRouter({ 'cleanup:remove': handler })
+    const someId = '3f2b8c1e-4d5a-4b6c-9d7e-8f9a0b1c2d3e'
+
+    for (const payload of [
+      { pictures: [], copies: [], mode: 'trash' },
+      { pictures: ['/Users/someone/Pictures/IMG_0001.jpg'], copies: [], mode: 'trash' },
+      { pictures: [someId], copies: [], mode: 'shred' },
+      { pictures: [someId], mode: 'forever' },
+    ]) {
+      await expect(dispatch('cleanup:remove', TRUSTED, payload)).resolves.toEqual({ ok: false, error: { code: 'INVALID_INPUT' } })
+    }
+    expect(handler).not.toHaveBeenCalled()
+
+    await expect(dispatch('cleanup:remove', TRUSTED, { pictures: [someId], copies: [], mode: 'trash' })).resolves.toEqual({ ok: true, data: { status: 'cancelled' } })
   })
 
   it('hides handler errors behind a generic code', async () => {

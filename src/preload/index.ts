@@ -52,6 +52,11 @@ const api: NearmoraApi = {
   revealExport: (input) => ipcRenderer.invoke(channelFor('export:reveal'), input),
   storageUsage: () => ipcRenderer.invoke(channelFor('settings:storage')),
   clearCache: (input) => ipcRenderer.invoke(channelFor('settings:clearCache'), input),
+  markUnneeded: (input) => ipcRenderer.invoke(channelFor('cleanup:mark'), input),
+  listUnneeded: () => ipcRenderer.invoke(channelFor('cleanup:unneeded')),
+  listDuplicates: () => ipcRenderer.invoke(channelFor('cleanup:duplicates')),
+  removePhotos: (input) => ipcRenderer.invoke(channelFor('cleanup:remove'), input),
+  removalHistory: () => ipcRenderer.invoke(channelFor('cleanup:history')),
   // The listener gets only the event data, never Electron's event object (which carries `sender`).
   onEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: MainEvent) => listener(payload)

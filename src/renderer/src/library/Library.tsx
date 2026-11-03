@@ -1,6 +1,6 @@
 /**
  * The Library screen: add a photo folder, follow its scan, browse "Your moments" and Albums, search and filter,
- * select photos to add to an album or to Favorites, and scroll every photo in a virtualized grid. Thumbnails load from
+ * select photos to add to an album or to Favorites or to mark as "Don't need" for Clean up, and scroll every photo in a virtualized grid. Thumbnails load from
  * nm-media:// by picture id; this screen never sees a file path.
  */
 
@@ -42,6 +42,8 @@ export function Library() {
   const [total, setTotal] = useState<number | null>(null)
   // The last Favorites change, with exactly the photos it changed, so Undo puts only those back.
   const [favoriteUndo, setFavoriteUndo] = useState<{ message: string; changed: string[]; favorite: boolean } | null>(null)
+  // The last "Don't need" marking, so Undo clears exactly the marks it added. Marking never removes a photo.
+  const [unneededUndo, setUnneededUndo] = useState<{ message: string; changed: string[] } | null>(null)
 
   const loadMoments = useCallback(() => {
     void window.nearmora.listMoments().then((result) => {
@@ -134,6 +136,26 @@ export function Library() {
     })
     stopSelecting()
     setRefreshToken((n) => n + 1)
+  }
+
+  async function markSelectedUnneeded() {
+    const result = await window.nearmora.markUnneeded({ assetIds: [...selected], unneeded: true })
+    if (!result.ok) {
+      setNotice('Those photos couldn’t be marked. Nothing was changed.')
+      return
+    }
+    const n = result.data.changed.length
+    setUnneededUndo({
+      message: n === 0 ? 'Those photos were already marked “Don’t need”.' : `Marked ${n} ${n === 1 ? 'photo' : 'photos'} “Don’t need”. Review and remove them in Clean up.`,
+      changed: result.data.changed,
+    })
+    stopSelecting()
+  }
+
+  async function undoUnneeded() {
+    if (!unneededUndo) return
+    if (unneededUndo.changed.length > 0) await window.nearmora.markUnneeded({ assetIds: unneededUndo.changed, unneeded: false })
+    setUnneededUndo(null)
   }
 
   async function undoFavorites() {
@@ -247,6 +269,19 @@ export function Library() {
         ) : null}
       </div>
 
+      <div className="library__undo" aria-live="polite">
+        {unneededUndo ? (
+          <>
+            <span>{unneededUndo.message}</span>
+            {unneededUndo.changed.length > 0 ? (
+              <button type="button" className="button button--quiet" onClick={() => void undoUnneeded()}>
+                Undo
+              </button>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+
       {openAlbum ? (
         <AlbumView
           key={openAlbum.id}
@@ -297,6 +332,9 @@ export function Library() {
                 </button>
                 <button type="button" className="button button--quiet" disabled={selected.size === 0} onClick={() => void favoriteSelected(false)}>
                   Remove from Favorites
+                </button>
+                <button type="button" className="button button--quiet" disabled={selected.size === 0} onClick={() => void markSelectedUnneeded()}>
+                  Don’t need
                 </button>
                 <button type="button" className="button button--quiet" onClick={stopSelecting}>
                   Done selecting

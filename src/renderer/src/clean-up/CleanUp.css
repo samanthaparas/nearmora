@@ -1,0 +1,136 @@
+/*
+ * Styles for the Clean up screen: the "Don't need" list, identical-copy groups with the copy that stays, and the
+ * review panel. Colours and spacing come from the design tokens like every other screen.
+ */
+
+.cleanup__section {
+  margin-bottom: var(--nm-space-4);
+}
+
+.cleanup__heading {
+  margin: 0 0 var(--nm-space-1);
+  font-family: var(--nm-font-display);
+  font-size: var(--nm-text-h2);
+  font-weight: 500;
+  cursor: default;
+}
+
+summary.cleanup__heading {
+  cursor: pointer;
+}
+
+.cleanup__hint {
+  margin: 0 0 var(--nm-space-2);
+  color: var(--nm-text-muted);
+}
+
+.cleanup__photos,
+.cleanup__groups,
+.cleanup__history,
+.cleanup__outcome {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cleanup__photo,
+.cleanup__group {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--nm-space-2);
+  padding: var(--nm-space-1) 0;
+  border-bottom: 1px solid var(--nm-border-subtle);
+}
+
+.cleanup__thumb {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--nm-surface-raised);
+}
+
+.cleanup__photo-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.cleanup__name,
+.cleanup__meta,
+.cleanup__warning {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cleanup__name {
+  font-weight: 600;
+}
+
+.cleanup__meta {
+  color: var(--nm-text-muted);
+  font-size: var(--nm-text-small);
+}
+
+.cleanup__warning {
+  margin-top: 4px;
+  font-size: var(--nm-text-small);
+}
+
+.cleanup__choose {
+  display: flex;
+  align-items: center;
+  gap: var(--nm-space-1);
+  min-height: var(--nm-target-min);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.cleanup__copies,
+.cleanup__modes {
+  margin: 0 0 var(--nm-space-2);
+  padding: 0;
+  border: 0;
+}
+
+.cleanup__copy {
+  display: flex;
+  align-items: center;
+  gap: var(--nm-space-1);
+  min-height: 32px;
+  overflow-wrap: anywhere;
+}
+
+/* Words as well as colour, so "which copy stays" never relies on colour alone. */
+.cleanup__stays,
+.cleanup__goes {
+  padding: 0 var(--nm-space-1);
+  border-radius: 999px;
+  font-size: var(--nm-text-small);
+  font-weight: 600;
+}
+
+.cleanup__stays {
+  background: var(--nm-favorite);
+}
+
+.cleanup__goes {
+  background: var(--nm-selected);
+}
+
+/* The review is a decision, so it sits in a raised panel like the folder-removal review. */
+.cleanup__review {
+  padding: var(--nm-space-2);
+  background: var(--nm-surface-raised);
+  border: 1px solid var(--nm-border-subtle);
+  border-radius: var(--nm-radius-card);
+}
+
+.cleanup__outcome {
+  margin-top: var(--nm-space-2);
+}
+
+.cleanup__history li {
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}

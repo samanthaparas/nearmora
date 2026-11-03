@@ -81,8 +81,8 @@ export function Settings() {
           Privacy
         </h2>
         <p>
-          Nearmora works entirely on this Mac. It never connects to the internet, sends no analytics, and never moves, edits, deletes or uploads your
-          photos.
+          Nearmora works entirely on this Mac. It never connects to the internet, sends no analytics, and never moves, edits or uploads your photos.
+          It removes a photo only when you choose to in Clean up.
         </p>
       </section>
     </>
