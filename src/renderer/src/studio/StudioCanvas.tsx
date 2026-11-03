@@ -27,7 +27,13 @@ function loadImage(assetId: string): Promise<HTMLImageElement> {
   if (!pending) {
     pending = new Promise((resolve, reject) => {
       const image = new Image()
-      image.onload = () => resolve(image)
+      // Decoded off the main thread before it's drawn (S7): drawing a large image that isn't decoded yet decodes it on
+      // the spot, which blocked the page for up to 200 ms when a seamless design first opened.
+      image.onload = () =>
+        image.decode().then(
+          () => resolve(image),
+          () => resolve(image),
+        )
       image.onerror = () => {
         image.onerror = () => reject(new Error('image unavailable'))
         image.src = `nm-media://thumb/${assetId}`

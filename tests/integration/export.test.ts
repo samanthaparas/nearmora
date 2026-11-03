@@ -4,7 +4,7 @@
  * overwrites, fresh folders, cancel, a full disk and a crash leaving nothing finished-looking behind.
  */
 
-import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import exifr from 'exifr'
 import sharp from 'sharp'
@@ -81,6 +81,29 @@ const NO_BORDER = { width: 0, color: '#ffffff' }
 const cellCentre = { left: { x: 48 + 480 / 2, y: 540 }, right: { x: 48 + 480 + 24 + 480 / 2, y: 540 } } // two-photo collage, 1:1
 
 describe('rendering an export file', () => {
+  // S7: upright photos on top are placed onto the drawn image directly instead of through the SVG, which made large
+  // exports far faster. An invisible shape drawn last sends every photo through the SVG path; both must match exactly.
+  it('places upright photos directly with exactly the same pixels as drawing them through the SVG', async () => {
+    const dir = tempDir()
+    const photo = join(dir, 'split.jpg')
+    await twoTone(photo, { split: 'columns', orientation: 6 })
+    for (const [templateId, format, params] of [
+      ['quartet-classic-grid', 'portrait', { v: 1 as const, borderWidth: 24, borderColor: '#2f2b2c' }],
+      ['seamless-story-strip', 'square', { v: 1 as const }],
+    ] as const) {
+      const composition = compose({ templateId, templateVersion: 1, format, params, photoCount: templateId.startsWith('seamless') ? 5 : 4 })
+      const drawn = layers(composition, 0).map((l): RenderLayer =>
+        l.kind === 'shape' ? l : { kind: 'photo', sourcePath: photo, crop: { cx: 0.4, cy: 0.5, zoom: 1.3 }, fit: l.element.slot === 1 ? 'fit' : 'fill', element: { ...l.element, flip: l.element.slot === 2 } },
+      )
+      const request = { width: composition.width, height: composition.height, background: composition.background, border: composition.border, ppi: null, quality: 92, encoding: 'png' as const }
+      const direct = join(dir, `${templateId}-direct.png`)
+      const viaSvg = join(dir, `${templateId}-svg.png`)
+      await renderCanvas({ ...request, layers: drawn, outputPaths: [direct] })
+      await renderCanvas({ ...request, layers: [...drawn, { kind: 'shape', d: 'M0 0Z', fill: 'none' }], outputPaths: [viaSvg] })
+      expect((await sharp(direct).raw().toBuffer()).equals(await sharp(viaSvg).raw().toBuffer()), templateId).toBe(true)
+    }
+  }, 60_000)
+
   // S5a, ADR-0021: a seamless design is drawn once and cut, so lossless slices put side by side are the design itself.
   it('cuts a design into slices that reassemble it pixel for pixel, including widths that don’t divide evenly', async () => {
     const dir = tempDir()
@@ -596,6 +619,23 @@ describe('exporting a project', () => {
     expect(outcome.status).toBe('cancelled')
     expect(readdirSync(destination)).toEqual([])
     expect(db.prepare(`SELECT status FROM job WHERE kind = 'export'`).pluck().get()).toBe('cancelled')
+  })
+
+  // S7: a seamless export writes several slices from one drawing; failing after some of them leaves none behind.
+  it('a seamless export that fails after writing some slices leaves nothing, and the next one completes', async () => {
+    const { db, profile, project } = await exportable('seamless')
+    const destination = tempDir()
+    // Writes the real slices, then reports the disk full, as if the last write had failed.
+    const failing = async (request: RenderRequest) => {
+      await renderCanvas(request)
+      expect(request.outputPaths.every((path) => existsSync(path))).toBe(true)
+      return { ok: false as const, reason: 'disk_full' as const }
+    }
+    const outcome = await runExport({ db, render: failing }, await ready(db, project.id, destination, profile.dir))
+    expect(outcome).toMatchObject({ status: 'failed', reason: 'disk_full' })
+    expect(readdirSync(destination)).toEqual([])
+    const retry = await runExport({ db, render }, await ready(db, project.id, destination, profile.dir))
+    expect(retry.status === 'done' && readdirSync(retry.folder).sort()).toEqual(['Across the seam 01.jpg', 'Across the seam 02.jpg'])
   })
 
   it('a crash mid-export is cleaned up at the next launch; folders that aren’t its own are never touched', async () => {

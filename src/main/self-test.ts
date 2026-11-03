@@ -2,6 +2,8 @@
  * A built-in diagnostic, run with `--self-test`, that proves the native libraries load and work inside this exact build.
  * It's how CI checks a packaged app, since packaged apps (correctly) block test tools from attaching.
  * It touches no user files and no network: in-memory databases, and generated images in a temporary folder it deletes.
+ * Since S7 it also has the packaged media worker render a playful layout with a caption and a seamless design cut into
+ * slides, proving the bundled caption font, text outlines and slicing work in the package, not just in development.
  */
 
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
@@ -13,6 +15,10 @@ import { IN_MEMORY, openCatalog } from './catalog/database'
 import { MIGRATIONS } from './catalog/migrations'
 import { latestVersion, readSchemaVersion } from './catalog/migrate'
 import { MediaWorker } from './media/worker-client'
+import { DEFAULT_CROP } from '@shared/layout'
+import { compose } from '@shared/studio/compose'
+import { layers } from '@shared/studio/layers'
+import type { RenderLayer } from './media/render-export'
 
 export const SELF_TEST_FLAG = '--self-test'
 /** Prefix on the single output line, so the smoke test can find it among Electron's own logging. */
@@ -25,6 +31,7 @@ export interface SelfTestReport {
   sharp: { ok: boolean; libvips?: string; error?: string }
   catalog: { ok: boolean; schemaVersion?: number; error?: string }
   mediaWorker: { ok: boolean; error?: string }
+  studio: { ok: boolean; error?: string }
 }
 
 // Exercises the SQLite features later milestones depend on: foreign keys, transactions and joins.
@@ -92,6 +99,32 @@ async function checkMediaWorker(): Promise<SelfTestReport['mediaWorker']> {
   }
 }
 
+// Renders Postcards (tilted cards, a postmark, a caption drawn as letter outlines from the bundled font) and a 2-slide
+// seamless design through the real media worker, and checks every file came out at its expected size.
+async function checkStudio(): Promise<SelfTestReport['studio']> {
+  const dir = mkdtempSync(join(tmpdir(), 'nearmora-self-test-'))
+  const worker = new MediaWorker()
+  try {
+    const source = join(dir, 'generated.jpg')
+    await sharp({ create: { width: 400, height: 300, channels: 3, background: '#b9a4c8' } }).jpeg().toFile(source)
+    const render = async (templateId: string, photoCount: number, files: string[]) => {
+      const composition = compose({ templateId, templateVersion: 1, format: 'square', params: { v: 1 }, photoCount })
+      const drawn = layers(composition, 0).map((l): RenderLayer => (l.kind === 'shape' ? l : { kind: 'photo', sourcePath: source, crop: DEFAULT_CROP, fit: 'fill', element: l.element }))
+      const textDrawn = drawn.some((l) => l.kind === 'shape' && l.d.length > 500) // the caption's letter outlines
+      const result = await worker.render({ outputPaths: files.map((f) => join(dir, f)), width: composition.width, height: composition.height, background: composition.background, border: composition.border, ppi: null, quality: 90, layers: drawn })
+      const widths = await Promise.all(files.map(async (f) => (await sharp(join(dir, f)).metadata()).width))
+      return { ok: result.ok, widths, textDrawn }
+    }
+    const postcards = await render('pair-postcards', 2, ['postcards.jpg'])
+    const seamless = await render('seamless-across-the-seam', 3, ['seam-01.jpg', 'seam-02.jpg'])
+    const ok = postcards.ok && postcards.textDrawn && postcards.widths[0] === 1080 && seamless.ok && seamless.widths.join() === '1080,1080'
+    return ok ? { ok } : { ok, error: `unexpected result: ${JSON.stringify({ postcards, seamless })}` }
+  } finally {
+    worker.stop()
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 // Exercises the sharp features later milestones depend on: decode, resize and re-encode.
 async function checkSharp(): Promise<SelfTestReport['sharp']> {
   const width = 64
@@ -141,12 +174,20 @@ export async function runSelfTest(): Promise<SelfTestReport> {
     workerResult = { ok: false, error: describeError(error) }
   }
 
+  let studioResult: SelfTestReport['studio']
+  try {
+    studioResult = await checkStudio()
+  } catch (error: unknown) {
+    studioResult = { ok: false, error: describeError(error) }
+  }
+
   return {
-    ok: sqliteResult.ok && sharpResult.ok && catalogResult.ok && workerResult.ok,
+    ok: sqliteResult.ok && sharpResult.ok && catalogResult.ok && workerResult.ok && studioResult.ok,
     electron: process.versions.electron,
     sqlite: sqliteResult,
     sharp: sharpResult,
     catalog: catalogResult,
     mediaWorker: workerResult,
+    studio: studioResult,
   }
 }

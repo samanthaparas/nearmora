@@ -23,6 +23,7 @@ R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (
 | `npm run lint` | Checks code for likely mistakes (ESLint, including type-aware rules) |
 | `npm run package:mac` | Builds an unsigned `Nearmora.app` into `release/` |
 | `npm run test:packaged` | Checks the packaged app: native libraries, catalog migrations, the media worker, security fuses, launch, shipped files, and the self-test with networking denied |
+| `npm run measure:studio` | Measures Memory Studio at its limits: dragging on a 10-photo collage, opening a 3-slide seamless design, and exporting at 16 × 24 in and as slides, with twelve-megapixel photos (generated, then deleted) |
 | `npm run measure:perf` | Measures the blueprint's performance budgets on 10,000 generated photos (writes several GB of temporary files, then deletes them) |
 | `npm run measure:scan` | Times scans through the real app and worker: the private fixture pack (if present) and 1,000 generated photos |
 | `npm run query-plans` | Measures the key catalog queries on 10,000 synthetic pictures, with and without their indexes, and compares moment grouping in SQL and JavaScript |

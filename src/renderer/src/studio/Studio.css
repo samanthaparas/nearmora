@@ -232,6 +232,7 @@
   flex: none;
 }
 
+.studio__swipe-row:focus-visible,
 .studio__swipe-one:focus-visible {
   outline: 3px solid var(--nm-focus-ring);
   outline-offset: 4px;

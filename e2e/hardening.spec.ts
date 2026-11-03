@@ -7,6 +7,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import Database from 'better-sqlite3'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
 import { generateBurstFolder } from '../tests/support/generate-photos'
 import { launchApp, tempFolder } from './launch'
@@ -53,6 +54,14 @@ async function unexpectedSockets(app: ElectronApplication): Promise<{ unexpected
 
 const nav = (page: Page, name: string) => page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name }).click()
 
+// Opens a project from Memory Studio's list. The sidebar keeps an open project open, so go back to the list first.
+async function openProject(page: Page, name: RegExp) {
+  await nav(page, 'Memory Studio')
+  const back = page.getByRole('button', { name: '← All projects' })
+  if ((await back.count()) > 0) await back.click()
+  await page.locator('.moments__card', { hasText: name }).first().click()
+}
+
 async function pickFolderNextTime(app: ElectronApplication, path: string): Promise<void> {
   await app.evaluate(({ dialog }, chosen) => {
     dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [chosen] })
@@ -60,9 +69,9 @@ async function pickFolderNextTime(app: ElectronApplication, path: string): Promi
 }
 
 // A profile with a scanned burst, saved favorites and an Equal split collage, so every screen has content.
-async function seededProfile(extraArgs: string[] = []): Promise<{ app: ElectronApplication; page: Page }> {
+async function seededProfile(extraArgs: string[] = []): Promise<{ app: ElectronApplication; page: Page; profileDir: string }> {
   const { root } = await generateBurstFolder(join(tempFolder('photos'), 'Burst'), 3)
-  const { app } = await launchApp(tempFolder('profile'), extraArgs)
+  const { app, profileDir } = await launchApp(tempFolder('profile'), extraArgs)
   const page = await app.firstWindow()
   await pickFolderNextTime(app, root)
   await page.getByRole('button', { name: 'Add folder' }).click()
@@ -78,7 +87,7 @@ async function seededProfile(extraArgs: string[] = []): Promise<{ app: ElectronA
   await pick.nth(1).click()
   await page.getByRole('button', { name: /Equal split/ }).click()
   await expect(page.getByRole('region', { name: 'Export' })).toBeVisible()
-  return { app, page }
+  return { app, page, profileDir }
 }
 
 test('quitting with unsaved picks asks first: "Keep reviewing" stays, "Quit without saving" closes', async () => {
@@ -153,6 +162,31 @@ test('the whole core workflow works with networking blocked, makes no network re
 test('every screen passes automated accessibility checks (WCAG 2.1 AA), at normal size and 200% zoom', async () => {
   test.setTimeout(240_000)
   const { app, page } = await seededProfile()
+
+  // S7: give the screens added since R6 something to show. A photo marked "Don't need" for Clean up; the collage
+  // customised (an added place, a hidden photo, a removed place) and saved as one of My templates; and a seamless
+  // carousel, whose seam notes and swipe preview are checked too.
+  await nav(page, 'Library')
+  await page.getByRole('button', { name: 'Select photos' }).click()
+  await page.getByRole('button', { name: /^Select:/ }).first().click()
+  await page.getByRole('button', { name: 'Don’t need' }).click()
+  await nav(page, 'Memory Studio')
+  await page.getByRole('button', { name: /Equal split/ }).first().click()
+  await page.getByRole('button', { name: 'Add a place' }).click()
+  await page.getByRole('button', { name: 'Adjust photo 2' }).click()
+  await page.getByRole('button', { name: 'Hide' }).click()
+  await page.getByRole('button', { name: 'Adjust photo 3, empty place' }).click()
+  await page.getByRole('button', { name: 'Remove this place' }).click()
+  await expect(page.getByRole('region', { name: 'Removed places (1)' })).toBeVisible()
+  await page.getByRole('button', { name: 'Save as my template…' }).click()
+  await page.getByLabel('Template name').fill('Checked pair')
+  await page.getByRole('button', { name: 'Save template' }).click()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (const i of [0, 1, 2]) await pick.nth(i).click()
+  await page.getByRole('region', { name: 'Seamless carousels', exact: true }).getByRole('button', { name: /^Across the seam/ }).click()
+  await expect(page.getByText('Where photos meet a slide edge')).toBeVisible()
+
   const screens: Array<[string, () => Promise<void>]> = [
     ['Library', () => nav(page, 'Library')],
     ['Best Moments', () => nav(page, 'Best Moments')],
@@ -166,6 +200,17 @@ test('every screen passes automated accessibility checks (WCAG 2.1 AA), at norma
       await nav(page, 'Memory Studio')
       await page.getByRole('button', { name: /Equal split/ }).first().click()
     }],
+    ['Customized editor: Arrange, hidden photos, removed places', async () => {
+      await openProject(page, /Equal split/)
+      await expect(page.getByRole('region', { name: 'Removed places (1)' })).toBeVisible()
+    }],
+    ['Seamless editor: guides, seam notes, swipe preview side by side', async () => {
+      await openProject(page, /Across the seam/)
+      await page.getByRole('button', { name: 'Preview the swipe' }).click()
+    }],
+    ['Swipe preview one at a time', () => page.getByRole('region', { name: 'Swipe preview' }).getByLabel('One at a time').check()],
+    ['Favorites with My templates', () => nav(page, 'Favorites')],
+    ['Clean up', () => nav(page, 'Clean up')],
     ['Sources', () => nav(page, 'Sources')],
     ['Settings', () => page.getByRole('button', { name: 'Settings', exact: true }).click()],
   ]
@@ -206,6 +251,107 @@ test('reduced motion turns transitions and animations off', async () => {
   )
   expect(Math.max(...durations)).toBeLessThanOrEqual(0.001)
   await app.close()
+})
+
+// S7: the swipe preview's slide from one slide to the next is the one moving part Studio added; it stops too.
+test('reduced motion stops the swipe preview sliding between slides', async () => {
+  const { app, page } = await seededProfile()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (const i of [0, 1, 2]) await pick.nth(i).click()
+  await page.getByRole('button', { name: /^Carousel/ }).click()
+  await page.getByRole('button', { name: 'Preview the swipe' }).click()
+  await page.getByRole('region', { name: 'Swipe preview' }).getByLabel('One at a time').check()
+  const track = page.locator('.studio__swipe-track')
+  const duration = () => track.evaluate((el) => parseFloat(getComputedStyle(el).transitionDuration) || 0)
+  expect(await duration()).toBeGreaterThan(0.1) // it does slide normally
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  expect(await duration()).toBeLessThanOrEqual(0.001)
+  await app.close()
+})
+
+// S7: every Customize change can be made from the keyboard alone: focus moves to a control and keys do the rest.
+test('Customize works from the keyboard alone: nudge, size, flip, hide and show, add and remove a place, save a template', async () => {
+  const { app, page } = await seededProfile()
+  const press = async (name: string | RegExp, key = 'Enter') => {
+    await page.getByRole('button', { name }).focus()
+    await page.keyboard.press(key)
+  }
+  const saved = (text: string) => expect(page.getByText(`${text}. All changes saved.`)).toBeVisible()
+  const left = page.getByLabel('Left', { exact: true })
+  const before = Number(await left.inputValue())
+  await page.getByRole('region', { name: 'Arrange photo 1' }).focus()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Shift+ArrowRight')
+  await saved('Photo 1 nudged')
+  await expect(left).toHaveValue(String(before + 10))
+  await page.getByLabel('Width', { exact: true }).focus()
+  await page.keyboard.press('Meta+a')
+  await page.keyboard.type('300')
+  await saved('Photo 1 resized')
+  await page.getByLabel('Flip left to right').focus()
+  await page.keyboard.press('Space')
+  await saved('Photo 1 flipped')
+  await press('Hide', 'Space')
+  await saved('Photo 1 hidden')
+  await press('Show photo 1')
+  await saved('Photo 1 shown again')
+  await press('Add a place')
+  await saved('Place 3 added')
+  await press('Remove this place')
+  await saved('Place 3 removed')
+  await press('Restore place 3')
+  await saved('Place 3 restored')
+  await press('Save as my template…')
+  await page.getByLabel('Template name').focus()
+  await page.keyboard.press('Meta+a')
+  await page.keyboard.type('Keyboard pair')
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Saved “Keyboard pair” to My templates.', { exact: false })).toBeVisible()
+  await app.close()
+})
+
+// S7 recovery: quitting straight after a drag keeps it; a project or template damaged on disk is named, never crashes.
+test('quitting right after a drag keeps it, and a damaged project or template is explained instead of breaking Studio', async () => {
+  const { app, page, profileDir } = await seededProfile()
+  const left = page.getByLabel('Left', { exact: true })
+  const before = await left.inputValue()
+  const canvas = page.locator('.studio__canvas').first()
+  await canvas.scrollIntoViewIfNeeded()
+  const box = (await canvas.boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.5)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.55, { steps: 3 })
+  await page.mouse.up()
+  await page.getByRole('button', { name: 'Save as my template…' }).click()
+  await page.getByLabel('Template name').fill('Will be damaged')
+  await page.getByRole('button', { name: 'Save template' }).click()
+  await expect(page.getByText('Saved “Will be damaged”', { exact: false })).toBeVisible()
+  await app.close() // straight after the drag: nothing waits for a pause in editing
+
+  let { app: again } = await launchApp(profileDir)
+  let page2 = await again.firstWindow()
+  await nav(page2, 'Memory Studio')
+  await page2.locator('.moments__card', { hasText: /Equal split/ }).first().click()
+  await expect(page2.getByLabel('Left', { exact: true })).not.toHaveValue(before)
+  await again.close()
+
+  // Damage the stored settings of the project and the template, as a newer Nearmora or a disk fault might.
+  const db = new Database(join(profileDir, 'catalog.sqlite'))
+  db.prepare(`UPDATE project SET params_json = '{"v":99}'`).run()
+  db.prepare(`UPDATE my_template SET params_json = '{"v":99}'`).run()
+  db.close()
+  ;({ app: again } = await launchApp(profileDir))
+  page2 = await again.firstWindow()
+  await nav(page2, 'Memory Studio')
+  await page2.locator('.moments__card', { hasText: /Equal split/ }).first().click()
+  await expect(page2.getByText('This project couldn’t be opened.')).toBeVisible()
+  await nav(page2, 'Favorites') // the damaged template is left out, and the picker still works
+  await expect(page2.getByRole('region', { name: 'My templates' })).toHaveCount(0)
+  await expect(page2.getByRole('region', { name: 'Two photos' })).toBeVisible()
+  await nav(page2, 'Library')
+  await expect(page2.getByRole('heading', { level: 1, name: 'Library' })).toBeVisible()
+  await again.close()
 })
 
 // The fonts and open-source software the app ships are listed with their licences, as those licences ask.

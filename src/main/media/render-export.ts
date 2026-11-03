@@ -77,6 +77,27 @@ function pixelRect(image: { width: number; height: number }, rect: Rect): { left
 const attr = (value: string | number) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
 
 /**
+ * One photo cropped and resized by sharp to exactly the whole pixels it covers (EXIF orientation applied first, then
+ * mirrored if flipped), with where it goes and the border rectangle behind it, if any.
+ */
+async function photoPiece(layer: Extract<RenderLayer, { kind: 'photo' }>, borderWidth: number) {
+  const metadata = await open(layer.sourcePath).metadata()
+  // Crops are defined on the photo as displayed (after EXIF rotation), as in the preview.
+  const shown = metadata.autoOrient ?? { width: metadata.width, height: metadata.height }
+  // A masked photo fills its whole rectangle; its border is drawn along the mask instead (see canvasSvg).
+  const place = placePhoto(shown, layer.element.rect, layer.crop, layer.fit, layer.element.mask ? 0 : borderWidth)
+  const dest = snap(place.dest)
+  const pixels = open(layer.sourcePath)
+    .rotate() // apply EXIF orientation first; the crop below is in upright coordinates
+    .extract(pixelRect(shown, place.src))
+    .resize(dest.width, dest.height, { fit: 'fill' })
+    // A flipped photo (S6a) is mirrored left to right within its place, as the preview draws it.
+    .flop(layer.element.flip === true)
+    .toColourspace('srgb')
+  return { dest, borderRect: place.frame ? snap(place.frame) : null, pixels }
+}
+
+/**
  * Builds the canvas as one SVG, in the shared drawing order (layers.ts): shapes, then each photo (turned, on its card,
  * cut to its mask, with its border), then shapes and captions on top. Each photo is first cropped and resized by sharp
  * to exactly the whole pixels it covers, so the SVG renderer places it without resampling unless it's turned.
@@ -92,22 +113,9 @@ async function canvasSvg(request: RenderRequest): Promise<string> {
       parts.push(`<path d="${attr(layer.d)}" ${paint}${stroke}${opacity}${at}/>`)
       continue
     }
-    const metadata = await open(layer.sourcePath).metadata()
-    // Crops are defined on the photo as displayed (after EXIF rotation), as in the preview.
-    const shown = metadata.autoOrient ?? { width: metadata.width, height: metadata.height }
     const { rect, rotation, mask, frame } = layer.element
-    // A masked photo fills its whole rectangle; its border is drawn along the mask instead (see below).
-    const place = placePhoto(shown, rect, layer.crop, layer.fit, mask ? 0 : request.border.width)
-    const dest = snap(place.dest)
-    const piece = await open(layer.sourcePath)
-      .rotate() // apply EXIF orientation first; the crop below is in upright coordinates
-      .extract(pixelRect(shown, place.src))
-      .resize(dest.width, dest.height, { fit: 'fill' })
-      // A flipped photo (S6a) is mirrored left to right within its place, as the preview draws it.
-      .flop(layer.element.flip === true)
-      .toColourspace('srgb')
-      .png({ compressionLevel: 1 })
-      .toBuffer()
+    const { dest, borderRect, pixels } = await photoPiece(layer, request.border.width)
+    const piece = await pixels.png({ compressionLevel: 1 }).toBuffer()
     const cx = rect.x + rect.width / 2
     const cy = rect.y + rect.height / 2
     const group: string[] = []
@@ -115,8 +123,8 @@ async function canvasSvg(request: RenderRequest): Promise<string> {
       const card = { x: rect.x - frame.pad, y: rect.y - frame.pad, width: rect.width + 2 * frame.pad, height: rect.height + 2 * frame.pad }
       group.push(`<rect x="${card.x}" y="${card.y}" width="${card.width}" height="${card.height}" fill="${attr(frame.color)}"/>`)
     }
-    if (place.frame) {
-      const f = snap(place.frame)
+    if (borderRect) {
+      const f = borderRect
       group.push(`<rect x="${f.left}" y="${f.top}" width="${f.width}" height="${f.height}" fill="${attr(request.border.color)}"/>`)
     }
     const image = `<image x="${dest.left}" y="${dest.top}" width="${dest.width}" height="${dest.height}" preserveAspectRatio="none" href="data:image/png;base64,${piece.toString('base64')}"/>`
@@ -131,9 +139,33 @@ async function canvasSvg(request: RenderRequest): Promise<string> {
 }
 
 export async function renderCanvas(request: RenderRequest): Promise<RenderResult> {
+  // Photos at the top of the drawing order that are upright, unshaped, on no card and wholly on the canvas are placed
+  // straight onto the drawn image as pixels (S7). Embedding them in the SVG instead made a 10-photo 16 × 24 in export
+  // take about a minute, almost all of it the SVG renderer unpacking the embedded images; placed directly, the pixels
+  // are the same. Anything tilted, shaped, on a card or under a decoration stays in the SVG, so the order never changes.
+  const placeable = (l: RenderLayer): l is Extract<RenderLayer, { kind: 'photo' }> => l.kind === 'photo' && !l.element.rotation && !l.element.mask && !l.element.frame
+  let split = request.layers.length
+  while (split > 0 && placeable(request.layers[split - 1]!)) split--
+  type Placed = { input: Buffer | { create: { width: number; height: number; channels: 3; background: string } }; raw?: { width: number; height: number; channels: 4 }; left: number; top: number }
+  let placed: Placed[] = []
   let svg: string
   try {
-    svg = await canvasSvg(request)
+    const onCanvas = (r: { left: number; top: number; width: number; height: number }) =>
+      r.left >= 0 && r.top >= 0 && r.left + r.width <= request.width && r.top + r.height <= request.height
+    for (const layer of request.layers.slice(split) as Array<Extract<RenderLayer, { kind: 'photo' }>>) {
+      const { dest, borderRect, pixels } = await photoPiece(layer, request.border.width)
+      if (!onCanvas(dest) || (borderRect && !onCanvas(borderRect))) {
+        // Partly off the canvas: the SVG crops it at the edge, so every photo here is drawn there as before.
+        placed = []
+        split = request.layers.length
+        break
+      }
+      if (borderRect) placed.push({ input: { create: { width: borderRect.width, height: borderRect.height, channels: 3, background: request.border.color } }, left: borderRect.left, top: borderRect.top })
+      // Kept with its transparency, so a see-through photo shows the canvas behind it, as it does in the SVG.
+      const { data, info } = await pixels.ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      placed.push({ input: data, raw: { width: info.width, height: info.height, channels: 4 }, left: dest.left, top: dest.top })
+    }
+    svg = await canvasSvg({ ...request, layers: request.layers.slice(0, split) })
   } catch {
     return { ok: false, reason: 'unreadable' }
   }
@@ -141,12 +173,20 @@ export async function renderCanvas(request: RenderRequest): Promise<RenderResult
   try {
     // `unlimited`: the SVG is our own, and embeds full-size photo pieces that exceed the parser's default size guard.
     // Drawn once, to raw pixels; any transparency becomes the background colour, on purpose.
-    const canvas = await sharp(Buffer.from(svg), { unlimited: true, limitInputPixels: false })
+    const drawn = await sharp(Buffer.from(svg), { unlimited: true, limitInputPixels: false })
       .flatten({ background: request.background })
       .toColourspace('srgb')
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true })
+    const canvas =
+      placed.length === 0
+        ? drawn
+        : await sharp(drawn.data, { raw: { width: drawn.info.width, height: drawn.info.height, channels: 3 }, limitInputPixels: false })
+            .composite(placed.map(({ input, raw, left, top }) => (raw ? { input, raw, left, top } : { input, left, top })))
+            .removeAlpha() // compositing adds an alpha channel; the canvas stays three-channel like the drawn one
+            .raw()
+            .toBuffer({ resolveWithObject: true })
     const raw = { width: canvas.info.width, height: canvas.info.height, channels: canvas.info.channels }
     // Every file is cut from the same pixels and encoded with the same settings, so slides match where they meet.
     const save = async (piece: Sharp, path: string) => {

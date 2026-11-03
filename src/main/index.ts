@@ -209,6 +209,11 @@ function startApp(): void {
 // Diagnostic mode: check the native libraries, catalog and media worker, print one line of JSON, and exit without opening a window.
 function runSelfTestAndExit(): void {
   app.dock?.hide()
+  // The self-test draws nothing on screen. Under the no-network sandbox Chromium's separate GPU process can't start, and
+  // Chromium quits after a few retries, which a longer self-test (S7's Studio render) can hit. So no hardware
+  // acceleration, and what GPU work remains runs inside this process, leaving no GPU process to fail.
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('in-process-gpu')
   // The media worker is an Electron utility process, which can only start once the app is ready.
   void app.whenReady().then(runSelfTest).then((report) => {
     process.stdout.write(`${SELF_TEST_MARKER}${JSON.stringify(report)}\n`)
