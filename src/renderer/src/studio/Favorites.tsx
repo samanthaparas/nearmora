@@ -2,11 +2,13 @@
  * The Favorites screen: every photo marked as a favorite (in Best Moments), ready to become a collage or carousel.
  * Select photos, then choose a template; the new project opens in Memory Studio. Filters narrow the layouts by photo
  * count and style, and the chosen size is both how the drawings are shown and the size the new project starts at.
+ * The person's own saved templates (S6b) are offered first, at the size they were saved with.
  */
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { CommandOutput } from '@shared/ipc-contract'
 import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
-import { formatFor, latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
+import { findTemplate, formatFor, latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
 import { TemplateIcon } from './TemplateIcon'
 import { PhotoGrid, altFor, libraryFetcher, type Photo } from '../library/PhotoGrid'
 import '../library/Library.css'
@@ -52,6 +54,32 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
   const [show, setShow] = useState<Show>('all')
   const [style, setStyle] = useState<'all' | 'everyday' | 'playful'>('all')
   const [format, setFormat] = useState<FormatId>('square')
+  const [mine, setMine] = useState<CommandOutput<'myTemplates:list'>>([])
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  // The person's own templates (S6b); they're kept in the catalogue, so they survive a restart.
+  useEffect(() => {
+    let current = true
+    void window.nearmora.listMyTemplates().then((result) => {
+      if (current && result.ok) setMine(result.data)
+    })
+    return () => {
+      current = false
+    }
+  }, [])
+
+  async function createFromMine(id: string) {
+    const result = await window.nearmora.createProjectFromMine({ myTemplateId: id, assetIds: selected })
+    if (!result.ok) return setMessage('That project couldn’t be created. Nothing was changed.')
+    onOpenProject(result.data.id)
+  }
+
+  async function deleteMine(id: string) {
+    const result = await window.nearmora.deleteMyTemplate({ id })
+    setDeleting(null)
+    if (!result.ok) return setMessage('That template couldn’t be deleted. Nothing was changed.')
+    setMine((list) => list.filter((t) => t.id !== id))
+  }
 
   async function create(template: TemplateDefinition) {
     // Seamless carousels come in sharing shapes only; a print size chosen here falls back to square for them.
@@ -151,6 +179,50 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
       {total !== 0 ? (
         // Layouts grouped by photo count and style, narrowed by the filters; only those that fit the selection are enabled.
         <div className="studio__templates">
+          {/* My templates: offered with "All layouts" and "Fit my selection" (filtered by it), not by count or style. */}
+          {mine.length > 0 && (show === 'all' || show === 'fits') && style === 'all' ? (
+            <section className="studio__template-group" aria-label="My templates">
+              <h2 className="studio__template-title">My templates</h2>
+              <ul className="studio__template-list">
+                {mine
+                  .filter((t) => show !== 'fits' || selected.length === t.photos)
+                  .map((saved) => {
+                    const base = findTemplate(saved.templateId, saved.templateVersion)!
+                    return (
+                      <li key={saved.id}>
+                        <button
+                          type="button"
+                          className="studio__template"
+                          disabled={selected.length !== saved.photos}
+                          title={`Your template, based on ${base.name}`}
+                          onClick={() => void createFromMine(saved.id)}
+                        >
+                          <TemplateIcon template={base} format={saved.format} params={saved.params} photoCount={saved.places} />
+                          <span>
+                            {saved.name} <span className="review__note">(select {saved.photos})</span>
+                          </span>
+                        </button>
+                        {deleting === saved.id ? (
+                          <span className="library__source-actions" role="group" aria-label={`Delete “${saved.name}”?`}>
+                            <button type="button" className="button button--quiet" onClick={() => void deleteMine(saved.id)}>
+                              Delete “{saved.name}”
+                            </button>
+                            <button type="button" className="button button--quiet" onClick={() => setDeleting(null)}>
+                              Keep it
+                            </button>
+                          </span>
+                        ) : (
+                          <button type="button" className="button button--quiet" onClick={() => setDeleting(saved.id)} aria-label={`Delete template “${saved.name}”…`}>
+                            Delete…
+                          </button>
+                        )}
+                      </li>
+                    )
+                  })}
+              </ul>
+              <p className="review__note">Deleting a template doesn’t change any project made from it.</p>
+            </section>
+          ) : null}
           {GROUPS.filter((g) => (show === 'all' || show === 'fits' || show === g.count) && (style === 'all' || style === g.style)).map((group) => {
             const templates = latestTemplates().filter(
               (t) => countOf(t) === group.count && styleOf(t) === group.style && (t.mode === 'seamless') === (group.seamless ?? false) && (show !== 'fits' || fitsSelection(t)),

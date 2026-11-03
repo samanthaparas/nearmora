@@ -10,9 +10,9 @@
 
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { clampCrop, DEFAULT_CROP, MAX_ZOOM, photoArea, type Crop, type Rect } from '@shared/layout'
-import { placeEdit, setEdit } from '@shared/studio/arrange'
+import { addPlace, MAX_PLACES, placeEdit, setEdit } from '@shared/studio/arrange'
 import { snapMove, snapResize, type Guide } from '@shared/studio/snap'
-import { captionText, compose, resolveParams, UnknownTemplateError, type Composition } from '@shared/studio/compose'
+import { captionText, compose, layoutPlaces, resolveParams, UnknownTemplateError, type Composition } from '@shared/studio/compose'
 import { moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '@shared/studio/design'
 import { FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
 import { BACKGROUNDS, BORDER_COLORS, MAX_BORDER, MAX_CAPTION, type Params } from '@shared/studio/params'
@@ -52,6 +52,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   const [replacing, setReplacing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [swiping, setSwiping] = useState(false)
+  // "Save as my template" (S6b): the name being typed, or null when the form is closed.
+  const [templateName, setTemplateName] = useState<string | null>(null)
   // A drag on the preview (S6a): the photo's place when it started, and the lines it's snapping to now.
   const dragStart = useRef<Rect | null>(null)
   const [snapGuides, setSnapGuides] = useState<Guide[]>([])
@@ -68,7 +70,10 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   // A project keeps the layout version it was made with; a newer one is offered, never applied without asking.
   const newer = latestTemplates().find((t) => t.id === template.id && t.version > template.version)
   const resolved = resolveParams(template, design.params)
-  const position = Math.min(selected, design.items.length - 1)
+  // The selected place, or (if it was just removed, S6b) the first place still in the layout.
+  const isRemoved = (at: number) => design.params.edits?.[String(at)]?.removed === true
+  const wanted = Math.min(selected, design.items.length - 1)
+  const position = isRemoved(wanted) ? Math.max(0, design.items.findIndex((_, at) => !isRemoved(at))) : wanted
   const item = design.items[position]!
   // Photo details (size, offline, file name) come from the last save; a just-replaced photo has none until it lands.
   const detailOf = (assetId: string | null) => (assetId ? project.items.find((i) => i.assetId === assetId) : undefined)
@@ -316,7 +321,10 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
               Layout
             </h3>
             <ul className="studio__template-list">
-              {templatesFor(design.items.length).map((t) => (
+              {/* The layout's own places decide which layouts fit; added places (S6b) come along, except into a carousel. */}
+              {templatesFor(layoutPlaces(design.items.length, design.params))
+                .filter((t) => !(design.params.extra?.length && t.mode === 'carousel'))
+                .map((t) => (
                 <li key={t.id}>
                   <button
                     type="button"
@@ -416,7 +424,9 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
 
           {/* Pick the photo to adjust (or click it on the preview); its frame is outlined in the preview. */}
           <ol className="studio__items" aria-label="Photos in this project, in order">
-            {design.items.map((i, at) => (
+            {design.items.map((i, at) =>
+              // Removed places (S6b) are listed with the hidden photos instead, where they can be restored.
+              design.params.edits?.[String(at)]?.removed ? null : (
               <li key={i.assetId ?? `empty-${at}`} className="studio__item">
                 <button
                   type="button"
@@ -434,8 +444,24 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
                   </span>
                 </button>
               </li>
-            ))}
+              ),
+            )}
           </ol>
+          {/* S6b: a new empty place in the middle of the canvas, for collages and seamless designs. */}
+          {composition.mode !== 'carousel' ? (
+            <button
+              type="button"
+              className="button button--quiet"
+              disabled={design.items.length >= MAX_PLACES}
+              title={design.items.length >= MAX_PLACES ? `A project holds up to ${MAX_PLACES} places` : undefined}
+              onClick={() => {
+                change(addPlace(design, composition), `Place ${design.items.length + 1} added`)
+                setSelected(design.items.length)
+              }}
+            >
+              Add a place
+            </button>
+          ) : null}
 
           <ArrangePanel design={design} composition={composition} position={position} change={change} live={live} />
 
@@ -554,6 +580,39 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             }`}
             offerWholeDesign={composition.mode === 'seamless'}
           />
+
+          {/* S6b: keep this layout, with its settings and places (not its photos), to start new projects from. */}
+          {templateName === null ? (
+            <button type="button" className="button button--quiet" onClick={() => setTemplateName(project.title)}>
+              Save as my template…
+            </button>
+          ) : (
+            <form
+              className="library__confirm"
+              aria-label="Save as my template"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void window.nearmora.saveMyTemplate({ projectId, name: templateName }).then((result) => {
+                  setStatus(result.ok ? `Saved “${result.data.name}” to My templates. Find it in Favorites when you start a project.` : 'That template couldn’t be saved.')
+                  if (result.ok) setTemplateName(null)
+                })
+              }}
+            >
+              <p className="review__note">Keeps the layout, size, settings and places, not the photos. Changing this project later won’t change the template.</p>
+              <label className="library__field">
+                <span>Template name</span>
+                <input value={templateName} maxLength={80} onChange={(e) => setTemplateName(e.target.value)} />
+              </label>
+              <div className="library__source-actions">
+                <button type="submit" className="button button--secondary" disabled={templateName.trim() === ''}>
+                  Save template
+                </button>
+                <button type="button" className="button button--quiet" onClick={() => setTemplateName(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
 
           <button type="button" className="button button--quiet" onClick={() => setConfirmDelete(true)}>
             Delete project…

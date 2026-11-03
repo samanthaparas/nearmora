@@ -65,6 +65,14 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'cleanup:duplicates': () => ({ groups: [], total: 0 }),
     'cleanup:remove': () => ({ status: 'cancelled' }),
     'cleanup:history': () => [],
+    'myTemplates:list': () => [],
+    'myTemplates:save': () => {
+      throw new Error('not used')
+    },
+    'myTemplates:delete': () => ({ deleted: true }),
+    'projects:createFromMine': () => {
+      throw new Error('not used')
+    },
     ...overrides,
   }
   const logError = vi.fn()

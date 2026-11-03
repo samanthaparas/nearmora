@@ -22,20 +22,29 @@ export const MAX_ROUNDING = 300
 /** Most photos a layout holds (carousels take up to 10); edits and layer order are keyed by these positions. */
 const MAX_SLOTS = 20
 
+// A rectangle as fractions of the canvas (a little way off it is allowed), so it keeps its proportions at any size.
+const fractionRect = z.object({ x: z.number().min(-1).max(2), y: z.number().min(-1).max(2), width: z.number().gt(0).max(2), height: z.number().gt(0).max(2) }).strict()
+
 /**
  * The person's own changes to one photo's place (S6a, ADR-0022). A moved or resized place is stored as fractions of
  * the canvas, so it keeps its proportions if the size changes; everything not set comes from the layout.
  */
 export const SlotEditSchema = z
   .object({
-    rect: z.object({ x: z.number().min(-1).max(2), y: z.number().min(-1).max(2), width: z.number().gt(0).max(2), height: z.number().gt(0).max(2) }).strict().optional(),
+    rect: fractionRect.optional(),
     rotation: z.number().min(-180).max(180).optional(),
     rounding: z.number().min(0).max(MAX_ROUNDING).optional(),
     flip: z.literal(true).optional(),
     locked: z.literal(true).optional(),
     hidden: z.literal(true).optional(),
+    // S6b: a place the person removed from the layout. It holds no photo and isn't drawn; it can be restored.
+    removed: z.literal(true).optional(),
   })
   .strict()
+
+/** Most places a person can add to a layout (S6b); a project still holds at most 10 places in all. */
+export const MAX_EXTRA_PLACES = 8
+
 export type SlotEdit = z.infer<typeof SlotEditSchema>
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, 'Colours are stored as #rrggbb')
@@ -56,6 +65,8 @@ export const ParamsSchema = z
     // S6a: changes to each photo's place, by position ("0", "1", …), and the drawing order of positions, back to front.
     edits: z.record(z.string().regex(/^(0|[1-9][0-9]?)$/), SlotEditSchema).optional(),
     order: z.array(z.number().int().min(0).max(MAX_SLOTS - 1)).max(MAX_SLOTS).optional(),
+    // S6b: places the person added, after the layout's own, as fractions of the canvas (collages and seamless designs).
+    extra: z.array(fractionRect).max(MAX_EXTRA_PLACES).optional(),
   })
   .strict()
 export type Params = z.infer<typeof ParamsSchema>

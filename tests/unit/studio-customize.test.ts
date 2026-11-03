@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { emptyPlace, moveInOrder, placeEdit, setEdit } from '../../src/shared/studio/arrange'
-import { compose, layerOrder } from '../../src/shared/studio/compose'
+import { addPlace, emptyPlace, moveInOrder, moveToEnd, placeEdit, removePlace, restorePlace, setEdit } from '../../src/shared/studio/arrange'
+import { compose, layerOrder, layoutPlaces } from '../../src/shared/studio/compose'
 import { DesignSchema, type Design } from '../../src/shared/studio/design'
 import { layers } from '../../src/shared/studio/layers'
 import { ParamsSchema } from '../../src/shared/studio/params'
@@ -147,5 +147,42 @@ describe('snapping', () => {
         { axis: 'y', at: 800 },
       ],
     })
+  })
+})
+
+// ---- S6b: added and removed places, front and back. ----
+
+describe('places the person adds or removes (S6b)', () => {
+  it('stores added places as fractions of the canvas, at most eight, and a removed flag per place', () => {
+    const extra = (n: number) => Array.from({ length: n }, () => ({ x: 0.3, y: 0.3, width: 0.3, height: 0.3 }))
+    expect(ParamsSchema.safeParse({ v: 1, extra: extra(8), edits: { '9': { removed: true } } }).success).toBe(true)
+    expect(ParamsSchema.safeParse({ v: 1, extra: extra(9) }).success).toBe(false)
+    expect(ParamsSchema.safeParse({ v: 1, extra: [{ x: 0, y: 0, width: 0, height: 1 }] }).success).toBe(false)
+  })
+
+  it('an added place comes after the layout’s own, empty and in the middle; the layout’s places don’t move', () => {
+    const before = composed(quartet())
+    const design = addPlace(quartet(), before)
+    expect(design.items.map((i) => i.assetId)).toEqual([A, B, C, D, null])
+    expect(layoutPlaces(design.items.length, design.params)).toBe(4)
+    const after = composed(design)
+    expect(after.elements.slice(0, 4).map((e) => e.rect)).toEqual(before.elements.map((e) => e.rect))
+    expect(after.elements[4]!.rect).toEqual({ x: 360, y: 360, width: 360, height: 360 })
+  })
+
+  it('a removed place loses its photo, isn’t drawn, and comes back empty where it was', () => {
+    const design = removePlace(quartet(), 1)
+    expect(design.items[1]!.assetId).toBeNull()
+    const c = composed(design)
+    expect(c.elements.find((e) => e.slot === 1)!.removed).toBe(true)
+    expect(layers(c, 0).flatMap((l) => (l.kind === 'photo' ? [l.element.slot] : []))).toEqual([0, 2, 3])
+    const restored = composed(restorePlace(design, 1))
+    expect(restored.elements.find((e) => e.slot === 1)).toMatchObject({ removed: false, rect: composed(quartet()).elements[1]!.rect })
+  })
+
+  it('bring to front and send to back move a photo all the way', () => {
+    const design = quartet()
+    expect(composed(moveToEnd(design, composed(design), 0, 'front')).elements.map((e) => e.slot)).toEqual([1, 2, 3, 0])
+    expect(composed(moveToEnd(design, composed(design), 3, 'back')).elements.map((e) => e.slot)).toEqual([3, 0, 1, 2])
   })
 })

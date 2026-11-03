@@ -9,7 +9,7 @@ import { FORMATS, type FormatId } from './formats'
 import type { Params, ResolvedParams } from './params'
 import { BACKGROUNDS } from './params'
 import { roundedRect, transformPath, type Decor } from './scene'
-import { findTemplate, formatsFor, type Mode, type TemplateDefinition } from './templates'
+import { findTemplate, formatsFor, type Mode, type Slot, type TemplateDefinition } from './templates'
 
 /** One photo on one output canvas. `slot` is the project's photo position it shows. */
 export interface PhotoElement {
@@ -30,6 +30,8 @@ export interface PhotoElement {
   hidden: boolean
   /** Locked by the person: the editor won't move or resize it (S6a). */
   locked: boolean
+  /** A place the person removed from the layout (S6b): no photo, not drawn, listed so it can be restored. */
+  removed: boolean
 }
 
 export interface Composition {
@@ -96,6 +98,9 @@ export function layerOrder(elements: PhotoElement[], order: readonly number[] | 
   return [...ordered, ...elements.filter((e) => !seen.has(e.slot))]
 }
 
+/** How many of a design's places come from its layout; the rest are places the person added (S6b). */
+export const layoutPlaces = (photoCount: number, params: Params): number => photoCount - (params.extra?.length ?? 0)
+
 export function compose(input: ComposeInput): Composition {
   const template = findTemplate(input.templateId, input.templateVersion)
   if (!template) throw new UnknownTemplateError(`Unknown template ${input.templateId} v${input.templateVersion}`)
@@ -109,7 +114,10 @@ export function compose(input: ComposeInput): Composition {
   // Reference pixels are pixels on a canvas (or slide) whose shorter side is 1080; this scales them to this one.
   const scale = Math.min(slide.width, height) / 1080
   const spacing = { margin: resolved.margin * scale, gutter: resolved.gutter * scale }
-  const slots = template.slots({ width, height }, spacing, input.photoCount)
+  // The layout's own places, then any the person added (S6b), placed as fractions of the canvas.
+  const fromLayout = layoutPlaces(input.photoCount, input.params)
+  const added = (input.params.extra ?? []).map((r): Slot => ({ canvas: 0, rect: { x: r.x * width, y: r.y * height, width: r.width * width, height: r.height * height } }))
+  const slots = [...template.slots({ width, height }, spacing, fromLayout).slice(0, fromLayout), ...added]
   const elements = slots.slice(0, input.photoCount).map((slot, index): PhotoElement => {
     // The person's own changes to this photo's place (S6a), on top of the layout's.
     const edit = input.params.edits?.[String(index)]
@@ -134,6 +142,7 @@ export function compose(input: ComposeInput): Composition {
       flip: edit?.flip === true,
       hidden: edit?.hidden === true,
       locked: edit?.locked === true,
+      removed: edit?.removed === true,
     }
   })
   return {

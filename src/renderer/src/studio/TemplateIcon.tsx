@@ -9,12 +9,19 @@ import { compose } from '@shared/studio/compose'
 import type { FormatId } from '@shared/studio/formats'
 import { layers, svgTransform } from '@shared/studio/layers'
 import { cutPositions } from '@shared/studio/slices'
+import type { Params } from '@shared/studio/params'
 import { formatFor, type TemplateDefinition } from '@shared/studio/templates'
 
-export function TemplateIcon({ template, format = 'square' }: { template: TemplateDefinition; format?: FormatId }) {
+export function TemplateIcon({ template, format = 'square', params = { v: 1 }, photoCount }: {
+  template: TemplateDefinition
+  format?: FormatId
+  /** A saved template's own settings and places (S6b); the layout's defaults otherwise. */
+  params?: Params
+  photoCount?: number
+}) {
   // Carousels are drawn as two slides side by side; collages as their single canvas, at the chosen size's shape (or the
   // nearest one the layout allows); seamless carousels as their whole wide design.
-  const composition = compose({ templateId: template.id, templateVersion: template.version, format: formatFor(template, format), params: { v: 1 }, photoCount: template.photos.min })
+  const composition = compose({ templateId: template.id, templateVersion: template.version, format: formatFor(template, format), params, photoCount: photoCount ?? template.photos.min })
   const { width, height } = composition
   const slides = Math.min(composition.canvasCount, 2)
   const gap = Math.min(width, height) / 18

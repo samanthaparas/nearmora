@@ -574,6 +574,77 @@ test('Customize: drag, resize, nudge, flip, lock, hide and show, layer order and
   await app.close()
 })
 
+test('Advanced: add and fill a place, remove and restore one, and save it as my template to start a new project from', async () => {
+  let { app } = await launchApp(profile)
+  let page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (const i of [0, 1, 2, 3]) await pick.nth(i).click()
+  await page.getByRole('region', { name: 'Four photos' }).getByRole('button', { name: /^Gallery mat/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Gallery mat' })).toBeVisible()
+  const saved = (text: string) => expect(page.getByText(`${text}. All changes saved.`)).toBeVisible()
+
+  // Add a fifth place and fill it with the one favorite not in the project yet.
+  await page.getByRole('button', { name: 'Add a place' }).click()
+  await saved('Place 5 added')
+  await expect(page.getByRole('heading', { name: 'Arrange photo 5' })).toBeVisible()
+  await page.getByRole('button', { name: 'Fill with a photo…' }).click()
+  await page.getByRole('group', { name: 'Replace photo 5 with a favorite' }).getByRole('button', { name: /^Use / }).first().click()
+  await saved('Replaced photo 5')
+  // A new place is drawn in front; it can go all the way back, and all the way forward again.
+  await expect(page.getByRole('button', { name: 'Bring to front' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Send to back' }).click()
+  await saved('Photo 5 sent to the back')
+  await page.getByRole('button', { name: 'Bring to front' }).click()
+  await saved('Photo 5 brought to the front')
+  await expect(page.getByRole('button', { name: 'Bring to front' })).toBeDisabled()
+
+  // Remove place 2: it leaves the strip and is listed, ready to restore.
+  await page.getByRole('button', { name: 'Adjust photo 2' }).click()
+  await page.getByRole('button', { name: 'Remove this place' }).click()
+  await saved('Place 2 removed')
+  await expect(page.getByRole('button', { name: /^Adjust photo 2/ })).toHaveCount(0)
+  // The removed place is no longer the one being edited: the first place still in the layout is.
+  await expect(page.getByRole('heading', { name: 'Arrange photo 1' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Replace…' })).toBeVisible()
+  const removed = page.getByRole('region', { name: 'Removed places (1)' })
+  await removed.getByRole('button', { name: 'Restore place 2' }).click()
+  await saved('Place 2 restored')
+  await expect(page.getByRole('button', { name: 'Adjust photo 2, empty place' })).toBeVisible()
+  await page.getByRole('button', { name: 'Remove this place' }).click()
+  await saved('Place 2 removed')
+
+  // Save as my template: the layout, settings and places, not the photos.
+  await page.getByRole('button', { name: 'Save as my template…' }).click()
+  await page.getByLabel('Template name').fill('Mat plus one')
+  await page.getByRole('button', { name: 'Save template' }).click()
+  await expect(page.getByText('Saved “Mat plus one” to My templates.', { exact: false })).toBeVisible()
+  await app.close()
+
+  // After a restart it's offered in Favorites, for exactly as many photos as its places that weren't removed.
+  ;({ app } = await launchApp(profile))
+  page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const mine = page.getByRole('region', { name: 'My templates' })
+  const button = mine.getByRole('button', { name: /^Mat plus one/ })
+  await expect(button).toContainText('(select 4)')
+  await expect(button).toBeDisabled()
+  for (const i of [1, 2, 3, 4]) await page.getByRole('button', { name: /^Select: / }).nth(i).click()
+  await button.click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Mat plus one' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Removed places (1)' })).toBeVisible()
+  await expect(page.getByText('Gallery mat · 5 photos', { exact: false })).toBeVisible() // the layout it's based on, with its added place
+
+  // Deleting the template asks first and leaves this project as it is.
+  await nav(page, 'Favorites')
+  await mine.getByRole('button', { name: 'Delete template “Mat plus one”…' }).click()
+  await mine.getByRole('button', { name: 'Delete “Mat plus one”' }).click()
+  await expect(page.getByRole('region', { name: 'My templates' })).toHaveCount(0)
+  await nav(page, 'Memory Studio')
+  await expect(page.getByRole('button', { name: /Mat plus one/ }).first()).toBeVisible()
+  await app.close()
+})
+
 test('captions wrap and keep the line breaks typed, the same after a restart', async () => {
   let { app } = await launchApp(profile)
   let page = await app.firstWindow()
