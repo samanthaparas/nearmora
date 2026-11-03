@@ -324,3 +324,42 @@ test('sharing and print sizes: small photos are named before a print export, and
   }).toEqual([315, 560])
   await app.close()
 })
+
+test('playful pairs: picked from their own group, with an editable caption that is undoable and kept after a restart', async () => {
+  let { app } = await launchApp(profile)
+  let page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const playful = page.getByRole('region', { name: 'Playful pairs' })
+  await expect(playful.getByRole('button')).toHaveCount(4)
+  const pick = page.getByRole('button', { name: /^Select: / })
+  await pick.nth(0).click()
+  await pick.nth(1).click()
+  await playful.getByRole('button', { name: /^Postcards/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Postcards' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Preview: postcards, square, cream background, caption “Good food, happier people”' })).toBeVisible()
+
+  // Type a new caption: the preview's description follows, and the edit is saved as one undo step.
+  const caption = page.getByLabel('Caption', { exact: true })
+  await expect(caption).toHaveValue('Good food, happier people')
+  await caption.fill('Lisbon, last June')
+  await expect(page.getByText('Caption changed. All changes saved.')).toBeVisible()
+  await expect(page.getByRole('img', { name: /caption “Lisbon, last June”$/ })).toBeVisible()
+  // A character the handwriting font can't draw is named, not silently shown as a box.
+  await caption.fill('Lisbon ♡')
+  await expect(page.getByText('The caption font can’t draw ♡, so it is left out.')).toBeVisible()
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(caption).toHaveValue('Lisbon, last June')
+  await app.close()
+
+  ;({ app } = await launchApp(profile))
+  page = await app.firstWindow()
+  await nav(page, 'Memory Studio')
+  await page.getByRole('button', { name: /Postcards/ }).first().click()
+  await expect(page.getByLabel('Caption', { exact: true })).toHaveValue('Lisbon, last June')
+  // Switching to another playful pair keeps the photos; that layout has no caption field.
+  await page.getByRole('region', { name: 'Layout' }).getByRole('button', { name: 'Circle story' }).click()
+  await expect(page.getByText('Layout changed to Circle story. All changes saved.')).toBeVisible()
+  await expect(page.getByRole('img', { name: /^Preview: circle story, square, cream background$/ })).toBeVisible()
+  await expect(page.getByLabel('Caption', { exact: true })).toHaveCount(0)
+  await app.close()
+})

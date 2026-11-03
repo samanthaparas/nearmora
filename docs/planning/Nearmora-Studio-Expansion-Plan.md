@@ -1,6 +1,6 @@
 # Memory Studio expansion: plan and catalog checklist
 
-Date: 2026-10-30 · Status: approved by the owner (Studio expansion request, 2026-10-30). This amends the roadmap: it adds Studio phases S1–S7 after R6 part 1. R6 part 2 (signing) and R7–R8 are unchanged.
+Date: 2026-10-30 · Status: approved by the owner (Studio expansion request, 2026-10-30). This amends the roadmap: it adds Studio phases S1–S7 after R6 part 1. R6 part 2 (signing) and R7–R8 are unchanged. Amended 2026-11-03 (approved by the owner): S4–S6 gain the strong-fit ideas from the [carousel-app audit](Nearmora-Competitor-Audit.md); the ideas that change product scope are listed at the end, awaiting a decision.
 
 References: the two-photo and four-photo concept boards and their guides (owner's design references, kept outside the repo). They are visual references only. No sample photograph or decoration from the boards is shipped.
 
@@ -28,9 +28,9 @@ References: the two-photo and four-photo concept boards and their guides (owner'
 | **S1** | Versioned composition schema; template definitions; resolver; preview and export drawing from one composition; schema v5 migration of existing projects; first templates: Equal split, Stacked, Classic grid, carousel | Existing projects open and export identically; new projects can start from the three templates |
 | **S2** ✅ | Quick edits: replace photo, swap, fit or fill, background colour, gutter, margin, border width and colour, undo and redo, reset to template | Every Quick edit is undoable and survives restart. Done: edits are saved at once and survive a restart; the undo list covers the current editing session (ADR-0015) |
 | **S3** ✅ | Remaining everyday layouts (8 pairs, 10 quartets) — done first, as S3a, at the owner's request; then social presets (square, portrait, vertical, wide) and print presets with an effective-resolution warning | All 18 everyday layouts are selectable and exported correctly at every preset. Done: S3a (layouts) and S3 (sizes and print warnings, ADR-0016) |
-| **S4** | Playful templates: original decorations (own SVG artwork, provenance documented), captions, masks (circle, arch, torn edge, film, ticket); export compositor spike | Each playful layout is drawn the same in preview and export |
-| **S5** | Seamless carousel: 2–3 slides, boundary guides, slide previews, master-and-slices export | PNG slices reassemble the master exactly |
-| **S6** | Customize and Advanced levels: proportions, rounding, rotation, overlap, lock, hide, move and resize with numeric controls and snapping, layers, add/remove slots, "My templates" | Level switches keep work; custom templates survive restart |
+| **S4** 🟡 | Playful templates: original decorations (own SVG artwork, provenance documented), captions that wrap and accept line breaks, masks (circle, arch, torn edge, film, ticket); template picker filters by photo count and size; export compositor spike | Each playful layout is drawn the same in preview and export; a multi-line caption wraps the same in both |
+| **S5** | Seamless carousel: 2–3 slides, boundary guides, slide previews, master-and-slices export; layouts where a photo spans two slides; a swipe preview (slides side by side, then one at a time); a factual note when a photo's edge or detail crosses a cut, saying the platform may show a small gap there; per-slide "fit with border" so a photo can sit on a mat instead of being cropped; slices cut by the remainder rule (`floor(W / N)`, first `W % N` slices one pixel wider) and encoded with identical settings; zero-padded file numbers in posting order | PNG slices reassemble the master exactly; slice widths add up to the master width for every slide count; files sort in posting order past 9 |
+| **S6** | Customize and Advanced levels: proportions, rounding, rotation, overlap, lock, hide, move and resize with numeric controls and snapping, layers, add/remove slots, "My templates"; snapping to edges, corners and centres; arrow-key nudging; bring forward and send back; flip a photo; take a photo out of a slot without breaking the layout; a visible list of hidden items so none are lost | Level switches keep work; custom templates survive restart; every hidden item can be found and shown again |
 | **S7** | Performance limits, accessibility pass (VoiceOver, 200% zoom, reduced motion), recovery tests, packaged-app verification | Release checklist for Studio passes |
 
 Each phase lands as its own pull request. Unfinished templates are never offered as working choices.
@@ -54,7 +54,18 @@ Status: ✅ implemented · 🟡 partly implemented · ⬜ pending
 
 ### Two-photo, playful
 
-Postcards, Film night, Torn pages, Window light, Love letter, Colorblock, Scrapbook, Then + now, Circle story, Gallery ticket: ⬜ S4
+| # | Layout | Status | Notes |
+|---|---|---|---|
+| 1 | Postcards | ✅ S4a | Tilted cards, editable caption, original postmark |
+| 2 | Film night | ✅ S4a | Strip with see-through sprocket holes; runs across on wide canvases; no brand labels |
+| 3 | Torn pages | ⬜ S4b | |
+| 4 | Window light | ✅ S4a | Arches with fine outlines; taller on tall canvases |
+| 5 | Love letter | ⬜ S4b | |
+| 6 | Colorblock | ⬜ S4b | |
+| 7 | Scrapbook | ⬜ S4b | |
+| 8 | Then + now | ⬜ S4b | Hearts are drawn art: the caption font has no ♡ |
+| 9 | Circle story | ✅ S4a | Large and small circles, dots and a sprig in the free corners |
+| 10 | Gallery ticket | ⬜ S4b | |
 
 ### Four-photo, everyday
 
@@ -114,3 +125,15 @@ Formats are labelled by shape and intended use. No claim about a platform's curr
 | Single collage | ✅ |
 | Standard carousel | ✅ (one photo per slide) |
 | Seamless carousel | ⬜ S5 |
+
+## Ideas from the carousel-app audit, not yet scheduled
+
+From the [carousel-app audit](Nearmora-Competitor-Audit.md). None is built or promised until the owner decides.
+
+| Idea | Why it waits |
+|---|---|
+| Photo-dump grids of 6–12 favourites | Adds a new template family; owner's decision |
+| "Start me off": place the chosen favourites in capture order in a layout that fits their number | Changes how a project starts; must never rank or judge photos; owner's decision |
+| The person's own text or logo mark on exports, off by default | Later; for photographers |
+| Importing the person's own fonts | After S4's compositor; needs a check of font handling and licence wording |
+| Video in templates | Follows the blueprint's video direction, after the photo loop is validated |

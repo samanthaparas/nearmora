@@ -5,7 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { compose, UnknownTemplateError } from '../../src/shared/studio/compose'
+import type { Rect } from '../../src/shared/layout'
+import { compose, UnknownTemplateError, type PhotoElement } from '../../src/shared/studio/compose'
 import { FORMAT_IDS, FORMATS } from '../../src/shared/studio/formats'
 import { readParams } from '../../src/shared/studio/params'
 import { latestTemplates, TEMPLATES, templatesFor } from '../../src/shared/studio/templates'
@@ -13,21 +14,37 @@ import { latestTemplates, TEMPLATES, templatesFor } from '../../src/shared/studi
 const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
   a.x < b.x + b.width - 1e-9 && b.x < a.x + a.width - 1e-9 && a.y < b.y + b.height - 1e-9 && b.y < a.y + a.height - 1e-9
 
+// The area a photo really takes: its card, if any, turned with it.
+function footprint(e: PhotoElement): Rect {
+  const pad = e.frame?.pad ?? 0
+  const w = e.rect.width + 2 * pad
+  const h = e.rect.height + 2 * pad
+  const t = (Math.abs(e.rotation) * Math.PI) / 180
+  const bw = w * Math.cos(t) + h * Math.sin(t)
+  const bh = w * Math.sin(t) + h * Math.cos(t)
+  return { x: e.rect.x + e.rect.width / 2 - bw / 2, y: e.rect.y + e.rect.height / 2 - bh / 2, width: bw, height: bh }
+}
+
+const circlesOverlap = (a: Rect, b: Rect) =>
+  Math.hypot(a.x + a.width / 2 - (b.x + b.width / 2), a.y + a.height / 2 - (b.y + b.height / 2)) < (a.width + b.width) / 2
+
 describe('templates', () => {
   it('each template version is unique, and new projects start from the newest', () => {
     const keys = TEMPLATES.map((t) => `${t.id}@${t.version}`)
     expect(new Set(keys).size).toBe(keys.length)
-    // The full everyday catalog: 8 pairs and 10 quartets, plus the carousel.
+    // The full everyday catalog: 8 pairs and 10 quartets, plus the carousel; and the playful pairs so far (S4a).
     const ids = latestTemplates().map((t) => t.id)
-    expect(ids.filter((id) => id.startsWith('pair-'))).toHaveLength(8)
-    expect(ids.filter((id) => id.startsWith('quartet-'))).toHaveLength(10)
+    const everyday = latestTemplates().filter((t) => t.style !== 'playful').map((t) => t.id)
+    expect(everyday.filter((id) => id.startsWith('pair-'))).toHaveLength(8)
+    expect(everyday.filter((id) => id.startsWith('quartet-'))).toHaveLength(10)
+    expect(latestTemplates().filter((t) => t.style === 'playful').map((t) => t.id)).toEqual(['pair-postcards', 'pair-film-night', 'pair-window-light', 'pair-circle-story'])
     expect(ids).toContain('carousel-full')
     expect(new Set(latestTemplates().map((t) => t.name)).size).toBe(ids.length) // every name is distinct
   })
 
   it('offers only the templates that fit the number of photos selected', () => {
     expect(templatesFor(2).every((t) => t.id.startsWith('pair-') || t.id === 'carousel-full')).toBe(true)
-    expect(templatesFor(2)).toHaveLength(9)
+    expect(templatesFor(2)).toHaveLength(13)
     expect(templatesFor(4).every((t) => t.id.startsWith('quartet-') || t.id === 'carousel-full')).toBe(true)
     expect(templatesFor(4)).toHaveLength(11)
     expect(templatesFor(3).map((t) => t.id)).toEqual(['carousel-full'])
@@ -35,6 +52,8 @@ describe('templates', () => {
   })
 
   // The acceptance rule: a two-photo template has exactly two independent slots, a four-photo template four.
+  // Playful photos may be turned on cards or cut to circles: what must stay inside the canvas is the turned card, and
+  // circles must not overlap as circles (their square rectangles may).
   it('every collage has exactly as many separate, non-overlapping slots as photos, inside the canvas, at every format', () => {
     for (const template of latestTemplates().filter((t) => t.mode === 'single')) {
       for (const format of FORMAT_IDS) {
@@ -43,11 +62,15 @@ describe('templates', () => {
         expect(canvasCount).toBe(1)
         expect(elements.map((e) => e.slot)).toEqual(Array.from({ length: photoCount }, (_, i) => i))
         for (const [i, e] of elements.entries()) {
-          expect(e.rect.x).toBeGreaterThanOrEqual(0)
-          expect(e.rect.y).toBeGreaterThanOrEqual(0)
-          expect(e.rect.x + e.rect.width).toBeLessThanOrEqual(width + 1e-9)
-          expect(e.rect.y + e.rect.height).toBeLessThanOrEqual(height + 1e-9)
-          for (const other of elements.slice(i + 1)) expect(overlaps(e.rect, other.rect)).toBe(false)
+          const box = footprint(e)
+          expect(box.x).toBeGreaterThanOrEqual(-1e-9)
+          expect(box.y).toBeGreaterThanOrEqual(-1e-9)
+          expect(box.x + box.width).toBeLessThanOrEqual(width + 1e-9)
+          expect(box.y + box.height).toBeLessThanOrEqual(height + 1e-9)
+          for (const other of elements.slice(i + 1)) {
+            const round = e.mask?.includes('A') && other.mask?.includes('A') && e.rect.width === e.rect.height && other.rect.width === other.rect.height
+            expect(round ? circlesOverlap(e.rect, other.rect) : overlaps(e.rect, other.rect), `${template.id} at ${format}`).toBe(false)
+          }
         }
       }
     }

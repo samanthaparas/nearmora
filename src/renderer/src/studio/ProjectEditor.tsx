@@ -1,5 +1,5 @@
 /**
- * Editing one Memory Studio project (AC6) with Quick edits: layout, sharing or print size, background colour, margin, gutter, photo
+ * Editing one Memory Studio project (AC6) with Quick edits: layout, captions (playful layouts), sharing or print size, background colour, margin, gutter, photo
  * border, and for each photo its order, swap, replace, fit or fill, crop and zoom. Every edit is saved at once, can be
  * undone and redone (buttons, or ⌘Z and ⇧⌘Z), and "Reset to layout defaults" brings back the layout's own look.
  * The preview is drawn from the same composition as the export. Photos that can't be reached, and photos too small for
@@ -8,12 +8,13 @@
 
 import { useState, type KeyboardEvent } from 'react'
 import { clampCrop, DEFAULT_CROP, MAX_ZOOM, photoArea, type Crop } from '@shared/layout'
-import { compose, resolveParams, UnknownTemplateError, type Composition } from '@shared/studio/compose'
+import { captionText, compose, resolveParams, UnknownTemplateError, type Composition } from '@shared/studio/compose'
 import { moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '@shared/studio/design'
 import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
-import { BACKGROUNDS, BORDER_COLORS, MAX_BORDER, type Params } from '@shared/studio/params'
+import { BACKGROUNDS, BORDER_COLORS, MAX_BORDER, MAX_CAPTION, type Params } from '@shared/studio/params'
 import { printResolution } from '@shared/studio/resolution'
 import { findTemplate, templatesFor } from '@shared/studio/templates'
+import { missingCharacters } from '@shared/studio/text'
 import { ColourChoice } from './ColourChoice'
 import { ExportPanel } from './ExportPanel'
 import { ReplacePhoto } from './ReplacePhoto'
@@ -117,7 +118,11 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           ? `Preview of slide ${canvasIndex + 1} of ${slides}`
           : `Preview: ${template.name.toLowerCase()}, ${FORMATS[design.format].label.toLowerCase()}, ${colourName(resolved.background)} background${
               resolved.borderWidth > 0 ? `, ${colourName(resolved.borderColor)} border` : ''
-            }`
+            }${(template.captions ?? [])
+              .map((c) => captionText(template, design.params)(c.id).trim())
+              .filter(Boolean)
+              .map((words) => `, caption “${words}”`)
+              .join('')}`
       }
     />
   )
@@ -252,6 +257,28 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
               ))}
             </ul>
           </section>
+
+          {/* Playful layouts' captions: typed text shows at once and is saved (as one undo step) when typing pauses. */}
+          {template.captions?.map((caption) => {
+            const words = captionText(template, design.params)(caption.id)
+            const missing = missingCharacters(words)
+            return (
+              <label key={caption.id} className="library__field">
+                <span>{caption.label}</span>
+                <input
+                  value={words}
+                  maxLength={MAX_CAPTION}
+                  aria-describedby={missing.length > 0 ? `missing-${caption.id}` : undefined}
+                  onChange={(e) => live(setParams({ text: { ...design.params.text, [caption.id]: e.target.value } }), `${caption.label} changed`)}
+                />
+                {missing.length > 0 ? (
+                  <span id={`missing-${caption.id}`} className="review__note">
+                    The caption font can’t draw {missing.join(' ')}, so {missing.length === 1 ? 'it is' : 'they are'} left out.
+                  </span>
+                ) : null}
+              </label>
+            )
+          })}
 
           {/* Sizes for screens and sizes for printing, as two groups of one choice. */}
           {(['share', 'print'] as const).map((use) => (

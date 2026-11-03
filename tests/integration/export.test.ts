@@ -9,6 +9,9 @@ import { join } from 'node:path'
 import exifr from 'exifr'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_CROP, type Crop, type Fit, type Rect } from '@shared/layout'
+import { compose } from '@shared/studio/compose'
+import { layers } from '@shared/studio/layers'
 import { FORMAT_IDS, FORMATS } from '@shared/studio/formats'
 import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
@@ -18,7 +21,7 @@ import { setSourceStatus } from '../../src/main/catalog/repositories/sources'
 import { scanSource } from '../../src/main/library/scan'
 import { addSourceFolder } from '../../src/main/library/source-folders'
 import { processImage } from '../../src/main/media/process-image'
-import { renderCanvas, type RenderRequest } from '../../src/main/media/render-export'
+import { renderCanvas, type RenderLayer, type RenderRequest } from '../../src/main/media/render-export'
 import { prepareExport, recoverInterruptedExports, runExport, safeName, type ExportPlan } from '../../src/main/studio/export'
 import { createDiskImage } from '../support/disk-image'
 import { fingerprintFolder, guardFolder } from '../support/originals-guard'
@@ -60,6 +63,15 @@ async function colourAt(file: string, x: number, y: number): Promise<string> {
   return `rgb(${r},${g},${b})`
 }
 
+// One upright, unmasked photo for a render request: the original, its crop and fit, and its place on the canvas.
+const photoLayer = (sourcePath: string, crop: Crop, cell: Rect, fit: Fit = 'fill'): RenderLayer => ({
+  kind: 'photo',
+  sourcePath,
+  crop,
+  fit,
+  element: { rect: cell, rotation: 0, mask: null, frame: null },
+})
+
 // Most renders here have no photo border; the border tests set their own.
 const NO_BORDER = { width: 0, color: '#ffffff' }
 const cellCentre = { left: { x: 48 + 480 / 2, y: 540 }, right: { x: 48 + 480 + 24 + 480 / 2, y: 540 } } // two-photo collage, 1:1
@@ -81,8 +93,8 @@ describe('rendering an export file', () => {
         quality: 90,
         border: NO_BORDER, ppi: null,
         layers: [
-          { sourcePath: photo, crop: { cx: 0.25, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 48, y: 48, width: 480, height: cellHeight } },
-          { sourcePath: photo, crop: { cx: 0.75, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 552, y: 48, width: 480, height: cellHeight } },
+          photoLayer(photo, { cx: 0.25, cy: 0.5, zoom: 1 }, { x: 48, y: 48, width: 480, height: cellHeight }, 'fill'),
+          photoLayer(photo, { cx: 0.75, cy: 0.5, zoom: 1 }, { x: 552, y: 48, width: 480, height: cellHeight }, 'fill'),
         ],
       }
       expect(await renderCanvas(request)).toEqual({ ok: true })
@@ -100,9 +112,9 @@ describe('rendering an export file', () => {
     await twoTone(photo, { split: 'rows', orientation: 6 })
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.9, cy: 0.5, zoom: 3 }, cell, 'fill')] })
     expect(await colourAt(out, 540, 540)).toBe('red')
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [{ sourcePath: photo, crop: { cx: 0.1, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.1, cy: 0.5, zoom: 3 }, cell, 'fill')] })
     expect(await colourAt(out, 540, 540)).toBe('blue')
   })
 
@@ -115,7 +127,7 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.5, cy: 0.5, zoom: 1 }, cell, 'fill')] })
     const meta = await sharp(out).metadata()
     expect({ exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc }).toEqual({ exif: undefined, xmp: undefined, iptc: undefined })
     expect(await exifr.parse(out, { gps: true, xmp: true, iptc: true, tiff: true, exif: true })).toBeUndefined()
@@ -127,7 +139,7 @@ describe('rendering an export file', () => {
     await twoTone(photo, { split: 'columns' })
     const out = join(dir, 'print.jpg')
     const cell = { x: 0, y: 0, width: 2400, height: 2400 }
-    await renderCanvas({ outputPath: out, width: 2400, height: 2400, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: 300, layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }] })
+    await renderCanvas({ outputPath: out, width: 2400, height: 2400, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: 300, layers: [photoLayer(photo, { cx: 0.5, cy: 0.5, zoom: 1 }, cell, 'fill')] })
     const meta = await sharp(out).metadata()
     expect({ density: meta.density, exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc }).toEqual({ density: 300, exif: undefined, xmp: undefined, iptc: undefined })
     expect(await exifr.parse(out, { gps: true, xmp: true, iptc: true, tiff: true, exif: true })).toBeUndefined()
@@ -145,7 +157,7 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     // The cell is the photo's own size, so nothing is resampled and every output pixel should match the source.
-    await renderCanvas({ outputPath: out, width: w, height: h, background: '#ffffff', quality: 92, border: NO_BORDER, ppi: null, layers: [{ sourcePath: stripes, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 0, y: 0, width: w, height: h } }] })
+    await renderCanvas({ outputPath: out, width: w, height: h, background: '#ffffff', quality: 92, border: NO_BORDER, ppi: null, layers: [photoLayer(stripes, { cx: 0.5, cy: 0.5, zoom: 1 }, { x: 0, y: 0, width: w, height: h }, 'fill')] })
     expect((await sharp(out).metadata()).chromaSubsampling).toBe('4:4:4')
     const back = await sharp(out).raw().toBuffer()
     let error = 0
@@ -167,7 +179,7 @@ describe('rendering an export file', () => {
       background: '#ffffff',
       quality: 90,
       border: { width: 60, color: '#f8f0e8' }, ppi: null,
-      layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }],
+      layers: [photoLayer(photo, { cx: 0.5, cy: 0.5, zoom: 1 }, cell, 'fill')],
     })
     expect(result).toEqual({ ok: true })
     expect(await colourAt(out, 20, 540)).toBe('white') // the margin, outside the place
@@ -191,7 +203,7 @@ describe('rendering an export file', () => {
         background: '#ffffff',
         quality: 90,
         border: { width: border, color: '#f8f0e8' }, ppi: null,
-        layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, fit: 'fit', cell }],
+        layers: [photoLayer(photo, { cx: 0.9, cy: 0.5, zoom: 3 }, cell, 'fit')],
       })
     // No border: 1000 × 750, centred, so 125 px of background above and below. The crop is ignored.
     await render(0)
@@ -203,6 +215,78 @@ describe('rendering an export file', () => {
     expect(await colourAt(out, 540, 140)).toBe('white')
     expect(await colourAt(out, 540, 170)).toBe('cream')
     expect(await colourAt(out, 300, 540)).toBe('red')
+  })
+
+  // S4a: playful layouts are drawn from the same layers the preview draws (ADR-0017); these check the pixels.
+  it('draws playful layouts: masks cut photos, film holes show the background, cards and captions are drawn', async () => {
+    const dir = tempDir()
+    const photo = join(dir, 'photo.jpg')
+    await twoTone(photo, { split: 'columns' })
+    const render = async (templateId: string, params: Parameters<typeof compose>[0]['params'] = { v: 1 }) => {
+      const composition = compose({ templateId, templateVersion: 1, format: 'square', params, photoCount: 2 })
+      const out = join(dir, `${templateId}.jpg`)
+      const result = await renderCanvas({
+        outputPath: out,
+        width: 1080,
+        height: 1080,
+        background: composition.background,
+        border: composition.border,
+        ppi: null,
+        quality: 92,
+        layers: layers(composition, 0).map((l): RenderLayer => (l.kind === 'shape' ? l : { kind: 'photo', sourcePath: photo, crop: DEFAULT_CROP, fit: 'fill', element: l.element })),
+      })
+      expect(result).toEqual({ ok: true })
+      return { out, composition }
+    }
+    const near = async (file: string, x: number, y: number, hex: string) => {
+      const [r, g, b] = await sharp(file).extract({ left: Math.round(x), top: Math.round(y), width: 1, height: 1 }).raw().toBuffer()
+      const want = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+      return Math.max(Math.abs(r! - want[0]!), Math.abs(g! - want[1]!), Math.abs(b! - want[2]!)) <= 8
+    }
+
+    // Circles: a rectangle's corner is outside the circle, so it shows the background; the middle is the photo.
+    const circles = await render('pair-circle-story')
+    const big = circles.composition.elements[0]!.rect
+    expect(await colourAt(circles.out, big.x + 6, big.y + 6)).toBe('cream')
+    expect(await colourAt(circles.out, big.x + big.width * 0.25, big.y + big.height / 2)).toBe('red')
+
+    // Arches: the top corners are outside the arch; the bottom is inside.
+    const windows = await render('pair-window-light')
+    const left = windows.composition.elements[0]!.rect
+    expect(await colourAt(windows.out, left.x + 4, left.y + 4)).toBe('cream')
+    expect(await colourAt(windows.out, left.x + left.width * 0.25, left.y + left.height - 20)).toBe('red')
+
+    // Film: the strip is film-coloured, and its sprocket holes are cut through, showing the background colour.
+    const film = await render('pair-film-night', { v: 1, background: '#123456' })
+    // On a square canvas the strip runs down the page; frames are 70% of its width, and its edge bands 12% each.
+    const frame = film.composition.elements[0]!.rect
+    const across = frame.width / 0.7
+    const stripLeft = frame.x - (across - frame.width) / 2
+    let [holes, filmColour] = [0, 0]
+    for (let y = frame.y; y < film.composition.elements[1]!.rect.y + frame.height; y += 4) {
+      const x = stripLeft + 0.06 * across // down the middle of the left edge band
+      if (await near(film.out, x, y, '#123456')) holes++
+      if (await near(film.out, x, y, '#3a2a30')) filmColour++
+    }
+    expect(holes).toBeGreaterThan(10) // the background shows through a column of holes
+    expect(filmColour).toBeGreaterThan(10) // with film between them
+
+    // Postcards: white card around each tilted photo, and the caption drawn in plum.
+    const postcards = await render('pair-postcards')
+    const card = postcards.composition.elements[0]!
+    const t = (card.rotation * Math.PI) / 180
+    const reach = card.rect.height / 2 + card.frame!.pad / 2 // halfway through the card's top edge, turned with the card
+    const cx = card.rect.x + card.rect.width / 2
+    const cy = card.rect.y + card.rect.height / 2
+    expect(await colourAt(postcards.out, cx + reach * Math.sin(t), cy - reach * Math.cos(t))).toBe('white')
+    const caption = postcards.composition.over.find((d) => d.type === 'text')
+    expect(caption).toBeDefined()
+    if (caption?.type === 'text') {
+      const { data, info } = await sharp(postcards.out).extract({ left: Math.round(caption.at.x), top: Math.round(caption.at.y - caption.size), width: 300, height: Math.round(caption.size * 1.2) }).raw().toBuffer({ resolveWithObject: true })
+      let ink = 0
+      for (let i = 0; i < info.width * info.height; i++) if (data[i * 3]! < 140 && data[i * 3 + 2]! < 140) ink++
+      expect(ink).toBeGreaterThan(300) // dark plum letter strokes
+    }
   })
 
   it('flattens transparency onto the chosen background, on purpose', async () => {
@@ -217,7 +301,7 @@ describe('rendering an export file', () => {
       background: '#f8f0e8',
       quality: 90,
       border: NO_BORDER, ppi: null,
-      layers: [{ sourcePath: clear, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 0, y: 0, width: 1080, height: 1080 } }],
+      layers: [photoLayer(clear, { cx: 0.5, cy: 0.5, zoom: 1 }, { x: 0, y: 0, width: 1080, height: 1080 }, 'fill')],
     })
     expect(await colourAt(out, 540, 540)).toBe('cream')
   })
@@ -291,6 +375,17 @@ describe('exporting a project', () => {
       })
     }
   }, 120_000)
+
+  it('exports a playful project through the same staged, verified pipeline', async () => {
+    const { db, profile, project } = await exportable()
+    for (const templateId of ['pair-postcards', 'pair-film-night', 'pair-window-light', 'pair-circle-story']) {
+      setDesign(db, { projectId: project.id, design: { ...designOf(getProject(db, project.id)), templateId, templateVersion: 1, format: 'print-8x10' } })
+      const outcome = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
+      if (outcome.status !== 'done') throw new Error(`${templateId}: ${JSON.stringify(outcome)}`)
+      const meta = await sharp(join(outcome.folder, outcome.files[0]!)).metadata()
+      expect({ templateId, width: meta.width, height: meta.height, density: meta.density, exif: meta.exif }).toEqual({ templateId, width: 2400, height: 3000, density: 300, exif: undefined })
+    }
+  }, 60_000)
 
   it('refuses a destination inside a photo folder or inside Nearmora’s data, or one it can’t write to', async () => {
     const { db, profile, photos, project } = await exportable()
@@ -378,7 +473,7 @@ describe.skipIf(process.platform !== 'darwin')('a full disk (AC8)', () => {
   it('fails cleanly with nothing left behind, and a retry elsewhere completes', async () => {
     const { db, profile, project } = await exportable('carousel')
     // Big, noisy photos make big JPEGs, so a 2 MB volume fills up partway through.
-    const noisy: RenderRequest['layers'][number]['sourcePath'] = join(tempDir(), 'noise.jpg')
+    const noisy = join(tempDir(), 'noise.jpg')
     await sharp({ create: { width: 2000, height: 2000, channels: 3, background: '#808080', noise: { type: 'gaussian', mean: 128, sigma: 60 } } })
       .jpeg({ quality: 95 })
       .toFile(noisy)
@@ -388,7 +483,7 @@ describe.skipIf(process.platform !== 'darwin')('a full disk (AC8)', () => {
     try {
       const plan = await ready(db, project.id, mount, profile.dir)
       // Swap in the noisy photo so each slide is large; the plan is otherwise the real one.
-      const heavy: ExportPlan = { ...plan, outputs: plan.outputs.map((o) => ({ ...o, layers: o.layers.map((l) => ({ ...l, sourcePath: noisy })) })) }
+      const heavy: ExportPlan = { ...plan, outputs: plan.outputs.map((o) => ({ ...o, layers: o.layers.map((l) => (l.kind === 'photo' ? { ...l, sourcePath: noisy } : l)) })) }
       const outcome = await runExport({ db, render }, heavy)
       expect(outcome).toMatchObject({ status: 'failed', reason: 'disk_full' })
       expect(readdirSync(mount).filter((name) => !name.startsWith('.fseventsd') && !name.startsWith('.Trashes'))).toEqual([])

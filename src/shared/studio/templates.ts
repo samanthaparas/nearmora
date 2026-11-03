@@ -5,6 +5,8 @@
  */
 
 import type { Rect } from '../layout'
+import { PLAYFUL_TEMPLATES } from './playful'
+import type { Decor } from './scene'
 
 /** Single: one image. Carousel: one image per photo, in order. (Seamless carousels arrive in phase S5.) */
 export type Mode = 'single' | 'carousel'
@@ -13,6 +15,20 @@ export type Mode = 'single' | 'carousel'
 export interface Slot {
   canvas: number
   rect: Rect
+  /** Degrees clockwise, around the rectangle's centre (playful layouts tilt some photos). */
+  rotation?: number
+  /** A shape the photo is cut to (SVG path in canvas pixels), such as a circle or an arch. */
+  mask?: string
+  /** A card behind the photo, `pad` pixels wider on every side, turned with it (a printed-photo look). */
+  frame?: { pad: number; color: string }
+}
+
+/** A caption a template offers; the person can change or clear its text. */
+export interface CaptionSlot {
+  id: string
+  /** What the editor calls it, such as "Caption". */
+  label: string
+  default: string
 }
 
 export interface TemplateDefinition {
@@ -27,6 +43,11 @@ export interface TemplateDefinition {
   defaults: { margin: number; gutter: number }
   /** `margin` and `gutter` here are already scaled to this canvas. */
   slots(canvas: { width: number; height: number }, spacing: { margin: number; gutter: number }, photoCount: number): Slot[]
+  /** Playful layouts add shapes, line art and captions; everyday layouts have only photos. */
+  style?: 'playful'
+  captions?: CaptionSlot[]
+  /** Drawn below the photos (`under`) and above them (`over`), in canvas pixels. `text` gives each caption's words. */
+  decor?(canvas: { width: number; height: number }, spacing: { margin: number; gutter: number }, text: (id: string) => string): { under: Decor[]; over: Decor[] }
 }
 
 // Equal cells in rows and columns, inside the margin and separated by the gutter. Left to right, then top to bottom.
@@ -335,6 +356,7 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
     slots: (canvas, _spacing, photoCount) =>
       Array.from({ length: photoCount }, (_, index) => ({ canvas: index, rect: { x: 0, y: 0, width: canvas.width, height: canvas.height } })),
   },
+  ...PLAYFUL_TEMPLATES,
 ]
 
 /** A template by id and version, or undefined if this version of the app doesn't know it. */
