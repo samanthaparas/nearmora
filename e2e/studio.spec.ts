@@ -1,6 +1,6 @@
 /**
  * End-to-end tests of Favorites and Memory Studio (AC6) in the built app: favorite a burst, start collages and a
- * carousel from Favorites, adjust order and crop by keyboard, restart and find the draft exactly as left, see
+ * carousel from Favorites (including playful pairs and quartets), adjust order and crop by keyboard, restart and find the draft exactly as left, see
  * offline photos named, and delete a project with every original untouched.
  */
 
@@ -366,6 +366,42 @@ test('playful pairs: picked from their own group, with an editable caption that 
   await app.close()
 })
 
+test('playful quartets: four photos in their own group, a label per photo that is undoable and kept after a restart', async () => {
+  let { app } = await launchApp(profile)
+  let page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const quartets = page.getByRole('region', { name: 'Playful quartets' })
+  await expect(quartets.getByRole('button')).toHaveCount(10)
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (const i of [0, 1, 2, 3]) await pick.nth(i).click()
+  await quartets.getByRole('button', { name: /^Four seasons/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Four seasons' })).toBeVisible()
+
+  // Each photo has its own label field; a change is one undo step.
+  await expect(page.getByLabel('First label', { exact: true })).toHaveValue('spring')
+  await expect(page.getByLabel('Fourth label', { exact: true })).toHaveValue('winter')
+  const third = page.getByLabel('Third label', { exact: true })
+  await third.fill('Porto')
+  await expect(page.getByText('Third label changed. All changes saved.')).toBeVisible()
+  await page.waitForTimeout(400) // let this change stand as its own undo step
+  await third.fill('Porto, rainy')
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(third).toHaveValue('Porto')
+  await app.close()
+
+  ;({ app } = await launchApp(profile))
+  page = await app.firstWindow()
+  await nav(page, 'Memory Studio')
+  await page.getByRole('button', { name: /Four seasons/ }).first().click()
+  await expect(page.getByLabel('Third label', { exact: true })).toHaveValue('Porto')
+  // Switching to another playful quartet keeps the four photos; that layout has no labels.
+  await page.getByRole('region', { name: 'Layout' }).getByRole('button', { name: 'Garden windows' }).click()
+  await expect(page.getByText('Layout changed to Garden windows. All changes saved.')).toBeVisible()
+  await expect(page.getByRole('img', { name: /^Preview: garden windows, square, cream background$/ })).toBeVisible()
+  await expect(page.getByLabel('Third label', { exact: true })).toHaveCount(0)
+  await app.close()
+})
+
 test('captions wrap and keep the line breaks typed, the same after a restart', async () => {
   let { app } = await launchApp(profile)
   let page = await app.firstWindow()
@@ -402,14 +438,18 @@ test('picker filters: by photo count, by style and by what fits the selection; t
   const page = await app.firstWindow()
   await nav(page, 'Favorites')
   const groups = page.locator('.studio__templates').getByRole('region')
-  await expect(groups).toHaveCount(4)
+  await expect(groups).toHaveCount(5)
 
-  // Style: playful shows only the playful pairs.
+  // Style: playful shows only the playful pairs and quartets.
   await page.getByRole('group', { name: 'Style' }).getByLabel('Playful').check()
-  await expect(groups).toHaveCount(1)
+  await expect(groups).toHaveCount(2)
   await expect(page.getByRole('region', { name: 'Playful pairs' })).toBeVisible()
-  // Playful and four photos: nothing yet, and it says so.
+  // Playful and four photos: just the playful quartets.
   await page.getByRole('group', { name: 'Show' }).getByLabel('Four photos').check()
+  await expect(groups).toHaveCount(1)
+  await expect(page.getByRole('region', { name: 'Playful quartets' }).getByRole('button')).toHaveCount(10)
+  // Playful carousels don't exist, and it says so.
+  await page.getByRole('group', { name: 'Show' }).getByLabel('Carousel').check()
   await expect(groups).toHaveCount(0)
   await expect(page.getByText('No layouts match these filters.')).toBeVisible()
 

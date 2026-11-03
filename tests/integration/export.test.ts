@@ -13,6 +13,7 @@ import { DEFAULT_CROP, type Crop, type Fit, type Rect } from '@shared/layout'
 import { compose } from '@shared/studio/compose'
 import { layers } from '@shared/studio/layers'
 import { PLAYFUL_TEMPLATES } from '@shared/studio/playful'
+import { PLAYFUL_QUARTETS } from '@shared/studio/playful-quartets'
 import { FORMAT_IDS, FORMATS } from '@shared/studio/formats'
 import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
@@ -329,19 +330,21 @@ describe('rendering an export file', () => {
 })
 
 // A scanned folder of two-tone photos and a project, ready to export.
-async function exportable(kind: 'collage' | 'carousel' = 'collage') {
+async function exportable(kind: 'collage' | 'carousel' | 'quartet' = 'collage') {
   const profile = tempProfile()
   const db = await openTestCatalog(profile.catalogFile)
   const thumbnailsDir = join(profile.dir, 'thumbnails')
   mkdirSync(thumbnailsDir)
   const photos = join(tempDir(), 'Photos')
   mkdirSync(photos)
-  for (const [i, name] of ['a.jpg', 'b.jpg', 'c.jpg'].entries()) await twoTone(join(photos, name), { split: i === 1 ? 'rows' : 'columns', shade: i * 10 })
+  for (const [i, name] of ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'].entries()) await twoTone(join(photos, name), { split: i === 1 ? 'rows' : 'columns', shade: i * 10 })
   const added = addSourceFolder(db, photos, profile.dir)
   if (!added.ok) throw new Error(added.reason)
   await scanSource({ db, thumbnailsDir, processImage }, added.source.id)
-  const assets = (db.prepare('SELECT asset_id FROM asset_location ORDER BY relative_path').pluck().all() as string[]).slice(0, kind === 'carousel' ? 3 : 2)
-  const project = createProject(db, { templateId: kind === 'carousel' ? 'carousel-full' : 'pair-equal-split', format: 'square', assetIds: assets })
+  const count = { collage: 2, carousel: 3, quartet: 4 }[kind]
+  const assets = (db.prepare('SELECT asset_id FROM asset_location ORDER BY relative_path').pluck().all() as string[]).slice(0, count)
+  const templateId = { collage: 'pair-equal-split', carousel: 'carousel-full', quartet: 'quartet-classic-grid' }[kind]
+  const project = createProject(db, { templateId, format: 'square', assetIds: assets })
   return { db, profile, photos, sourceId: added.source.id, project }
 }
 
@@ -407,6 +410,18 @@ describe('exporting a project', () => {
       expect({ templateId, width: meta.width, height: meta.height, density: meta.density, exif: meta.exif }).toEqual({ templateId, width: 2400, height: 3000, density: 300, exif: undefined })
     }
   }, 60_000)
+
+  // S4c: every playful quartet goes through the full pipeline too, at a print size, with all four photos placed.
+  it('exports each playful quartet through the same staged, verified pipeline', async () => {
+    const { db, profile, project } = await exportable('quartet')
+    for (const templateId of PLAYFUL_QUARTETS.map((t) => t.id)) {
+      setDesign(db, { projectId: project.id, design: { ...designOf(getProject(db, project.id)), templateId, templateVersion: 1, format: 'print-8x10' } })
+      const outcome = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
+      if (outcome.status !== 'done') throw new Error(`${templateId}: ${JSON.stringify(outcome)}`)
+      const meta = await sharp(join(outcome.folder, outcome.files[0]!)).metadata()
+      expect({ templateId, width: meta.width, height: meta.height, density: meta.density, exif: meta.exif }).toEqual({ templateId, width: 2400, height: 3000, density: 300, exif: undefined })
+    }
+  }, 120_000)
 
   it('refuses a destination inside a photo folder or inside Nearmora’s data, or one it can’t write to', async () => {
     const { db, profile, photos, project } = await exportable()

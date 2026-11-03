@@ -21,6 +21,7 @@ const GROUPS: Array<{ title: string; count: Count; style: 'everyday' | 'playful'
   { title: 'Two photos', count: 'two', style: 'everyday' },
   { title: 'Playful pairs', count: 'two', style: 'playful' },
   { title: 'Four photos', count: 'four', style: 'everyday' },
+  { title: 'Playful quartets', count: 'four', style: 'playful' },
   { title: 'Carousel', count: 'carousel', style: 'everyday' },
 ]
 const countOf = (t: TemplateDefinition): Count => (t.mode === 'carousel' ? 'carousel' : t.photos.max === 2 ? 'two' : 'four')

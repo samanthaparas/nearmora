@@ -32,12 +32,14 @@ describe('templates', () => {
   it('each template version is unique, and new projects start from the newest', () => {
     const keys = TEMPLATES.map((t) => `${t.id}@${t.version}`)
     expect(new Set(keys).size).toBe(keys.length)
-    // The full everyday catalog: 8 pairs and 10 quartets, plus the carousel; and all ten playful pairs (S4a, S4b).
+    // The full everyday catalog: 8 pairs and 10 quartets, plus the carousel; all ten playful pairs (S4a, S4b) and all
+    // ten playful quartets (S4c), each in the concept board's order.
     const ids = latestTemplates().map((t) => t.id)
     const everyday = latestTemplates().filter((t) => t.style !== 'playful').map((t) => t.id)
     expect(everyday.filter((id) => id.startsWith('pair-'))).toHaveLength(8)
     expect(everyday.filter((id) => id.startsWith('quartet-'))).toHaveLength(10)
-    expect(latestTemplates().filter((t) => t.style === 'playful').map((t) => t.name)).toEqual([
+    const playful = (count: number) => latestTemplates().filter((t) => t.style === 'playful' && t.photos.min === count).map((t) => t.name)
+    expect(playful(2)).toEqual([
       'Postcards',
       'Film night',
       'Torn pages',
@@ -49,6 +51,18 @@ describe('templates', () => {
       'Circle story',
       'Gallery ticket',
     ])
+    expect(playful(4)).toEqual([
+      'Postcard stack',
+      'Film weekend',
+      'Torn journal',
+      'Garden windows',
+      'Love notes',
+      'Color play',
+      'Travel scrapbook',
+      'Four seasons',
+      'Circle collection',
+      'Keepsake ticket',
+    ])
     expect(ids).toContain('carousel-full')
     expect(new Set(latestTemplates().map((t) => t.name)).size).toBe(ids.length) // every name is distinct
   })
@@ -57,7 +71,7 @@ describe('templates', () => {
     expect(templatesFor(2).every((t) => t.id.startsWith('pair-') || t.id === 'carousel-full')).toBe(true)
     expect(templatesFor(2)).toHaveLength(19)
     expect(templatesFor(4).every((t) => t.id.startsWith('quartet-') || t.id === 'carousel-full')).toBe(true)
-    expect(templatesFor(4)).toHaveLength(11)
+    expect(templatesFor(4)).toHaveLength(21)
     expect(templatesFor(3).map((t) => t.id)).toEqual(['carousel-full'])
     expect(templatesFor(1)).toEqual([])
   })

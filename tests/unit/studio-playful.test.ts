@@ -1,7 +1,7 @@
 /**
- * Unit tests for playful Memory Studio layouts (S4a): caption text turned into outlines (fitted, anchored, characters
- * the font lacks left out), the shared drawing order, caption settings, the mask shapes, and what makes each playful
- * pair itself at every size: tilted cards, a film strip with holes, arches and circles.
+ * Unit tests for playful Memory Studio layouts (S4a–S4c): caption text turned into outlines (fitted, anchored, characters
+ * the font lacks left out), the shared drawing order, caption settings, the mask shapes, what makes each playful
+ * pair and quartet itself at every size, and that a quartet's decorations never cover a photo.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -247,5 +247,152 @@ describe('each playful pair keeps its character at every size', () => {
     const [big, small] = circles.elements
     expect(big!.mask).toBe(circle(big!.rect))
     expect(small!.rect.width / big!.rect.width).toBeCloseTo(0.62, 6)
+  })
+})
+
+// ---- S4c: the playful quartets. ----
+
+const quartet = (templateId: string, format: FormatId, params: Parameters<typeof compose>[0]['params'] = { v: 1 }) =>
+  compose({ templateId, templateVersion: 1, format, params, photoCount: 4 })
+
+// A decoration's outline as placed on the canvas: its path (or caption letters) moved, turned and scaled by `at`.
+function placedBounds(decor: ReturnType<typeof quartet>['over'][number]) {
+  const local = decor.type === 'text' ? points(textOutline(decor.text, decor.size, decor.maxWidth, decor.align, decor.maxLines).d) : points(decor.d)
+  if (!decor.at) return bounds(local)
+  const { x, y, rotate, scale } = decor.at
+  const t = (rotate * Math.PI) / 180
+  return bounds(local.map(([px, py]): [number, number] => [x + scale * (px * Math.cos(t) - py * Math.sin(t)), y + scale * (px * Math.sin(t) + py * Math.cos(t))]))
+}
+
+// The upright box a photo takes once its card is added and it's turned.
+function footprint(e: ReturnType<typeof quartet>['elements'][number]) {
+  const card = e.frame ? { x: e.rect.x - e.frame.pad, y: e.rect.y - e.frame.pad, width: e.rect.width + 2 * e.frame.pad, height: e.rect.height + 2 * e.frame.pad } : e.rect
+  const t = (Math.abs(e.rotation) * Math.PI) / 180
+  const w = card.width * Math.cos(t) + card.height * Math.sin(t)
+  const h = card.width * Math.sin(t) + card.height * Math.cos(t)
+  return { x: card.x - (w - card.width) / 2, y: card.y - (h - card.height) / 2, width: w, height: h }
+}
+
+const QUARTETS = [
+  'quartet-postcard-stack',
+  'quartet-film-weekend',
+  'quartet-torn-journal',
+  'quartet-garden-windows',
+  'quartet-love-notes',
+  'quartet-color-play',
+  'quartet-travel-scrapbook',
+  'quartet-four-seasons',
+  'quartet-circle-collection',
+  'quartet-keepsake-ticket',
+]
+
+describe('playful quartets: decorations never cover a photo', () => {
+  // Line art, captions and labels sit beside the photos, never on them, and stay on the canvas. Tape is the one
+  // decoration meant to cross a photo's card, so it's left out of this check. Tried with the layout's own spacing, and
+  // with none and with a lot, since those leave the least and the most room for art.
+  it.each(FORMAT_IDS)('%s', (format) => {
+    const { width, height } = FORMATS[format]
+    const spacings = [{ v: 1 as const }, { v: 1 as const, margin: 0, gutter: 0 }, { v: 1 as const, margin: 200, gutter: 120 }]
+    for (const [id, params] of QUARTETS.flatMap((id) => spacings.map((p) => [id, p] as const))) {
+      const composition = quartet(id, format, params)
+      for (const decor of composition.over.filter((d) => !(d.type === 'shape' && d.opacity === 0.85))) {
+        const box = placedBounds(decor)
+        const where = `${id} at ${format} with ${JSON.stringify(params)}`
+        expect(box.left, where).toBeGreaterThanOrEqual(-0.5)
+        expect(box.right, where).toBeLessThanOrEqual(width + 0.5)
+        expect(box.top, where).toBeGreaterThanOrEqual(-0.5)
+        expect(box.bottom, where).toBeLessThanOrEqual(height + 0.5)
+        for (const e of composition.elements) {
+          const p = footprint(e)
+          const round = e.mask === circle(e.rect)
+          if (round) {
+            const [cx, cy, r] = [p.x + p.width / 2, p.y + p.height / 2, p.width / 2]
+            const nx = Math.max(box.left, Math.min(cx, box.right))
+            const ny = Math.max(box.top, Math.min(cy, box.bottom))
+            expect(Math.hypot(nx - cx, ny - cy), where).toBeGreaterThanOrEqual(r)
+          } else {
+            const apart = box.right <= p.x || p.x + p.width <= box.left || box.bottom <= p.y || p.y + p.height <= box.top
+            expect(apart, `${where}: ${JSON.stringify(box)} touches photo ${e.slot}`).toBe(true)
+          }
+        }
+      }
+    }
+  })
+})
+
+describe('each playful quartet keeps its character at every size', () => {
+  it.each(FORMAT_IDS)('%s', (format) => {
+    // Postcard stack: four cards tilted alternately, and a postmark when there's room for it.
+    const stack = quartet('quartet-postcard-stack', format)
+    expect(stack.elements.map((e) => Math.sign(e.rotation))).toEqual([-1, 1, 1, -1])
+    expect(stack.elements.every((e) => e.frame?.color === '#ffffff')).toBe(true)
+
+    // Film weekend: every frame inside one of the film strips, which have holes cut through them.
+    const film = quartet('quartet-film-weekend', format)
+    expect(film.under.every((d) => d.type === 'shape' && d.fillRule === 'evenodd')).toBe(true)
+    const strips = film.under.map((d) => bounds(points((d as { d: string }).d)))
+    for (const e of film.elements) {
+      expect(strips.some((s) => e.rect.x > s.left && e.rect.x + e.rect.width < s.right && e.rect.y > s.top && e.rect.y + e.rect.height < s.bottom)).toBe(true)
+    }
+
+    // Torn journal: four torn photos on four torn white sheets, and a two-line note.
+    const journal = quartet('quartet-torn-journal', format)
+    expect(journal.elements.every((e) => e.mask && !e.mask.includes('A'))).toBe(true)
+    expect(journal.under.filter((d) => d.type === 'shape' && d.fill === '#ffffff')).toHaveLength(4)
+    expect(journal.over.find((d) => d.type === 'text')).toMatchObject({ text: 'Good people,\nbrighter days', maxLines: 2 })
+
+    // Garden windows: four arches the same size, each outlined.
+    const garden = quartet('quartet-garden-windows', format)
+    expect(garden.elements.every((e) => e.mask === arch(e.rect) && e.rect.width === garden.elements[0]!.rect.width)).toBe(true)
+    expect(garden.under.filter((d) => d.type === 'shape' && d.stroke)).toHaveLength(4)
+
+    // Love notes: blush, an envelope and a sheet under four small framed prints, and the note.
+    const notes = quartet('quartet-love-notes', format)
+    expect(notes.background).toBe('#e8b7b0')
+    expect(notes.under).toHaveLength(3)
+    expect(notes.elements.every((e) => e.frame && e.rotation !== 0)).toBe(true)
+    expect(notes.over.find((d) => d.type === 'text')).toMatchObject({ text: 'Same places,\nbrighter people' })
+
+    // Color play: four colour blocks, each behind its own upright framed photo.
+    const color = quartet('quartet-color-play', format)
+    const blocks = color.under.map((d) => bounds(points((d as { d: string }).d)))
+    expect(color.under.map((d) => d.type === 'shape' && d.fill)).toEqual(['#e8b7b0', '#b9a4c8', '#b8bda6', '#f2d6d1'])
+    color.elements.forEach((e, i) => {
+      expect(e.rotation).toBe(0)
+      expect(e.rect.x).toBeGreaterThan(blocks[i]!.left)
+      expect(e.rect.y + e.rect.height).toBeLessThan(blocks[i]!.bottom)
+    })
+
+    // Travel scrapbook: four tilted cards, each with its own strip of tape, and a note.
+    const travel = quartet('quartet-travel-scrapbook', format)
+    expect(travel.elements.map((e) => e.rotation)).toEqual([-3, 3, 4, -2])
+    expect(travel.over.filter((d) => d.type === 'shape' && d.opacity === 0.85)).toHaveLength(4)
+    expect(travel.over.filter((d) => d.type === 'text').map((d) => d.type === 'text' && d.text)).toEqual(['Collect kinder days'])
+
+    // Four seasons: four photos the same size, each with its own label below it.
+    const seasons = quartet('quartet-four-seasons', format)
+    const labels = seasons.over.filter((d) => d.type === 'text')
+    expect(labels.map((d) => d.type === 'text' && d.text)).toEqual(['spring', 'summer', 'autumn', 'winter'])
+    labels.forEach((label, i) => {
+      const photo = seasons.elements[i]!.rect
+      expect(label.at.y).toBeGreaterThan(photo.y + photo.height)
+      expect(Math.abs(label.at.x - (photo.x + photo.width / 2))).toBeLessThan(1e-6)
+    })
+
+    // Circle collection: four circles the same size.
+    const circles = quartet('quartet-circle-collection', format)
+    expect(circles.elements.every((e) => e.mask === circle(e.rect) && e.rect.width === e.rect.height && e.rect.width === circles.elements[0]!.rect.width)).toBe(true)
+
+    // Keepsake ticket: blush, photos inside the ticket, a title and a note.
+    const keepsake = quartet('quartet-keepsake-ticket', format)
+    expect(keepsake.background).toBe('#e8b7b0')
+    const outline = bounds(points((keepsake.under[0] as { d: string }).d))
+    for (const e of keepsake.elements) {
+      expect(e.rect.x).toBeGreaterThan(outline.left)
+      expect(e.rect.x + e.rect.width).toBeLessThan(outline.right)
+      expect(e.rect.y).toBeGreaterThan(outline.top)
+      expect(e.rect.y + e.rect.height).toBeLessThan(outline.bottom)
+    }
+    expect(keepsake.over.filter((d) => d.type === 'text').map((d) => d.type === 'text' && d.text)).toEqual(['Our little escape', 'Good people, brighter days'])
   })
 })
