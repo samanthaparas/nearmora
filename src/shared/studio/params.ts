@@ -1,5 +1,5 @@
 /**
- * A project's own settings on top of its template (background, margin, gutter, photo border). Stored as versioned JSON and
+ * A project's own settings on top of its template (background, margin, gutter, photo border, caption words). Stored as versioned JSON and
  * checked with this schema whenever it is written or read, so a damaged or unknown value never reaches the drawing code.
  * Only settings the person changed are stored; everything else comes from the template's defaults.
  */
@@ -8,6 +8,9 @@ import { z } from 'zod'
 
 /** Bump when the stored shape changes, and teach `readParams` to upgrade the older shape. */
 export const PARAMS_VERSION = 1
+
+/** The longest caption, in characters: captions are one short line. */
+export const MAX_CAPTION = 60
 
 /** The widest photo border, in reference pixels. */
 export const MAX_BORDER = 60
@@ -25,6 +28,8 @@ export const ParamsSchema = z
     // A frame drawn around each photo, inside its place, so the layout's geometry never moves.
     borderWidth: z.number().min(0).max(MAX_BORDER).optional(),
     borderColor: hexColor.optional(),
+    // Caption words by caption id (playful layouts). An empty string removes that caption.
+    text: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,19}$/), z.string().max(MAX_CAPTION)).optional(),
   })
   .strict()
 export type Params = z.infer<typeof ParamsSchema>

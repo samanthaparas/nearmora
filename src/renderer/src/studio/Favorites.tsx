@@ -15,8 +15,9 @@ const hint = ({ photos: { min, max } }: TemplateDefinition) => (min === max ? `s
 
 // The picker's groups, in the order they're shown.
 const GROUPS: Array<{ title: string; fits: (t: TemplateDefinition) => boolean }> = [
-  { title: 'Two photos', fits: (t) => t.mode === 'single' && t.photos.max === 2 },
-  { title: 'Four photos', fits: (t) => t.mode === 'single' && t.photos.max === 4 },
+  { title: 'Two photos', fits: (t) => t.mode === 'single' && t.style !== 'playful' && t.photos.max === 2 },
+  { title: 'Playful pairs', fits: (t) => t.mode === 'single' && t.style === 'playful' && t.photos.max === 2 },
+  { title: 'Four photos', fits: (t) => t.mode === 'single' && t.style !== 'playful' && t.photos.max === 4 },
   { title: 'Carousel', fits: (t) => t.mode === 'carousel' },
 ]
 

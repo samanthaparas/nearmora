@@ -9,14 +9,14 @@ import { createHash, randomUUID } from 'node:crypto'
 import { accessSync, constants, createReadStream, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import sharp from 'sharp'
-import type { Crop, Fit, Rect } from '@shared/layout'
 import { compose } from '@shared/studio/compose'
 import { FORMATS, PRINT_PPI } from '@shared/studio/formats'
+import { layers } from '@shared/studio/layers'
 import type { Catalog } from '../catalog/database'
 import { getProject } from '../catalog/repositories/projects'
 import { listSources } from '../catalog/repositories/sources'
 import { isSameOrInside } from '../library/source-folders'
-import type { RenderRequest, RenderResult } from '../media/render-export'
+import type { RenderLayer, RenderRequest, RenderResult } from '../media/render-export'
 
 export const JPEG_QUALITY = 92
 const STAGING_PREFIX = '.nearmora-export-'
@@ -36,7 +36,7 @@ export interface ExportPlan {
   border: { width: number; color: string }
   /** Pixels per inch recorded in print-size files; null for sharing sizes. */
   ppi: number | null
-  outputs: Array<{ fileName: string; layers: Array<{ sourcePath: string; crop: Crop; fit: Fit; cell: Rect }> }>
+  outputs: Array<{ fileName: string; layers: RenderLayer[] }>
 }
 
 export type ExportOutcome =
@@ -129,9 +129,13 @@ export async function prepareExport(
     fileName: composition.mode === 'carousel' ? `${name} ${String(i + 1).padStart(2, '0')}.jpg` : `${name}.jpg`,
     layers: [],
   }))
-  for (const element of composition.elements) {
-    const item = project.items[element.slot]!
-    outputs[element.canvas]!.layers.push({ sourcePath: paths[element.slot]!, crop: item.crop, fit: item.fit, cell: element.rect })
+  // Each file's drawing order, shared with the preview; photos gain the path of their verified original.
+  for (const [canvas, output] of outputs.entries()) {
+    output.layers = layers(composition, canvas).map((layer): RenderLayer => {
+      if (layer.kind === 'shape') return layer
+      const item = project.items[layer.element.slot]!
+      return { kind: 'photo', sourcePath: paths[layer.element.slot]!, crop: item.crop, fit: item.fit, element: layer.element }
+    })
   }
   return {
     status: 'ready',

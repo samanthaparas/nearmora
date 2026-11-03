@@ -1,13 +1,14 @@
 /**
  * Draws one output canvas (a collage, or one carousel slide) from the project's composition, the same element list
  * the export draws (AC7). Uses the large preview image, or the thumbnail when that's
- * not available. Borders and fit-or-fill come from the same placement math as the export. A pinch or mouse wheel over a
- * photo zooms that photo.
+ * not available. It draws the same layers, in the same order, as the export: shapes, art and captions, and photos that
+ * may be tilted, on cards or cut to a shape (ADR-0017). A pinch or mouse wheel over a photo zooms that photo.
  */
 
 import { useEffect, useRef } from 'react'
-import { placePhoto, type Crop, type Fit } from '@shared/layout'
-import type { Composition } from '@shared/studio/compose'
+import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
+import type { Composition, PhotoElement } from '@shared/studio/compose'
+import { layers, type Layer } from '@shared/studio/layers'
 import { useWheelZoom } from '../wheel-zoom'
 
 export interface CanvasItem {
@@ -33,6 +34,66 @@ function loadImage(assetId: string): Promise<HTMLImageElement> {
     images.set(assetId, pending)
   }
   return pending
+}
+
+const rectPath = (r: Rect) => `M${r.x} ${r.y}h${r.width}v${r.height}h${-r.width}Z`
+
+// Turns the drawing around a photo's centre by its tilt, as the export's SVG `rotate(angle cx cy)` does.
+function turn(context: CanvasRenderingContext2D, e: PhotoElement) {
+  if (!e.rotation) return
+  const cx = e.rect.x + e.rect.width / 2
+  const cy = e.rect.y + e.rect.height / 2
+  context.translate(cx, cy)
+  context.rotate((e.rotation * Math.PI) / 180)
+  context.translate(-cx, -cy)
+}
+
+// A shape, line art or caption outline: filled and/or stroked, placed by its transform (translate, rotate, scale).
+function drawShape(context: CanvasRenderingContext2D, shape: Extract<Layer, { kind: 'shape' }>) {
+  context.save()
+  if (shape.at) {
+    context.translate(shape.at.x, shape.at.y)
+    context.rotate((shape.at.rotate * Math.PI) / 180)
+    context.scale(shape.at.scale, shape.at.scale)
+  }
+  const path = new Path2D(shape.d)
+  if (shape.fill) {
+    context.fillStyle = shape.fill
+    context.fill(path, shape.fillRule ?? 'nonzero')
+  }
+  if (shape.stroke) {
+    context.strokeStyle = shape.stroke.color
+    context.lineWidth = shape.stroke.width
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    context.stroke(path)
+  }
+  context.restore()
+}
+
+// A photo: turned, on its card, cut to its mask, with its border. A masked photo's border runs along the mask's inside.
+function drawPhoto(context: CanvasRenderingContext2D, e: PhotoElement, image: HTMLImageElement, item: CanvasItem, border: Composition['border']) {
+  context.save()
+  turn(context, e)
+  if (e.frame) {
+    context.fillStyle = e.frame.color
+    context.fillRect(e.rect.x - e.frame.pad, e.rect.y - e.frame.pad, e.rect.width + 2 * e.frame.pad, e.rect.height + 2 * e.frame.pad)
+  }
+  // The crop is in proportions of the photo, so it means the same on the preview image and the original.
+  const place = placePhoto({ width: image.naturalWidth, height: image.naturalHeight }, e.rect, item.crop, item.fit, e.mask ? 0 : border.width)
+  if (place.frame) {
+    context.fillStyle = border.color
+    context.fillRect(place.frame.x, place.frame.y, place.frame.width, place.frame.height)
+  }
+  if (e.mask) context.clip(new Path2D(e.mask))
+  const { src, dest } = place
+  context.drawImage(image, src.x, src.y, src.width, src.height, dest.x, dest.y, dest.width, dest.height)
+  if (e.mask && border.width > 0) {
+    context.strokeStyle = border.color
+    context.lineWidth = 2 * border.width
+    context.stroke(new Path2D(e.mask))
+  }
+  context.restore()
 }
 
 export function StudioCanvas({ composition, items, canvasIndex, displayWidth, highlight, label, onWheelZoom }: {
@@ -80,29 +141,28 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
     context.fillStyle = composition.background
     context.fillRect(0, 0, size.width, size.height)
 
-    const mine = composition.elements
-      .filter((e) => e.canvas === canvasIndex && items[e.slot])
-      .map((e) => ({ cell: e.rect, position: e.slot, item: items[e.slot]! }))
-    void Promise.allSettled(mine.map((p) => loadImage(p.item.assetId))).then((loaded) => {
+    // The same drawing order the export uses (layers.ts); everything is drawn once every photo has loaded or failed.
+    const order = layers(composition, canvasIndex)
+    const photos = order.flatMap((l) => (l.kind === 'photo' && items[l.element.slot] ? [l.element] : []))
+    void Promise.allSettled(photos.map((e) => loadImage(items[e.slot]!.assetId))).then((loaded) => {
       if (cancelled) return
-      mine.forEach((p, i) => {
-        const result = loaded[i]
-        if (result?.status !== 'fulfilled') return
-        const image = result.value
-        // The crop is in proportions of the photo, so it means the same on the preview image and the original.
-        const place = placePhoto({ width: image.naturalWidth, height: image.naturalHeight }, p.cell, p.item.crop, p.item.fit, composition.border.width)
-        if (place.frame) {
-          context.fillStyle = composition.border.color
-          context.fillRect(place.frame.x, place.frame.y, place.frame.width, place.frame.height)
+      const imageOf = new Map(photos.map((e, i) => [e.slot, loaded[i]?.status === 'fulfilled' ? loaded[i].value : null]))
+      for (const layer of order) {
+        if (layer.kind === 'shape') drawShape(context, layer)
+        else {
+          const image = imageOf.get(layer.element.slot)
+          const item = items[layer.element.slot]
+          if (image && item) drawPhoto(context, layer.element, image, item, composition.border)
         }
-        const { src, dest } = place
-        context.drawImage(image, src.x, src.y, src.width, src.height, dest.x, dest.y, dest.width, dest.height)
-      })
-      const selected = mine.find((p) => p.position === highlight)
+      }
+      const selected = composition.elements.find((e) => e.canvas === canvasIndex && e.slot === highlight)
       if (selected) {
+        context.save()
+        turn(context, selected)
         context.strokeStyle = '#5b414b'
         context.lineWidth = 8 / scale
-        context.strokeRect(selected.cell.x, selected.cell.y, selected.cell.width, selected.cell.height)
+        context.stroke(new Path2D(selected.mask ?? rectPath(selected.rect)))
+        context.restore()
       }
     })
     return () => {

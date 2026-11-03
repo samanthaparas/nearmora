@@ -1,6 +1,6 @@
 /**
  * Renders one export file (a collage, or one carousel slide) from the original photos, using the same shared layout
- * math as the on-screen preview (AC7). The output is a fresh sRGB JPEG with full-resolution colour and no metadata at all: no location, camera,
+ * math and drawing order as the on-screen preview (AC7, ADR-0017). The output is a fresh sRGB JPEG with full-resolution colour and no metadata at all: no location, camera,
  * EXIF, XMP or IPTC (sharp writes none unless asked). Transparency is flattened onto the chosen background.
  * Originals are only read.
  */
@@ -8,6 +8,8 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import sharp from 'sharp'
 import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
+import type { PhotoElement } from '@shared/studio/compose'
+import { svgTransform, type Layer } from '@shared/studio/layers'
 import { MAX_INPUT_PIXELS } from './limits'
 
 export interface RenderRequest {
@@ -21,8 +23,13 @@ export interface RenderRequest {
   /** For print sizes, the pixels per inch recorded in the file, so print software sizes it correctly. */
   ppi: number | null
   quality: number
-  layers: Array<{ sourcePath: string; crop: Crop; fit: Fit; cell: Rect }>
+  /** The canvas in drawing order: shapes (captions already outlined) and photos with their originals. */
+  layers: RenderLayer[]
 }
+
+export type RenderLayer =
+  | Extract<Layer, { kind: 'shape' }>
+  | { kind: 'photo'; sourcePath: string; crop: Crop; fit: Fit; element: Pick<PhotoElement, 'rect' | 'rotation' | 'mask' | 'frame'> }
 
 export type RenderResult = { ok: true } | { ok: false; reason: 'disk_full' | 'unreadable' | 'failed' }
 
@@ -57,37 +64,71 @@ function pixelRect(image: { width: number; height: number }, rect: Rect): { left
   }
 }
 
-export async function renderCanvas(request: RenderRequest): Promise<RenderResult> {
-  const composites: Array<{ input: Buffer; left: number; top: number }> = []
-  try {
-    for (const layer of request.layers) {
-      const metadata = await open(layer.sourcePath).metadata()
-      // Crops are defined on the photo as displayed (after EXIF rotation), as in the preview.
-      const shown = metadata.autoOrient ?? { width: metadata.width, height: metadata.height }
-      // The same placement the preview uses: border, the part of the photo shown, and where it goes.
-      const place = placePhoto(shown, layer.cell, layer.crop, layer.fit, request.border.width)
-      if (place.frame) {
-        const frame = snap(place.frame)
-        const fill = await sharp({ create: { width: frame.width, height: frame.height, channels: 3, background: request.border.color } }).png().toBuffer()
-        composites.push({ input: fill, left: frame.left, top: frame.top })
-      }
-      const dest = snap(place.dest)
-      const piece = await open(layer.sourcePath)
-        .rotate() // apply EXIF orientation first; the crop below is in upright coordinates
-        .extract(pixelRect(shown, place.src))
-        .resize(dest.width, dest.height, { fit: 'fill' })
-        .toColourspace('srgb')
-        .png()
-        .toBuffer()
-      composites.push({ input: piece, left: dest.left, top: dest.top })
+// Path data and colours come from our own templates and validated settings; attribute values are still escaped.
+const attr = (value: string | number) => String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+
+/**
+ * Builds the canvas as one SVG, in the shared drawing order (layers.ts): shapes, then each photo (turned, on its card,
+ * cut to its mask, with its border), then shapes and captions on top. Each photo is first cropped and resized by sharp
+ * to exactly the whole pixels it covers, so the SVG renderer places it without resampling unless it's turned.
+ */
+async function canvasSvg(request: RenderRequest): Promise<string> {
+  const parts: string[] = [`<rect width="${request.width}" height="${request.height}" fill="${attr(request.background)}"/>`]
+  for (const [index, layer] of request.layers.entries()) {
+    if (layer.kind === 'shape') {
+      const paint = `fill="${attr(layer.fill ?? 'none')}"${layer.fillRule ? ` fill-rule="${layer.fillRule}"` : ''}`
+      const stroke = layer.stroke ? ` stroke="${attr(layer.stroke.color)}" stroke-width="${layer.stroke.width}" stroke-linecap="round" stroke-linejoin="round"` : ''
+      const at = layer.at ? ` transform="${attr(svgTransform(layer.at))}"` : ''
+      parts.push(`<path d="${attr(layer.d)}" ${paint}${stroke}${at}/>`)
+      continue
     }
+    const metadata = await open(layer.sourcePath).metadata()
+    // Crops are defined on the photo as displayed (after EXIF rotation), as in the preview.
+    const shown = metadata.autoOrient ?? { width: metadata.width, height: metadata.height }
+    const { rect, rotation, mask, frame } = layer.element
+    // A masked photo fills its whole rectangle; its border is drawn along the mask instead (see below).
+    const place = placePhoto(shown, rect, layer.crop, layer.fit, mask ? 0 : request.border.width)
+    const dest = snap(place.dest)
+    const piece = await open(layer.sourcePath)
+      .rotate() // apply EXIF orientation first; the crop below is in upright coordinates
+      .extract(pixelRect(shown, place.src))
+      .resize(dest.width, dest.height, { fit: 'fill' })
+      .toColourspace('srgb')
+      .png({ compressionLevel: 1 })
+      .toBuffer()
+    const cx = rect.x + rect.width / 2
+    const cy = rect.y + rect.height / 2
+    const group: string[] = []
+    if (frame) {
+      const card = { x: rect.x - frame.pad, y: rect.y - frame.pad, width: rect.width + 2 * frame.pad, height: rect.height + 2 * frame.pad }
+      group.push(`<rect x="${card.x}" y="${card.y}" width="${card.width}" height="${card.height}" fill="${attr(frame.color)}"/>`)
+    }
+    if (place.frame) {
+      const f = snap(place.frame)
+      group.push(`<rect x="${f.left}" y="${f.top}" width="${f.width}" height="${f.height}" fill="${attr(request.border.color)}"/>`)
+    }
+    const image = `<image x="${dest.left}" y="${dest.top}" width="${dest.width}" height="${dest.height}" preserveAspectRatio="none" href="data:image/png;base64,${piece.toString('base64')}"/>`
+    if (mask) {
+      // The border runs along the inside of the mask: a stroke twice as wide, half of it clipped away.
+      const border = request.border.width > 0 ? `<path d="${attr(mask)}" fill="none" stroke="${attr(request.border.color)}" stroke-width="${2 * request.border.width}"/>` : ''
+      group.push(`<clipPath id="mask${index}"><path d="${attr(mask)}"/></clipPath><g clip-path="url(#mask${index})">${image}${border}</g>`)
+    } else group.push(image)
+    parts.push(rotation ? `<g transform="rotate(${rotation} ${cx} ${cy})">${group.join('')}</g>` : group.join(''))
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${request.width}" height="${request.height}" viewBox="0 0 ${request.width} ${request.height}">${parts.join('')}</svg>`
+}
+
+export async function renderCanvas(request: RenderRequest): Promise<RenderResult> {
+  let svg: string
+  try {
+    svg = await canvasSvg(request)
   } catch {
     return { ok: false, reason: 'unreadable' }
   }
 
   try {
-    const encoded = await sharp({ create: { width: request.width, height: request.height, channels: 3, background: request.background } })
-      .composite(composites)
+    // `unlimited`: the SVG is our own, and embeds full-size photo pieces that exceed the parser's default size guard.
+    const encoded = await sharp(Buffer.from(svg), { unlimited: true, limitInputPixels: false })
       .flatten({ background: request.background }) // any transparency becomes the background colour, on purpose
       .toColourspace('srgb')
       // Full-resolution colour (4:4:4): the default stores colour at half resolution, which visibly smears saturated
