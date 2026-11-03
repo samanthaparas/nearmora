@@ -238,7 +238,7 @@ Intent-to-use may fit a prelaunch product with a bona fide intent to use the mar
 - `Nearmora-Library-Home.png`: original desktop concept.
 - `Nearmora-Best-Moments-Review.png`: original desktop concept.
 - `Nearmora-Mockup-Prompts.md`: image-generation prompt record and concept limitations.
-- `Nearmora-Memory-Studio-Concept-Board.png`: user-supplied broader product vision, with scope mapping in Section 14.
+- `Nearmora-Memory-Studio-Concept-Board.png`: the owner's own broader product vision, with scope mapping in Section 14.
 - `Nearmora-Technical-Requirements-Source.md`: verbatim supplied technical and mentoring requirements.
 
 No app has been built or tested by this planning work. Product metrics, implementation schedule, grouping accuracy and performance are targets awaiting validation. Mockup photography is synthetic demonstration content; it is not the user's library. Brand palette and typography remain proposals. Legal clearance, platform packaging and real-library testing remain future work.
@@ -307,7 +307,7 @@ Main overengineering risks: learning every framework at once, building cloud/aut
 
 ## 14. Included concept board and design precedence
 
-![User-supplied Moments Memory Studio concept board](Nearmora-Memory-Studio-Concept-Board.png)
+![The owner's Moments Memory Studio concept board](Nearmora-Memory-Studio-Concept-Board.png)
 
 The supplied board is retained as a visual/product reference. Its “Moments” wordmark and “Your memories, beautifully kept” line are reference artwork; the product remains **Nearmora — Keep the feeling close.** The board's provenance and asset rights have not been established here; do not extract its photos, logo or other assets into production without appropriate rights.
 

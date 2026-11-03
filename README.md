@@ -87,7 +87,7 @@ Every source file starts with a short comment explaining its purpose. These file
 | [Technical Requirements](docs/planning/Nearmora-Technical-Requirements-Source.md) | Original stack and learning requirements, kept word for word |
 | [Mockup Prompts](docs/planning/Nearmora-Mockup-Prompts.md) | How the concept images were generated, and their limits |
 
-The concept images in `docs/planning/` are design references only. The photos in them are synthetic. The rights to the "Moments" concept board are unverified, so none of its assets may be shipped.
+The concept images in `docs/planning/` are design references only, and the photos in them are synthetic. The "Moments" concept board is the owner's own work, kept as a picture of the wider product vision; the app ships none of its assets.
 
 ## Stack
 
