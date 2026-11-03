@@ -1,6 +1,6 @@
 # Memory Studio expansion: plan and catalog checklist
 
-Date: 2026-10-30 · Status: approved by the owner (Studio expansion request, 2026-10-30). This amends the roadmap: it adds Studio phases S1–S7 after R6 part 1. R6 part 2 (signing) and R7–R8 are unchanged. Amended 2026-11-03 (approved by the owner): S4–S6 gain the strong-fit ideas from the [carousel-app audit](Nearmora-Competitor-Audit.md); the ideas that change product scope are listed at the end, awaiting a decision.
+Date: 2026-10-30 · Status: approved by the owner (Studio expansion request, 2026-10-30). This amends the roadmap: it adds Studio phases S1–S7 after R6 part 1. R6 part 2 (signing) and R7–R8 are unchanged. Amended 2026-11-03 (approved by the owner): S4–S6 gain the strong-fit ideas from the owner's carousel-app audit (research notes kept outside the repo); the ideas that change product scope are listed at the end, awaiting a decision.
 
 References: the two-photo and four-photo concept boards and their guides (owner's design references, kept outside the repo). They are visual references only. No sample photograph or decoration from the boards is shipped.
 
@@ -128,7 +128,7 @@ Formats are labelled by shape and intended use. No claim about a platform's curr
 
 ## Ideas from the carousel-app audit, not yet scheduled
 
-From the [carousel-app audit](Nearmora-Competitor-Audit.md). None is built or promised until the owner decides.
+From the owner's carousel-app audit (research notes kept outside the repo). None is built or promised until the owner decides.
 
 | Idea | Why it waits |
 |---|---|
