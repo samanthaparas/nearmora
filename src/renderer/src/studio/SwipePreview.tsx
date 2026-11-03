@@ -63,7 +63,8 @@ export function SwipePreview({ composition, items, slideWidth }: { composition: 
       </fieldset>
 
       {view === 'side' ? (
-        <div className="studio__swipe-row" style={{ gap: GAP }}>
+        // Focusable, so keyboard users can scroll it sideways when the slides don't fit (at 200% zoom, for example).
+        <div className="studio__swipe-row" style={{ gap: GAP }} tabIndex={0} role="group" aria-label={`All ${count} slides side by side`}>
           {Array.from({ length: count }, (_, i) => slide(i))}
         </div>
       ) : (

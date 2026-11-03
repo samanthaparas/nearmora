@@ -22,7 +22,8 @@
     "test:packaged": "node scripts/smoke-packaged.mjs",
     "query-plans": "node scripts/query-plans.mjs",
     "measure:scan": "electron-vite build && NEARMORA_MEASURE=1 playwright test e2e/measure-scan.spec.ts --reporter=list",
-    "measure:perf": "electron-vite build && NEARMORA_PERF=1 playwright test e2e/measure-perf.spec.ts --reporter=list"
+    "measure:perf": "electron-vite build && NEARMORA_PERF=1 playwright test e2e/measure-perf.spec.ts --reporter=list",
+    "measure:studio": "electron-vite build && NEARMORA_STUDIO_PERF=1 playwright test e2e/measure-studio.spec.ts --reporter=list"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",

@@ -58,6 +58,7 @@ check('self-test exits 0', selfTest.code === 0, `code ${selfTest.code}`)
 check('SQLite works in the package', report?.sqlite?.ok === true, report?.sqlite?.version ?? report?.sqlite?.error)
 check('sharp works in the package', report?.sharp?.ok === true, report?.sharp?.libvips ?? report?.sharp?.error)
 check('media worker process makes a thumbnail in the package', report?.mediaWorker?.ok === true, report?.mediaWorker?.error)
+check('Studio renders a captioned layout and a seamless design in the package', report?.studio?.ok === true, report?.studio?.error)
 check('catalog migrations apply in the package', report?.catalog?.ok === true, report?.catalog?.schemaVersion ? `schema v${report.catalog.schemaVersion}` : report?.catalog?.error)
 
 // 2. Security fuses are set as electron-builder.yml asks.
