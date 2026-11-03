@@ -55,7 +55,7 @@ export class UnknownTemplateError extends Error {}
 /** The template's defaults with the person's own settings on top, all in reference pixels. */
 export function resolveParams(template: TemplateDefinition, params: Params): ResolvedParams {
   return {
-    background: params.background ?? BACKGROUNDS.cream,
+    background: params.background ?? template.defaults.background ?? BACKGROUNDS.cream,
     margin: params.margin ?? template.defaults.margin,
     gutter: params.gutter ?? template.defaults.gutter,
     borderWidth: params.borderWidth ?? 0,

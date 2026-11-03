@@ -39,8 +39,8 @@ export interface TemplateDefinition {
   description: string
   mode: Mode
   photos: { min: number; max: number }
-  /** Margin and gutter in reference pixels (see params.ts). */
-  defaults: { margin: number; gutter: number }
+  /** Margin and gutter in reference pixels (see params.ts); a playful layout may also have its own background. */
+  defaults: { margin: number; gutter: number; background?: string }
   /** `margin` and `gutter` here are already scaled to this canvas. */
   slots(canvas: { width: number; height: number }, spacing: { margin: number; gutter: number }, photoCount: number): Slot[]
   /** Playful layouts add shapes, line art and captions; everyday layouts have only photos. */

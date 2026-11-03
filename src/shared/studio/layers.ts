@@ -9,7 +9,7 @@ import type { Transform } from './scene'
 import { textOutline } from './text'
 
 export type Layer =
-  | { kind: 'shape'; d: string; fill?: string; fillRule?: 'evenodd'; stroke?: { color: string; width: number }; at?: Transform }
+  | { kind: 'shape'; d: string; fill?: string; fillRule?: 'evenodd'; opacity?: number; stroke?: { color: string; width: number }; at?: Transform }
   | { kind: 'photo'; element: PhotoElement }
 
 export function layers(composition: Composition, canvas: number): Layer[] {
@@ -21,12 +21,13 @@ export function layers(composition: Composition, canvas: number): Layer[] {
           const shape: Layer = { kind: 'shape', d: d.d }
           if (d.fill) shape.fill = d.fill
           if (d.fillRule) shape.fillRule = d.fillRule
+          if (d.opacity !== undefined) shape.opacity = d.opacity
           if (d.stroke) shape.stroke = d.stroke
           if (d.at) shape.at = d.at
           return [shape]
         }
         if (!d.text.trim()) return []
-        return [{ kind: 'shape', d: textOutline(d.text, d.size, d.maxWidth, d.align).d, fill: d.color, at: d.at }]
+        return [{ kind: 'shape', d: textOutline(d.text, d.size, d.maxWidth, d.align, d.maxLines).d, fill: d.color, at: d.at }]
       })
   return [
     ...decor(composition.under),

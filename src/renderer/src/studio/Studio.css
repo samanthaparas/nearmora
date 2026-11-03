@@ -75,6 +75,15 @@
 }
 
 /* The template picker: compact tiles, each a layout drawing and its name, grouped by photo count. */
+/* The picker's filters: what to show, which style, and the size new projects start at. */
+.studio__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--nm-space-2);
+  margin-bottom: var(--nm-space-2);
+}
+
 .studio__templates {
   display: flex;
   flex-wrap: wrap;
@@ -129,7 +138,7 @@
 }
 
 /* Carousels are drawn as two slides, so their icon is wider. */
-.studio__template-icon[viewBox^='0 0 2'] {
+.studio__template-icon--slides {
   width: 84px;
 }
 

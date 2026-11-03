@@ -9,8 +9,8 @@ import { z } from 'zod'
 /** Bump when the stored shape changes, and teach `readParams` to upgrade the older shape. */
 export const PARAMS_VERSION = 1
 
-/** The longest caption, in characters: captions are one short line. */
-export const MAX_CAPTION = 60
+/** The longest caption, in characters, line breaks included; each layout also limits how many lines it shows. */
+export const MAX_CAPTION = 160
 
 /** The widest photo border, in reference pixels. */
 export const MAX_BORDER = 60
@@ -28,7 +28,7 @@ export const ParamsSchema = z
     // A frame drawn around each photo, inside its place, so the layout's geometry never moves.
     borderWidth: z.number().min(0).max(MAX_BORDER).optional(),
     borderColor: hexColor.optional(),
-    // Caption words by caption id (playful layouts). An empty string removes that caption.
+    // Caption words by caption id (playful layouts), with any line breaks the person typed. An empty string removes it.
     text: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,19}$/), z.string().max(MAX_CAPTION)).optional(),
   })
   .strict()
@@ -44,7 +44,7 @@ export interface ResolvedParams {
 }
 
 /** Named colours offered as one-click choices for the background and the border; any other colour can be picked too. */
-export const BACKGROUNDS = { cream: '#f8f0e8', white: '#ffffff', sand: '#e6d8c6', charcoal: '#2f2b2c' } as const
+export const BACKGROUNDS = { cream: '#f8f0e8', white: '#ffffff', sand: '#e6d8c6', blush: '#e8b7b0', sage: '#b8bda6', charcoal: '#2f2b2c' } as const
 export const BORDER_COLORS = { white: '#ffffff', cream: '#f8f0e8', charcoal: '#2f2b2c' } as const
 
 export const DEFAULT_PARAMS: Params = { v: PARAMS_VERSION }

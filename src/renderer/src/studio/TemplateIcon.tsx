@@ -5,19 +5,26 @@
  */
 
 import { compose } from '@shared/studio/compose'
+import { FORMATS, type FormatId } from '@shared/studio/formats'
 import { layers, svgTransform } from '@shared/studio/layers'
 import type { TemplateDefinition } from '@shared/studio/templates'
 
-export function TemplateIcon({ template }: { template: TemplateDefinition }) {
-  // Carousels are drawn as two slides side by side; collages as their single square canvas.
-  const composition = compose({ templateId: template.id, templateVersion: template.version, format: 'square', params: { v: 1 }, photoCount: template.photos.min })
+export function TemplateIcon({ template, format = 'square' }: { template: TemplateDefinition; format?: FormatId }) {
+  // Carousels are drawn as two slides side by side; collages as their single canvas, at the chosen size's shape.
+  const composition = compose({ templateId: template.id, templateVersion: template.version, format, params: { v: 1 }, photoCount: template.photos.min })
+  const { width, height } = FORMATS[format]
   const slides = Math.min(composition.canvasCount, 2)
-  const gap = 60
+  const gap = Math.min(width, height) / 18
   return (
-    <svg className="studio__template-icon" viewBox={`0 0 ${slides * 1080 + (slides - 1) * gap} 1080`} aria-hidden="true" focusable="false">
+    <svg
+      className={`studio__template-icon${slides > 1 ? ' studio__template-icon--slides' : ''}`}
+      viewBox={`0 0 ${slides * width + (slides - 1) * gap} ${height}`}
+      aria-hidden="true"
+      focusable="false"
+    >
       {Array.from({ length: slides }, (_, canvas) => (
-        <g key={canvas} transform={`translate(${canvas * (1080 + gap)} 0)`}>
-          <rect width="1080" height="1080" className="studio__template-canvas" />
+        <g key={canvas} transform={`translate(${canvas * (width + gap)} 0)`}>
+          <rect width={width} height={height} className="studio__template-canvas" />
           {layers(composition, canvas).map((layer, i) => {
             if (layer.kind === 'shape') {
               return (
@@ -26,6 +33,7 @@ export function TemplateIcon({ template }: { template: TemplateDefinition }) {
                   d={layer.d}
                   fill={layer.fill ?? 'none'}
                   fillRule={layer.fillRule}
+                  opacity={layer.opacity}
                   stroke={layer.stroke?.color}
                   strokeWidth={layer.stroke?.width}
                   strokeLinecap="round"

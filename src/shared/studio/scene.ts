@@ -18,11 +18,21 @@ export interface Transform {
 
 export type Decor =
   /** `fillRule: 'evenodd'` lets a shape have holes cut in it, such as a film strip's sprocket holes. */
-  | { type: 'shape'; canvas: number; d: string; fill?: string; fillRule?: 'evenodd'; stroke?: { color: string; width: number }; at?: Transform }
-  /** One line of caption text, drawn as letter outlines; `at` places its baseline anchor. */
-  | { type: 'text'; canvas: number; text: string; size: number; maxWidth: number; align: Align; color: string; at: Transform }
+  | { type: 'shape'; canvas: number; d: string; fill?: string; fillRule?: 'evenodd'; opacity?: number; stroke?: { color: string; width: number }; at?: Transform }
+  /** Caption text, drawn as letter outlines, wrapped to `maxWidth` over up to `maxLines` lines; `at` places the first baseline's anchor. */
+  | { type: 'text'; canvas: number; text: string; size: number; maxWidth: number; maxLines: number; align: Align; color: string; at: Transform }
 
-export const COLORS = { cream: '#f8f0e8', plum: '#5b414b', blush: '#e8b7b0', lilac: '#b9a4c8', sage: '#b8bda6', film: '#3a2a30', card: '#ffffff' } as const
+export const COLORS = {
+  cream: '#f8f0e8',
+  plum: '#5b414b',
+  blush: '#e8b7b0',
+  lilac: '#b9a4c8',
+  sage: '#b8bda6',
+  film: '#3a2a30',
+  card: '#ffffff',
+  paper: '#fffaf4', // stationery and tickets: warmer than the white photo cards
+  envelope: '#f2d6d1',
+} as const
 
 const n = (v: number) => Math.round(v * 100) / 100
 
@@ -74,3 +84,54 @@ export function art(canvas: number, d: string, cx: number, cy: number, size: num
 export function filledArt(canvas: number, d: string, cx: number, cy: number, size: number, color: string, rotate = 0): Decor {
   return { type: 'shape', canvas, d, fill: color, at: { x: cx, y: cy, rotate, scale: size / 100 } }
 }
+
+// A small, repeatable random sequence: the same seed always gives the same numbers, so a torn edge is torn the same
+// way every time it's drawn, in the preview and the export alike.
+function seeded(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/**
+ * A torn-paper edge around a rectangle: points every `step` pixels along each side, each pulled in by up to `depth`
+ * at random (from `seed`). The shape always stays inside the rectangle.
+ */
+export function torn(r: Rect, seed: number, depth: number, step: number): string {
+  const random = seeded(seed)
+  const corners: Array<[number, number, number, number]> = [
+    [r.x, r.y, 1, 0], // top: left to right, pulled down
+    [r.x + r.width, r.y, 0, 1], // right: top to bottom, pulled left
+    [r.x + r.width, r.y + r.height, -1, 0], // bottom: right to left, pulled up
+    [r.x, r.y + r.height, 0, -1], // left: bottom to top, pulled right
+  ]
+  const points: string[] = []
+  for (const [sx, sy, dx, dy] of corners) {
+    const length = dx !== 0 ? r.width : r.height
+    const count = Math.max(2, Math.round(length / step))
+    for (let i = 0; i < count; i++) {
+      const along = (i / count) * length
+      const inward = random() * depth
+      // Inward is a quarter turn clockwise from the direction of travel.
+      points.push(`${n(sx + dx * along - dy * inward)} ${n(sy + dy * along + dx * inward)}`)
+    }
+  }
+  return `M${points.join('L')}Z`
+}
+
+/** A ticket: a rectangle with a quarter-circle notch cut into each corner. */
+export function ticket(r: Rect, notch: number): string {
+  const k = n(Math.min(notch, r.width / 4, r.height / 4))
+  const [x, y, w, h] = [r.x, r.y, r.width, r.height].map(n) as [number, number, number, number]
+  return (
+    `M${n(x + k)} ${y}H${n(x + w - k)}A${k} ${k} 0 0 0 ${n(x + w)} ${n(y + k)}V${n(y + h - k)}A${k} ${k} 0 0 0 ${n(x + w - k)} ${n(y + h)}` +
+    `H${n(x + k)}A${k} ${k} 0 0 0 ${x} ${n(y + h - k)}V${n(y + k)}A${k} ${k} 0 0 0 ${n(x + k)} ${y}Z`
+  )
+}
+
+/** A closed shape through the given points. */
+export const polygon = (points: ReadonlyArray<readonly [number, number]>): string => `M${points.map(([x, y]) => `${n(x)} ${n(y)}`).join('L')}Z`

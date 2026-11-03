@@ -49,7 +49,7 @@ src/
     src/wheel-zoom.ts Pinch and mouse-wheel zoom, shared by Memory Studio and Best Moments
     src/library/     The Library and Sources screens: folders and scans, moments, albums, search and filters, virtualized grid
     src/best-moments/ The Best Moments screen: queue, compare view, choosing favorites, corrections, unsaved-changes dialog
-    src/studio/      Favorites and Memory Studio: template picker, projects, the canvas preview, Quick edits with undo and redo, export panel
+    src/studio/      Favorites and Memory Studio: template picker with filters, projects, the canvas preview, Quick edits and captions with undo and redo, export panel
     src/settings/    Settings: storage sizes, cache clearing, privacy statement
   shared/          Types and schemas used by more than one process, and the Studio crop, fit and border math (preview and export)
     studio/          Studio templates (everyday and playful), shapes and line art, caption text as outlines, sizes, print resolution, settings, the project design and the composition and drawing order both preview and export use

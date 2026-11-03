@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_CROP, type Crop, type Fit, type Rect } from '@shared/layout'
 import { compose } from '@shared/studio/compose'
 import { layers } from '@shared/studio/layers'
+import { PLAYFUL_TEMPLATES } from '@shared/studio/playful'
 import { FORMAT_IDS, FORMATS } from '@shared/studio/formats'
 import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
@@ -271,6 +272,26 @@ describe('rendering an export file', () => {
     expect(holes).toBeGreaterThan(10) // the background shows through a column of holes
     expect(filmColour).toBeGreaterThan(10) // with film between them
 
+    // Torn pages: the photo's corner is torn away to its white sheet; beyond the sheet is the blush background.
+    const tornPages = await render('pair-torn-pages')
+    const page = tornPages.composition.elements[0]!.rect
+    expect(await near(tornPages.out, page.x - 0.035 * 1080, page.y + page.height / 2, '#e8b7b0')).toBe(true)
+    expect(await colourAt(tornPages.out, page.x + page.width / 4, page.y + page.height / 2)).toBe('red')
+
+    // Gallery ticket: its corner notch shows the sage background; just inside the top edge is the paper.
+    const ticketed = await render('pair-gallery-ticket')
+    const firstPhoto = ticketed.composition.elements[0]!.rect
+    const ticketLeft = firstPhoto.x - 0.06 * 1080
+    const ticketTop = firstPhoto.y - 0.13 * 1080
+    expect(await near(ticketed.out, ticketLeft + 4, ticketTop + 4, '#b8bda6')).toBe(true)
+    expect(await near(ticketed.out, ticketLeft + 0.1 * 1080, ticketTop + 8, '#fffaf4')).toBe(true)
+
+    // Colorblock: the lilac block is see-through (55%), so the corner is lilac mixed with the cream background.
+    const blocks = await render('pair-colorblock')
+    const mix = (a: number, b: number) => Math.round(a * 0.45 + b * 0.55)
+    const mixed = `#${[mix(0xf8, 0xb9), mix(0xf0, 0xa4), mix(0xe8, 0xc8)].map((v) => v.toString(16).padStart(2, '0')).join('')}`
+    expect(await near(blocks.out, 6, 6, mixed)).toBe(true)
+
     // Postcards: white card around each tilted photo, and the caption drawn in plum.
     const postcards = await render('pair-postcards')
     const card = postcards.composition.elements[0]!
@@ -378,7 +399,7 @@ describe('exporting a project', () => {
 
   it('exports a playful project through the same staged, verified pipeline', async () => {
     const { db, profile, project } = await exportable()
-    for (const templateId of ['pair-postcards', 'pair-film-night', 'pair-window-light', 'pair-circle-story']) {
+    for (const templateId of PLAYFUL_TEMPLATES.map((t) => t.id)) {
       setDesign(db, { projectId: project.id, design: { ...designOf(getProject(db, project.id)), templateId, templateVersion: 1, format: 'print-8x10' } })
       const outcome = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
       if (outcome.status !== 'done') throw new Error(`${templateId}: ${JSON.stringify(outcome)}`)

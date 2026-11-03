@@ -57,6 +57,7 @@ function drawShape(context: CanvasRenderingContext2D, shape: Extract<Layer, { ki
     context.scale(shape.at.scale, shape.at.scale)
   }
   const path = new Path2D(shape.d)
+  if (shape.opacity !== undefined) context.globalAlpha = shape.opacity
   if (shape.fill) {
     context.fillStyle = shape.fill
     context.fill(path, shape.fillRule ?? 'nonzero')
