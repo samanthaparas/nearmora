@@ -11,6 +11,7 @@ import { basename, join } from 'node:path'
 import sharp from 'sharp'
 import type { Crop, Fit, Rect } from '@shared/layout'
 import { compose } from '@shared/studio/compose'
+import { FORMATS, PRINT_PPI } from '@shared/studio/formats'
 import type { Catalog } from '../catalog/database'
 import { getProject } from '../catalog/repositories/projects'
 import { listSources } from '../catalog/repositories/sources'
@@ -33,6 +34,8 @@ export interface ExportPlan {
   background: string
   /** The frame around each photo, in canvas pixels. */
   border: { width: number; color: string }
+  /** Pixels per inch recorded in print-size files; null for sharing sizes. */
+  ppi: number | null
   outputs: Array<{ fileName: string; layers: Array<{ sourcePath: string; crop: Crop; fit: Fit; cell: Rect }> }>
 }
 
@@ -140,6 +143,7 @@ export async function prepareExport(
       height: composition.height,
       background: composition.background,
       border: composition.border,
+      ppi: FORMATS[project.format].use === 'print' ? PRINT_PPI : null,
       outputs,
     },
   }
@@ -161,7 +165,10 @@ function freshFolderName(destination: string, title: string, now: Date): string 
   throw new Error('No free folder name')
 }
 
-/** Each file has the planned size, is a JPEG with full-resolution colour, and carries no EXIF, XMP or IPTC; and nothing else is in the folder. */
+/**
+ * Each file has the planned size, is a JPEG with full-resolution colour, carries no EXIF, XMP or IPTC, and (for print
+ * sizes) records the print density; and nothing else is in the folder.
+ */
 async function verifyOutputs(staging: string, plan: ExportPlan): Promise<boolean> {
   const expected = plan.outputs.map((o) => o.fileName).sort()
   if (JSON.stringify(readdirSync(staging).sort()) !== JSON.stringify(expected)) return false
@@ -170,6 +177,7 @@ async function verifyOutputs(staging: string, plan: ExportPlan): Promise<boolean
     if (meta.format !== 'jpeg' || meta.width !== plan.width || meta.height !== plan.height) return false
     if (meta.chromaSubsampling !== '4:4:4') return false
     if (meta.exif || meta.xmp || meta.iptc) return false
+    if (plan.ppi && meta.density !== plan.ppi) return false
   }
   return true
 }
@@ -217,6 +225,7 @@ export async function runExport(
       height: plan.height,
       background: plan.background,
       border: plan.border,
+      ppi: plan.ppi,
       quality: JPEG_QUALITY,
       layers: output.layers,
     })

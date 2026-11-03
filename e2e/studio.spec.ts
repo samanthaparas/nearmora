@@ -290,3 +290,37 @@ test('Quick edits: colour, spacing, border, fit, swap and replace, each undoable
   await expect(page.getByRole('img', { name: /charcoal background, white border/ })).toBeVisible()
   await app.close()
 })
+
+test('sharing and print sizes: small photos are named before a print export, and tall shapes fit the preview', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  await pick.nth(0).click()
+  await pick.nth(1).click()
+  await page.getByRole('button', { name: /^Equal split/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Equal split' })).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Shape for sharing' }).getByRole('radio')).toHaveCount(5)
+  await expect(page.getByRole('group', { name: /^Print size/ }).getByRole('radio')).toHaveCount(5)
+  // Sharing sizes never warn, however small the photos are.
+  await expect(page.getByText(/about \d+ pixels per inch/)).toHaveCount(0)
+
+  // The test photos are 320 × 240, far too small for an 8 × 10 in print: both are named, with what can help.
+  await page.getByLabel('Print 8 × 10 in (2400 × 3000)').check()
+  await expect(page.getByText('Size changed. All changes saved.')).toBeVisible()
+  await expect(page.getByText('Some photos may look blurry at this print size')).toBeVisible()
+  await expect(page.getByText(/^Photo 1: about \d+ pixels per inch, likely to look blurry$/)).toBeVisible()
+  await expect(page.getByText(/^Photo 2: about \d+ pixels per inch, likely to look blurry$/)).toBeVisible()
+  await expect(page.getByText('JPEG, 2400 × 3000 pixels, 1 file')).toBeVisible()
+  await expect.poll(() => cropNote(page)).toMatch(/prints at about \d+ pixels per inch/)
+
+  // Back to a sharing size: the warning goes. Vertical is drawn narrower so the whole 9 : 16 canvas fits.
+  await page.getByLabel('Vertical (1080 × 1920)').check()
+  await expect(page.getByText('Some photos may look blurry at this print size')).toHaveCount(0)
+  const canvas = page.getByRole('img', { name: /Preview: equal split, vertical/ })
+  await expect.poll(async () => {
+    const b = await canvas.boundingBox()
+    return b ? [Math.round(b.width), Math.round(b.height)] : null
+  }).toEqual([315, 560])
+  await app.close()
+})

@@ -1,12 +1,15 @@
 /**
  * Unit tests for Studio Quick edits: where a photo and its border are drawn (fill and fit), the design edits (swap,
- * move, replace, reset), the composition's border scaling, and the undo/redo list. Preview and export both rely on
+ * move, replace, reset), the composition's border scaling, the undo/redo list, and the sharing and print sizes with
+ * their effective-resolution check. Preview and export both rely on
  * placePhoto(), and the editor relies on the history rules, so these pin both down.
  */
 
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CROP, placePhoto } from '../../src/shared/layout'
 import { compose } from '../../src/shared/studio/compose'
+import { FORMAT_IDS, FORMATS, PRINT_PPI, type FormatId } from '../../src/shared/studio/formats'
+import { printResolution, sharpnessOf } from '../../src/shared/studio/resolution'
 import { moveItem, replaceItem, resetDesign, sameDesign, swapItems, updateItem, type Design } from '../../src/shared/studio/design'
 import { HISTORY_LIMIT, preview, record, redo, startHistory, undo } from '../../src/renderer/src/studio/design-history'
 
@@ -141,5 +144,44 @@ describe('undo and redo', () => {
     for (let m = 1; m <= HISTORY_LIMIT + 20; m++) h = record(h, margin(m), 'Margin changed')
     expect(h.past).toHaveLength(HISTORY_LIMIT)
     expect(h.past[0]!.design).toEqual(margin(20))
+  })
+})
+
+describe('sizes and print resolution (S3)', () => {
+  it('print sizes are 300 pixels per inch at the size in their name, and wide is about 1.91 : 1', () => {
+    for (const id of FORMAT_IDS.filter((f) => FORMATS[f].use === 'print')) {
+      const [w, h] = FORMATS[id].label.match(/(\d+) × (\d+) in/)!.slice(1).map(Number) as [number, number]
+      expect([FORMATS[id].width, FORMATS[id].height]).toEqual([w * PRINT_PPI, h * PRINT_PPI])
+    }
+    expect(FORMATS.wide.width / FORMATS.wide.height).toBeCloseTo(1.91, 2)
+    expect(FORMATS.vertical.height / FORMATS.vertical.width).toBeCloseTo(16 / 9, 6)
+  })
+
+  const fullBleed = (format: FormatId) => compose({ templateId: 'pair-full-bleed', templateVersion: 1, format, params: { v: 1 }, photoCount: 2 })
+  const photo = (width: number, height: number, zoom = 1, fit: 'fill' | 'fit' = 'fill') => ({ width, height, crop: { ...DEFAULT_CROP, zoom }, fit })
+
+  it('counts the photo’s pixels per printed inch, after crop, zoom and fit', () => {
+    // Full bleed pair at 8 × 8 in: each photo fills 1200 × 2400 px, i.e. 4 × 8 in.
+    const big = photo(3000, 4000) // fills by height: 4000 px over 8 in = 500 per inch
+    const [a, b, c] = [big, photo(3000, 4000, 2), photo(600, 800)]
+    expect(printResolution(fullBleed('print-8x8'), 'print-8x8', [a, b])).toEqual([
+      { slot: 0, ppi: 500, sharpness: 'good' },
+      { slot: 1, ppi: 250, sharpness: 'good' }, // zoom 2 uses half the pixels
+    ])
+    expect(printResolution(fullBleed('print-8x8'), 'print-8x8', [c, photo(3000, 4000, 2.8)])).toEqual([
+      { slot: 0, ppi: 100, sharpness: 'low' },
+      { slot: 1, ppi: 178, sharpness: 'fair' },
+    ])
+    // Shown whole, a 4:3 photo is limited by its width: 3000 px over 4 in = 750 per inch.
+    expect(printResolution(fullBleed('print-8x8'), 'print-8x8', [photo(3000, 4000, 1, 'fit'), big])[0]!.ppi).toBe(750)
+  })
+
+  it('says nothing for sharing sizes, and leaves out photos whose size isn’t known', () => {
+    expect(printResolution(fullBleed('square'), 'square', [photo(60, 80), photo(60, 80)])).toEqual([])
+    expect(printResolution(fullBleed('print-8x10'), 'print-8x10', [{ ...photo(1, 1), width: null, height: null }, photo(600, 800)])).toHaveLength(1)
+  })
+
+  it('names the thresholds: 200 and up good, 150 to 199 fair, below 150 low', () => {
+    expect([sharpnessOf(200), sharpnessOf(199), sharpnessOf(150), sharpnessOf(149)]).toEqual(['good', 'fair', 'fair', 'low'])
   })
 })

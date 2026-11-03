@@ -27,7 +27,7 @@ References: the two-photo and four-photo concept boards and their guides (owner'
 |---|---|---|
 | **S1** | Versioned composition schema; template definitions; resolver; preview and export drawing from one composition; schema v5 migration of existing projects; first templates: Equal split, Stacked, Classic grid, carousel | Existing projects open and export identically; new projects can start from the three templates |
 | **S2** ✅ | Quick edits: replace photo, swap, fit or fill, background colour, gutter, margin, border width and colour, undo and redo, reset to template | Every Quick edit is undoable and survives restart. Done: edits are saved at once and survive a restart; the undo list covers the current editing session (ADR-0015) |
-| **S3** | Remaining everyday layouts (8 pairs, 10 quartets) — done first, as S3a, at the owner's request; then social presets (square, portrait, vertical, wide) and print presets with an effective-resolution warning | All 18 everyday layouts are selectable and exported correctly at every preset |
+| **S3** ✅ | Remaining everyday layouts (8 pairs, 10 quartets) — done first, as S3a, at the owner's request; then social presets (square, portrait, vertical, wide) and print presets with an effective-resolution warning | All 18 everyday layouts are selectable and exported correctly at every preset. Done: S3a (layouts) and S3 (sizes and print warnings, ADR-0016) |
 | **S4** | Playful templates: original decorations (own SVG artwork, provenance documented), captions, masks (circle, arch, torn edge, film, ticket); export compositor spike | Each playful layout is drawn the same in preview and export |
 | **S5** | Seamless carousel: 2–3 slides, boundary guides, slide previews, master-and-slices export | PNG slices reassemble the master exactly |
 | **S6** | Customize and Advanced levels: proportions, rounding, rotation, overlap, lock, hide, move and resize with numeric controls and snapping, layers, add/remove slots, "My templates" | Level switches keep work; custom templates survive restart |
@@ -48,7 +48,7 @@ Status: ✅ implemented · 🟡 partly implemented · ⬜ pending
 | 3 | Wide gutter | ✅ S3a | |
 | 4 | Quiet frame | ✅ S3a | |
 | 5 | Tall + detail | ✅ S3a | |
-| 6 | Landscape pair | ✅ S3a | |
+| 6 | Landscape pair | ✅ S3a | Keeps both photos landscape-shaped, so on the Wide size it stacks them and leaves space at the sides |
 | 7 | Offset pair | ✅ S3a | |
 | 8 | Full bleed pair | ✅ S3a | |
 
@@ -95,13 +95,15 @@ Postcard stack, Film weekend, Torn journal, Garden windows, Love notes, Color pl
 | Square | 1080 × 1080 | ✅ |
 | Portrait | 1080 × 1350 | ✅ |
 | Landscape | 1350 × 1080 | ✅ |
-| Vertical | 1080 × 1920 | ⬜ S3 |
-| Wide (about 1.91:1) | 1200 × 628 | ⬜ S3 |
-| Print 8 × 8 in | 2400 × 2400 | ⬜ S3 |
-| Print 8 × 10 in | 2400 × 3000 | ⬜ S3 |
-| Print 12 × 18 in | 3600 × 5400 | ⬜ S3 |
-| Print 16 × 24 in | 4800 × 7200 | ⬜ S3 |
-| Print 12 × 8 in | 3600 × 2400 | ⬜ S3 |
+| Vertical | 1080 × 1920 | ✅ S3 |
+| Wide (about 1.91:1) | 1200 × 628 | ✅ S3 |
+| Print 8 × 8 in | 2400 × 2400 | ✅ S3 |
+| Print 8 × 10 in | 2400 × 3000 | ✅ S3 |
+| Print 12 × 18 in | 3600 × 5400 | ✅ S3 |
+| Print 16 × 24 in | 4800 × 7200 | ✅ S3 |
+| Print 12 × 8 in | 3600 × 2400 | ✅ S3 |
+
+Print sizes are 300 output pixels per inch at the size named, and print files record that density (in a JFIF header, never EXIF). Before a print export, the editor names any photo with fewer than 200 of its own pixels per printed inch (after crop, zoom, fit and border): 150–199 "may look soft up close", under 150 "likely to look blurry". These thresholds are Nearmora's own guide, not a print service's rule.
 
 Formats are labelled by shape and intended use. No claim about a platform's current requirements is made unless it has been checked against that platform's official documentation. There is no posting, account connection, printing service or ordering.
 

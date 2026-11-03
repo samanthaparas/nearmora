@@ -1,8 +1,9 @@
 /**
- * Editing one Memory Studio project (AC6) with Quick edits: layout, shape, background colour, margin, gutter, photo
+ * Editing one Memory Studio project (AC6) with Quick edits: layout, sharing or print size, background colour, margin, gutter, photo
  * border, and for each photo its order, swap, replace, fit or fill, crop and zoom. Every edit is saved at once, can be
  * undone and redone (buttons, or ⌘Z and ⇧⌘Z), and "Reset to layout defaults" brings back the layout's own look.
- * The preview is drawn from the same composition as the export. Photos that can't be reached are named before export.
+ * The preview is drawn from the same composition as the export. Photos that can't be reached, and photos too small for
+ * the chosen print size, are named before export.
  */
 
 import { useState, type KeyboardEvent } from 'react'
@@ -11,6 +12,7 @@ import { compose, resolveParams, UnknownTemplateError, type Composition } from '
 import { moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '@shared/studio/design'
 import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
 import { BACKGROUNDS, BORDER_COLORS, MAX_BORDER, type Params } from '@shared/studio/params'
+import { printResolution } from '@shared/studio/resolution'
 import { findTemplate, templatesFor } from '@shared/studio/templates'
 import { ColourChoice } from './ColourChoice'
 import { ExportPanel } from './ExportPanel'
@@ -92,6 +94,15 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   }
 
   const slides = composition.canvasCount
+  // Tall shapes are previewed narrower, so the whole canvas fits on screen beside the controls.
+  const previewWidth = (widest: number, tallest: number) => Math.round(Math.min(widest, (tallest * composition.width) / composition.height))
+  const resolution = printResolution(
+    composition,
+    design.format,
+    design.items.map((i) => ({ ...i, width: detailOf(i.assetId)?.width ?? null, height: detailOf(i.assetId)?.height ?? null })),
+  )
+  const weak = resolution.filter((r) => r.sharpness !== 'good')
+  const selectedPrint = resolution.find((r) => r.slot === position)
   const preview = (canvasIndex: number, width: number) => (
     <StudioCanvas
       key={canvasIndex}
@@ -155,10 +166,26 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
       <div className="studio__layout">
         <div className="studio__previews">
           {composition.mode === 'carousel' ? (
-            <div className="studio__slides">{Array.from({ length: slides }, (_, i) => preview(i, 220))}</div>
+            <div className="studio__slides">{Array.from({ length: slides }, (_, i) => preview(i, previewWidth(220, 300)))}</div>
           ) : (
-            preview(0, 480)
+            preview(0, previewWidth(480, 560))
           )}
+          {/* Prints: photos enlarged so much they may look soft, named before export with what can help. */}
+          {weak.length > 0 ? (
+            <div className="library__confirm" role="status">
+              <p className="library__confirm-title">
+                {weak.some((r) => r.sharpness === 'low') ? 'Some photos may look blurry at this print size' : 'Some photos may look slightly soft up close'}
+              </p>
+              <ul className="review__note">
+                {weak.map((r) => (
+                  <li key={r.slot}>
+                    Photo {r.slot + 1}: about {r.ppi} pixels per inch{r.sharpness === 'low' ? ', likely to look blurry' : ', may look soft up close'}
+                  </li>
+                ))}
+              </ul>
+              <p className="review__note">Zooming out, showing the whole photo, or a smaller print size gives each photo more pixels per inch.</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="studio__controls">
@@ -226,15 +253,18 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             </ul>
           </section>
 
-          <fieldset className="studio__choice">
-            <legend>Shape</legend>
-            {FORMAT_IDS.map((value) => (
-              <label key={value} className="library__check">
-                <input type="radio" name="format" checked={design.format === value} onChange={() => change({ ...design, format: value }, 'Shape changed')} />
-                <span>{formatLabel(value)}</span>
-              </label>
-            ))}
-          </fieldset>
+          {/* Sizes for screens and sizes for printing, as two groups of one choice. */}
+          {(['share', 'print'] as const).map((use) => (
+            <fieldset key={use} className="studio__choice">
+              <legend>{use === 'share' ? 'Shape for sharing' : 'Print size (300 pixels per inch)'}</legend>
+              {FORMAT_IDS.filter((id) => FORMATS[id].use === use).map((value) => (
+                <label key={value} className="library__check">
+                  <input type="radio" name="format" checked={design.format === value} onChange={() => change({ ...design, format: value }, 'Size changed')} />
+                  <span>{formatLabel(value)}</span>
+                </label>
+              ))}
+            </fieldset>
+          ))}
 
           <ColourChoice
             legend="Background"
@@ -297,6 +327,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           >
             <p className="review__note">
               Photo {position + 1} of {design.items.length} · {item.fit === 'fill' ? describeCrop(item.crop) : 'whole photo shown'}
+              {selectedPrint ? ` · prints at about ${selectedPrint.ppi} pixels per inch` : ''}
             </p>
             <div className="library__source-actions">
               <button
