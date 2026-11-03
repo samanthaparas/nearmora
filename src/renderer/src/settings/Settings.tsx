@@ -1,6 +1,7 @@
 /**
  * The Settings screen: what Nearmora stores on this Mac and how big it is, clearing the caches that can be rebuilt
- * (AC9), and plain statements of what Nearmora does with the person's data.
+ * (AC9), plain statements of what Nearmora does with the person's data, and the licences of the fonts and open-source
+ * software it includes, as their licences ask.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -15,6 +16,17 @@ const size = (bytes: number) =>
 export function Settings() {
   const [usage, setUsage] = useState<Usage | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [licences, setLicences] = useState<CommandOutput<'app:licences'> | null>(null)
+
+  useEffect(() => {
+    let current = true
+    void window.nearmora.licences().then((result) => {
+      if (current) setLicences(result.ok ? result.data : [])
+    })
+    return () => {
+      current = false
+    }
+  }, [])
 
   const load = useCallback(() => window.nearmora.storageUsage().then((result) => setUsage(result.ok ? result.data : null)), [])
   useEffect(() => {
@@ -84,6 +96,34 @@ export function Settings() {
           Nearmora works entirely on this Mac. It never connects to the internet, sends no analytics, and never moves, edits or uploads your photos.
           It removes a photo only when you choose to in Clean up.
         </p>
+      </section>
+
+      {/* Each package's licence asks for its notice to travel with the app; each opens to show its full text. */}
+      <section className="moments" aria-labelledby="licences-title">
+        <h2 id="licences-title" className="moments__title">
+          Licences
+        </h2>
+        <p>
+          Nearmora is built with these fonts and open-source software. Chromium’s own notices are in the app, in Contents/Resources/LICENSES.chromium.html.
+        </p>
+        {licences === null ? (
+          <p>Loading…</p>
+        ) : licences.length === 0 ? (
+          <p className="library__skipped">The list is made when the app is built, so it isn’t available in this development run.</p>
+        ) : (
+          <ul className="settings__licences" aria-label="Fonts and open-source software">
+            {licences.map((notice) => (
+              <li key={notice.name}>
+                <details>
+                  <summary>
+                    {notice.name} {notice.version} · {notice.license}
+                  </summary>
+                  <pre className="settings__licence-text">{notice.text}</pre>
+                </details>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </>
   )

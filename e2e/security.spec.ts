@@ -58,6 +58,7 @@ test('bridge exposes only the named API, frozen', async () => {
   expect(shape).toEqual({
     keys: [
       'getAppInfo',
+      'licences',
       'addSource',
       'listSources',
       'rescanSource',

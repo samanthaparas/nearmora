@@ -14,6 +14,11 @@ files:
   - package.json
 
 asar: true
+
+# Chromium's own licence notices ship inside the app, next to Nearmora's (Settings → Licences lists the rest).
+extraResources:
+  - from: node_modules/electron/dist/LICENSES.chromium.html
+    to: LICENSES.chromium.html
 # Native binaries can't be loaded from inside the asar archive, so these
 # packages are unpacked next to it.
 asarUnpack:

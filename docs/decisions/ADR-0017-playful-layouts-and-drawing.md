@@ -58,7 +58,7 @@ Later the same comparison was made in the real app, between the editor's preview
 
 - Every export now goes through the SVG renderer, including everyday layouts. All earlier export tests still pass on it, including pixel checks, metadata, print density and every size up to 16 × 24 in.
 - The picker shows playful layouts in their own group. Their picker drawings come from the same layers.
-- **Licence notices are needed before distribution.** The app doesn't yet ship third-party licence notices for the libraries and fonts it bundles (Fraunces, Source Sans 3 and Caveat are OFL; React and opentype.js are MIT). The pre-beta checklist must add them.
+- **Licence notices are needed before distribution.** The app doesn't yet ship third-party licence notices for the libraries and fonts it bundles (Fraunces, Source Sans 3 and Caveat are OFL; React and opentype.js are MIT). The pre-beta checklist must add them. *Done 2026-11-03:* Settings → Licences lists every package and font the app ships, with its full text, generated at build time; the build fails if one lacks a licence text (`scripts/notices.mjs`).
 - **Tests:**
   - Text outlines: fitting, anchoring, characters the font lacks.
   - Caption settings and the drawing order.

@@ -133,6 +133,11 @@ export const commands = {
       version: z.string(),
     }),
   },
+  // Third-party licence notices for everything the app ships, written at build time (scripts/notices.mjs).
+  'app:licences': {
+    input: z.undefined(),
+    output: z.array(z.object({ name: z.string(), version: z.string(), license: z.string(), kind: z.enum(['bundled', 'shipped', 'runtime']), text: z.string() })),
+  },
   // Main opens the folder picker itself, so the UI never supplies a path (roadmap §6.5).
   'sources:add': {
     input: z.undefined(),

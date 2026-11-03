@@ -12,6 +12,8 @@ import type { CommandInput, CommandOutput, IpcResult, MainEvent } from './ipc-co
  */
 export interface NearmoraApi {
   getAppInfo(): Promise<IpcResult<CommandOutput<'app:getInfo'>>>
+  /** The licence notices of every third-party package the app ships. */
+  licences(): Promise<IpcResult<CommandOutput<'app:licences'>>>
   /** Opens the macOS folder picker; the chosen folder is added and scanned. */
   addSource(): Promise<IpcResult<CommandOutput<'sources:add'>>>
   listSources(): Promise<IpcResult<CommandOutput<'sources:list'>>>

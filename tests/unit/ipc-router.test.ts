@@ -12,6 +12,7 @@ const TRUSTED = 'app://nearmora/index.html'
 function makeRouter(overrides: Partial<Handlers> = {}) {
   const handlers: Handlers = {
     'app:getInfo': () => ({ name: 'Nearmora', version: '0.0.1' }),
+    'app:licences': () => [],
     'sources:add': () => ({ status: 'cancelled' }),
     'sources:list': () => [],
     'sources:rescan': () => ({ started: false }),
