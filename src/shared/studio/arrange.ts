@@ -42,3 +42,32 @@ export const emptyPlace = (design: Design, slot: number): Design => ({
   ...design,
   items: design.items.map((item, i) => (i === slot ? { ...item, assetId: null } : item)),
 })
+
+/** Most places a project holds, added ones included (the catalogue allows 10). */
+export const MAX_PLACES = 10
+
+/**
+ * Adds an empty place to a collage or seamless design (S6b), in the middle of the canvas, a third of its shorter side
+ * across, ready to be filled and moved. Its photo position is the next one after every existing place.
+ */
+export function addPlace(design: Design, composition: Pick<Composition, 'width' | 'height'>): Design {
+  const side = Math.min(composition.width, composition.height) / 3
+  const rect = placeEdit(composition, { x: (composition.width - side) / 2, y: (composition.height - side) / 2, width: side, height: side })
+  return {
+    ...design,
+    params: { ...design.params, extra: [...(design.params.extra ?? []), rect] },
+    items: [...design.items, { assetId: null, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill' }],
+  }
+}
+
+/** Removes a place from the layout (S6b): its photo leaves the project and the place isn't drawn; it can be restored. */
+export const removePlace = (design: Design, slot: number): Design => setEdit(emptyPlace(design, slot), slot, { removed: true, hidden: undefined })
+
+/** Puts a removed place back, empty, where it was. */
+export const restorePlace = (design: Design, slot: number): Design => setEdit(design, slot, { removed: undefined })
+
+/** Moves a photo all the way to the front or the back of the drawing order. */
+export function moveToEnd(design: Design, composition: Composition, slot: number, end: 'front' | 'back'): Design {
+  const others = composition.elements.map((e) => e.slot).filter((s) => s !== slot)
+  return { ...design, params: { ...design.params, order: end === 'front' ? [...others, slot] : [slot, ...others] } }
+}

@@ -1,11 +1,12 @@
 /**
  * Customize controls for the selected photo (S6a, ADR-0022): exact position, size and angle, rounded corners, flip,
  * lock, hide, layer order, and taking the photo out of its place. Arrow keys nudge it (Shift for 10 pixels), so
- * everything a drag does can also be done from the keyboard. Also the list of hidden photos, so none is ever lost.
+ * everything a drag does can also be done from the keyboard. S6b adds bringing to the front or back, and removing a
+ * place from the layout. Also the list of hidden photos and removed places, so none is ever lost.
  */
 
 import type { KeyboardEvent } from 'react'
-import { emptyPlace, moveInOrder, placeEdit, setEdit } from '@shared/studio/arrange'
+import { emptyPlace, moveInOrder, moveToEnd, placeEdit, removePlace, restorePlace, setEdit } from '@shared/studio/arrange'
 import type { Composition } from '@shared/studio/compose'
 import type { Design } from '@shared/studio/design'
 import { MAX_ROUNDING } from '@shared/studio/params'
@@ -23,13 +24,15 @@ export function ArrangePanel({ design, composition, position, change, live }: {
   live: Apply
 }) {
   const element = composition.elements.find((e) => e.slot === position)
-  if (!element) return null
+  if (!element || element.removed) return null
   const edit = design.params.edits?.[String(position)] ?? {}
   const name = `Photo ${position + 1}`
   const locked = element.locked
   const order = composition.elements.map((e) => e.slot)
   const photos = design.items.filter((i) => i.assetId !== null).length
   const empty = design.items[position]?.assetId === null
+  // The last photo can't leave its place; a carousel's places are its slides, so they aren't removed here.
+  const lastPhoto = !empty && photos <= 1
   // A layout that gives this photo its own shape (circle, arch, torn edge) keeps it; corners can't be rounded then.
   const shapedByLayout = element.mask !== null && edit.rounding === undefined
   const rect = element.rect
@@ -115,14 +118,20 @@ export function ArrangePanel({ design, composition, position, change, live }: {
         <button type="button" className="button button--quiet" disabled={order.indexOf(position) === 0} onClick={() => change(moveInOrder(design, composition, position, -1), `${name} sent back`)}>
           Send back
         </button>
+        <button type="button" className="button button--quiet" disabled={order.indexOf(position) === order.length - 1} onClick={() => change(moveToEnd(design, composition, position, 'front'), `${name} brought to the front`)}>
+          Bring to front
+        </button>
+        <button type="button" className="button button--quiet" disabled={order.indexOf(position) === 0} onClick={() => change(moveToEnd(design, composition, position, 'back'), `${name} sent to the back`)}>
+          Send to back
+        </button>
         <button type="button" className="button button--quiet" onClick={() => change(setEdit(design, position, { hidden: true }), `${name} hidden`)}>
           Hide
         </button>
         <button
           type="button"
           className="button button--quiet"
-          disabled={empty || photos <= 1}
-          title={photos <= 1 && !empty ? 'A project keeps at least one photo' : undefined}
+          disabled={empty || lastPhoto}
+          title={lastPhoto ? 'A project keeps at least one photo' : undefined}
           onClick={() => change(emptyPlace(design, position), `${name} taken out; its place is empty`)}
         >
           Take out of its place
@@ -135,15 +144,53 @@ export function ArrangePanel({ design, composition, position, change, live }: {
         >
           Back to the layout’s place
         </button>
+        {composition.mode !== 'carousel' ? (
+          <button
+            type="button"
+            className="button button--quiet"
+            disabled={lastPhoto}
+            title={lastPhoto ? 'A project keeps at least one photo' : undefined}
+            onClick={() => change(removePlace(design, position), `Place ${position + 1} removed`)}
+          >
+            Remove this place
+          </button>
+        ) : null}
       </div>
     </section>
   )
 }
 
-/** Every hidden photo, always listed while any is hidden, each with a way to show it again. */
+/** Every hidden photo and removed place, always listed while there are any, each with a way to bring it back. */
 export function HiddenPhotos({ design, composition, change }: { design: Design; composition: Composition; change: Apply }) {
-  const hidden = composition.elements.filter((e) => e.hidden).sort((a, b) => a.slot - b.slot)
-  if (hidden.length === 0) return null
+  const hidden = composition.elements.filter((e) => e.hidden && !e.removed).sort((a, b) => a.slot - b.slot)
+  const removed = composition.elements.filter((e) => e.removed).sort((a, b) => a.slot - b.slot)
+  if (hidden.length === 0 && removed.length === 0) return null
+  return (
+    <>
+      {hidden.length > 0 ? <HiddenList design={design} hidden={hidden} change={change} /> : null}
+      {removed.length > 0 ? (
+        <section className="library__confirm" aria-labelledby="removed-title">
+          <h3 id="removed-title" className="library__confirm-title">
+            Removed places ({removed.length})
+          </h3>
+          <p className="review__note">Removed places aren’t shown or exported. Restoring one brings it back empty, where it was.</p>
+          <ul className="review__note">
+            {removed.map((e) => (
+              <li key={e.slot}>
+                Place {e.slot + 1}{' '}
+                <button type="button" className="button button--quiet" onClick={() => change(restorePlace(design, e.slot), `Place ${e.slot + 1} restored`)}>
+                  Restore place {e.slot + 1}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </>
+  )
+}
+
+function HiddenList({ design, hidden, change }: { design: Design; hidden: Composition['elements']; change: Apply }) {
   return (
     <section className="library__confirm" aria-labelledby="hidden-title">
       <h3 id="hidden-title" className="library__confirm-title">

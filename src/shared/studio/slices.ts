@@ -46,7 +46,7 @@ export function seamNotes(composition: Composition): SeamNote[] {
   const near = (NEAR_CUT * Math.min(composition.height, composition.width / composition.slices)) / 1080
   const notes: SeamNote[] = []
   cutPositions(Math.round(composition.width), composition.slices).forEach((x, i) => {
-    for (const e of composition.elements.filter((e) => !e.hidden)) {
+    for (const e of composition.elements.filter((e) => !e.hidden && !e.removed)) {
       const left = e.rect.x
       const right = e.rect.x + e.rect.width
       if (left < x - near && right > x + near) notes.push({ slot: e.slot, kind: 'crosses', cut: i + 1 })

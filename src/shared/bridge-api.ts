@@ -48,6 +48,10 @@ export interface NearmoraApi {
   renameProject(input: CommandInput<'projects:rename'>): Promise<IpcResult<CommandOutput<'projects:rename'>>>
   setProjectDesign(input: CommandInput<'projects:setDesign'>): Promise<IpcResult<CommandOutput<'projects:setDesign'>>>
   deleteProject(input: CommandInput<'projects:delete'>): Promise<IpcResult<CommandOutput<'projects:delete'>>>
+  listMyTemplates(): Promise<IpcResult<CommandOutput<'myTemplates:list'>>>
+  saveMyTemplate(input: CommandInput<'myTemplates:save'>): Promise<IpcResult<CommandOutput<'myTemplates:save'>>>
+  deleteMyTemplate(input: CommandInput<'myTemplates:delete'>): Promise<IpcResult<CommandOutput<'myTemplates:delete'>>>
+  createProjectFromMine(input: CommandInput<'projects:createFromMine'>): Promise<IpcResult<CommandOutput<'projects:createFromMine'>>>
   startExport(input: CommandInput<'export:start'>): Promise<IpcResult<CommandOutput<'export:start'>>>
   cancelExport(input: CommandInput<'export:cancel'>): Promise<IpcResult<CommandOutput<'export:cancel'>>>
   revealExport(input: CommandInput<'export:reveal'>): Promise<IpcResult<CommandOutput<'export:reveal'>>>

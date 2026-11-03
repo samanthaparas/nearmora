@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { DEFAULT_CROP, type Crop, type Fit } from '@shared/layout'
 import { DesignSchema, type Design } from '@shared/studio/design'
 import { isFormatId, type FormatId } from '@shared/studio/formats'
+import { layoutPlaces } from '@shared/studio/compose'
 import { DEFAULT_PARAMS, readParams, type Params } from '@shared/studio/params'
 import { findTemplate, formatsFor, latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
 import type { Catalog } from '../database'
@@ -107,6 +108,27 @@ export function createProject(db: Catalog, input: { templateId: string; format: 
   return getProject(db, id)
 }
 
+/** Starts a project from a whole design (used by My templates); it must pass every rule a saved design meets. */
+export function createProjectFromDesign(db: Catalog, input: { design: Design; title: string }): ProjectDetail {
+  const { design, template } = checkDesign(input.design)
+  const title = Title.safeParse(input.title)
+  if (!title.success) throw new CatalogError('INVALID_INPUT', 'Project titles need 1–120 characters')
+  const id = randomUUID()
+  db.transaction(() => {
+    db.prepare('INSERT INTO project (id, title, template_id, template_version, format, params_json, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      id,
+      title.data,
+      template.id,
+      template.version,
+      design.format,
+      JSON.stringify(design.params),
+      Date.now(),
+    )
+    insertItems(db, id, design.items)
+  })()
+  return getProject(db, id)
+}
+
 /** Most recently edited first. */
 export function listProjects(db: Catalog): ProjectSummary[] {
   return (
@@ -194,23 +216,39 @@ export function renameProject(db: Catalog, input: { projectId: string; title: st
 }
 
 /**
- * Saves a project's whole design in one transaction: layout and version, shape, settings, and every photo with its
- * crop and fit. Every Quick edit, undo, redo and reset goes through here. The layout must be one this version knows
- * and must take this many photos; each photo can appear once. Anything invalid is refused and nothing is written.
+ * Every rule a stored design must meet; refused designs are never written. Shared by saving an edit and by starting a
+ * project from one of the person's own templates, so both follow exactly the same rules.
  */
-export function setDesign(db: Catalog, input: { projectId: string; design: Design }): void {
-  const parsed = DesignSchema.safeParse(input.design)
+export function checkDesign(input: Design): { design: Design; template: TemplateDefinition } {
+  const parsed = DesignSchema.safeParse(input)
   if (!parsed.success) throw new CatalogError('INVALID_INPUT', 'That design isn’t valid')
   const design = parsed.data
   const template = findTemplate(design.templateId, design.templateVersion)
   if (!template) throw new CatalogError('INVALID_INPUT', 'Unknown template')
   if (!formatsFor(template).includes(design.format)) throw new CatalogError('INVALID_INPUT', `${template.name} can’t be made at that size`)
-  const count = design.items.length
+  // Places from the layout must still be a count it takes; places the person added (S6b) come on top, collages and
+  // seamless designs only (a carousel's places are its slides).
+  const count = layoutPlaces(design.items.length, design.params)
   if (count < template.photos.min || count > template.photos.max) throw new CatalogError('INVALID_INPUT', `${template.name} doesn’t take ${count} photos`)
+  if (design.params.extra?.length && template.mode === 'carousel') throw new CatalogError('INVALID_INPUT', 'Carousels can’t have added places')
+  // A removed place holds no photo, so a photo is never silently kept out of sight in a project.
+  if (design.items.some((item, i) => item.assetId !== null && design.params.edits?.[String(i)]?.removed)) {
+    throw new CatalogError('INVALID_INPUT', 'A removed place can’t hold a photo')
+  }
   // Empty places (S6a) don't count as photos; at least one photo must stay, and each photo is used once.
   const photos = design.items.flatMap((i) => (i.assetId ? [i.assetId] : []))
   if (photos.length === 0) throw new CatalogError('INVALID_INPUT', 'A project needs at least one photo')
   if (new Set(photos).size !== photos.length) throw new CatalogError('INVALID_INPUT', 'Each photo can be used once per project')
+  return { design, template }
+}
+
+/**
+ * Saves a project's whole design in one transaction: layout and version, shape, settings, and every photo with its
+ * crop and fit. Every Quick edit, undo, redo and reset goes through here. The layout must be one this version knows
+ * and must take this many photos; each photo can appear once. Anything invalid is refused and nothing is written.
+ */
+export function setDesign(db: Catalog, input: { projectId: string; design: Design }): void {
+  const { design, template } = checkDesign(input.design)
   db.transaction(() => {
     const result = db
       .prepare('UPDATE project SET template_id = ?, template_version = ?, format = ?, params_json = ?, updated_at = ? WHERE id = ?')

@@ -100,6 +100,18 @@ const fileName = z.string()
  * inside the folder, it's the picture's last copy, or the Trash or delete step itself failed. */
 const RefusalReason = z.enum(['offline', 'missing', 'changed', 'not_a_file', 'outside_folder', 'last_copy', 'failed'])
 
+// My templates (S6b): a customised layout saved under the person's own name; no photos are stored in it.
+const MyTemplate = z.object({
+  id,
+  name: z.string(),
+  templateId,
+  templateVersion: z.number().int().positive(),
+  format,
+  params: ParamsSchema,
+  places: count,
+  photos: count,
+})
+
 /** Album edits return an undo id: passing it to albums:undo puts the album back as it was before that edit. */
 const UndoResult = z.object({ undoId: z.number().int().positive() })
 
@@ -317,6 +329,11 @@ export const commands = {
   // Every Quick edit, undo, redo and reset saves the project's whole design in one step.
   'projects:setDesign': { input: z.object({ projectId: id, design: DesignSchema }), output: ProjectDetail },
   'projects:delete': { input: z.object({ projectId: id }), output: z.object({ deleted: z.literal(true) }) },
+  'myTemplates:list': { input: z.undefined(), output: z.array(MyTemplate) },
+  'myTemplates:save': { input: z.object({ projectId: id, name: z.string().trim().min(1).max(80) }), output: MyTemplate },
+  'myTemplates:delete': { input: z.object({ id }), output: z.object({ deleted: z.literal(true) }) },
+  // The chosen photos fill the template's places in order; removed places stay removed.
+  'projects:createFromMine': { input: z.object({ myTemplateId: id, assetIds: z.array(id).min(1).max(10) }), output: ProjectDetail },
   // Export (AC7, AC8). Main opens the destination picker; nothing is written until every check passes.
   'export:start': {
     // `wholeDesign`: a seamless carousel also saves its whole design as one wide file, next to the slides.

@@ -19,6 +19,7 @@ import {
 import { createAlbum, listAlbums } from '../catalog/repositories/albums'
 import { listDuplicates, listRemovals, listUnneeded, setUnneeded } from '../catalog/repositories/clean-up'
 import { setFavorites } from '../catalog/repositories/favorites'
+import { createFromMyTemplate, deleteMyTemplate, listMyTemplates, saveMyTemplate } from '../catalog/repositories/my-templates'
 import { queryAlbumPhotos, queryLibrary } from '../catalog/repositories/library'
 import { listMoments, updateMoment } from '../catalog/repositories/moments'
 import {
@@ -112,6 +113,13 @@ export function createHandlers({ db, library, exports, paths, removal }: Handler
       deleteProject(db, projectId)
       return { deleted: true as const }
     },
+    'myTemplates:list': () => listMyTemplates(db),
+    'myTemplates:save': (input) => saveMyTemplate(db, input),
+    'myTemplates:delete': ({ id }) => {
+      deleteMyTemplate(db, id)
+      return { deleted: true as const }
+    },
+    'projects:createFromMine': (input) => createFromMyTemplate(db, input),
     // The destination picker runs here in main; the path never reaches the UI.
     'export:start': async ({ projectId, wholeDesign }) => {
       const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]

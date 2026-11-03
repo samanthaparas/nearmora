@@ -11,6 +11,7 @@ import landscapeProjects from './0004_landscape_projects.sql?raw'
 import studioTemplates from './0005_studio_templates.sql?raw'
 import cleanUp from './0006_clean_up.sql?raw'
 import emptySlots from './0007_empty_slots.sql?raw'
+import myTemplates from './0008_my_templates.sql?raw'
 
 export interface Migration {
   version: number
@@ -26,4 +27,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 5, name: 'studio-templates', sql: studioTemplates },
   { version: 6, name: 'clean-up', sql: cleanUp },
   { version: 7, name: 'empty-slots', sql: emptySlots },
+  { version: 8, name: 'my-templates', sql: myTemplates },
 ]

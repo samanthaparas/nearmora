@@ -19,8 +19,8 @@ import { FORMAT_IDS, FORMATS } from '@shared/studio/formats'
 import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
 import { createProject, getProject, setDesign } from '../../src/main/catalog/repositories/projects'
-import { designOf, updateItem } from '../../src/shared/studio/design'
-import { emptyPlace, setEdit } from '../../src/shared/studio/arrange'
+import { designOf, replaceItem, updateItem } from '../../src/shared/studio/design'
+import { addPlace, emptyPlace, setEdit } from '../../src/shared/studio/arrange'
 import { setSourceStatus } from '../../src/main/catalog/repositories/sources'
 import { scanSource } from '../../src/main/library/scan'
 import { addSourceFolder } from '../../src/main/library/source-folders'
@@ -501,6 +501,21 @@ describe('exporting a project', () => {
     expect(await colourAt(await exportNow((d) => d), right.x, right.y)).not.toBe('cream')
     expect(await colourAt(await exportNow((d) => setEdit(d, 1, { hidden: true })), right.x, right.y)).toBe('cream')
     expect(await colourAt(await exportNow((d) => emptyPlace(setEdit(d, 1, { hidden: undefined }), 1)), right.x, right.y)).toBe('cream')
+  }, 60_000)
+
+  // S6b: a place the person added is exported with its photo, in front, where they put it.
+  it('exports an added place with its photo, drawn over the layout’s photos', async () => {
+    const { db, profile, project } = await exportable('collage')
+    const c = db.prepare(`SELECT asset_id FROM asset_location WHERE relative_path = 'c.jpg'`).pluck().get() as string
+    const spot = { x: 360 + 360 * 0.25, y: 540 } // inside the added place's red (left) half, over the left photo's blue half
+    setDesign(db, { projectId: project.id, design: designOf(getProject(db, project.id)) })
+    const plain = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
+    if (plain.status !== 'done') throw new Error(JSON.stringify(plain))
+    expect(await colourAt(join(plain.folder, plain.files[0]!), spot.x, spot.y)).toBe('blue')
+    setDesign(db, { projectId: project.id, design: replaceItem(addPlace(designOf(getProject(db, project.id)), { width: 1080, height: 1080 }), 2, c) })
+    const added = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
+    if (added.status !== 'done') throw new Error(JSON.stringify(added))
+    expect(await colourAt(join(added.folder, added.files[0]!), spot.x, spot.y)).toBe('red')
   }, 60_000)
 
   it('numbers carousel files with two digits, so ten slides sort in posting order', async () => {
