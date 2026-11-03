@@ -1,20 +1,21 @@
 /**
  * The app shell: sidebar navigation plus the main content area.
- * Every section is real: Library, Best Moments, Favorites, Memory Studio, Sources and Settings.
+ * Every section is real: Library, Best Moments, Favorites, Memory Studio, Clean up, Sources and Settings.
  */
 
 import { useEffect, useState } from 'react'
 import { Library } from './library/Library'
 import { Sources } from './library/Sources'
 import { BestMoments } from './best-moments/BestMoments'
+import { CleanUp } from './clean-up/CleanUp'
 import { Favorites } from './studio/Favorites'
 import { MemoryStudio } from './studio/MemoryStudio'
 import { Settings } from './settings/Settings'
 import { navigate } from './navigation-guard'
 import './App.css'
 
-// The five main sections, in the order the blueprint specifies. Settings sits apart at the bottom.
-const SECTIONS = ['Library', 'Best Moments', 'Favorites', 'Memory Studio', 'Sources'] as const
+// The main sections in the blueprint's order, with Clean up (ADR-0019) before Sources. Settings sits apart at the bottom.
+const SECTIONS = ['Library', 'Best Moments', 'Favorites', 'Memory Studio', 'Clean up', 'Sources'] as const
 type Section = (typeof SECTIONS)[number] | 'Settings'
 
 /** What we know about the app version. Each state renders differently, and the compiler checks we handle all three. */
@@ -123,6 +124,8 @@ export function App() {
               setSection('Memory Studio')
             }}
           />
+        ) : section === 'Clean up' ? (
+          <CleanUp />
         ) : section === 'Memory Studio' ? (
           <MemoryStudio key={studioProjectId ?? 'list'} initialProjectId={studioProjectId} onGoToFavorites={() => setSection('Favorites')} />
         ) : (

@@ -9,6 +9,7 @@ import jobSource from './0002_job_source.sql?raw'
 import assetOrderIndex from './0003_asset_order_index.sql?raw'
 import landscapeProjects from './0004_landscape_projects.sql?raw'
 import studioTemplates from './0005_studio_templates.sql?raw'
+import cleanUp from './0006_clean_up.sql?raw'
 
 export interface Migration {
   version: number
@@ -22,4 +23,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 3, name: 'asset-order-index', sql: assetOrderIndex },
   { version: 4, name: 'landscape-projects', sql: landscapeProjects },
   { version: 5, name: 'studio-templates', sql: studioTemplates },
+  { version: 6, name: 'clean-up', sql: cleanUp },
 ]

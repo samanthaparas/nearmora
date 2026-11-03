@@ -30,6 +30,8 @@ export function createLibraryService(deps: LibraryServiceDeps) {
   const { db } = deps
   // One running scan per source; its controller lets the UI pause or cancel it.
   const running = new Map<string, AbortController>()
+  // While Clean up removes files, no scan may start, so a scan can't re-record a file that is being removed.
+  let scansHeld = false
 
   const countPictures = db.prepare(
     `SELECT COUNT(*) AS files, COUNT(DISTINCT asset_id) AS pictures
@@ -67,7 +69,7 @@ export function createLibraryService(deps: LibraryServiceDeps) {
   }
 
   function startScan(sourceId: string): boolean {
-    if (running.has(sourceId)) return false
+    if (running.has(sourceId) || scansHeld) return false
     if (getSource(db, sourceId).status === 'disconnected') return false
     const controller = new AbortController()
     running.set(sourceId, controller)
@@ -142,6 +144,19 @@ export function createLibraryService(deps: LibraryServiceDeps) {
       const controller = running.get(sourceId)
       controller?.abort()
       return controller !== undefined
+    },
+    /**
+     * Runs `work` (removing files in Clean up) only when no scan is running, and holds new scans until it ends.
+     * Returns 'busy' without running it otherwise, so removal and scanning never see the folder change under them.
+     */
+    async withoutScans<T>(work: () => Promise<T>): Promise<T | 'busy'> {
+      if (scansHeld || running.size > 0) return 'busy'
+      scansHeld = true
+      try {
+        return await work()
+      } finally {
+        scansHeld = false
+      }
     },
     /** On quit: pause rather than cancel, so the next launch offers to resume. */
     pauseAll(): void {

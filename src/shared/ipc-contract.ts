@@ -92,6 +92,13 @@ const ProjectDetail = z.object({
   ),
 })
 
+// Clean up (ADR-0019). Pictures and copies are named by catalogue id only; the UI never sends a path.
+const removeMode = z.enum(['trash', 'forever'])
+const fileName = z.string()
+/** Why a file was left alone: its folder is offline, it's gone or changed since the scan, it isn't an ordinary file
+ * inside the folder, it's the picture's last copy, or the Trash or delete step itself failed. */
+const RefusalReason = z.enum(['offline', 'missing', 'changed', 'not_a_file', 'outside_folder', 'last_copy', 'failed'])
+
 /** Album edits return an undo id: passing it to albums:undo puts the album back as it was before that edit. */
 const UndoResult = z.object({ undoId: z.number().int().positive() })
 
@@ -341,6 +348,67 @@ export const commands = {
   'albums:photos': {
     input: z.object({ albumId: id, afterPosition: z.number().int().nullable().optional(), limit: z.number().int().min(1).max(500) }),
     output: z.object({ items: z.array(LibraryItem), total: count, nextAfter: z.number().int().nullable() }),
+  },
+  // Clean up (ADR-0019): "Don't need" marks are notes only; nothing is removed until cleanup:remove is confirmed.
+  'cleanup:mark': {
+    input: z.object({ assetIds: z.array(id).min(1).max(500), unneeded: z.boolean() }),
+    output: z.object({ changed: z.array(id) }),
+  },
+  'cleanup:unneeded': {
+    input: z.undefined(),
+    output: z.object({
+      items: z.array(
+        z.object({
+          assetId: id,
+          width: z.number().int().nullable(),
+          height: z.number().int().nullable(),
+          capturedAt: z.number().int().nullable(),
+          fileName,
+          folderName: z.string(),
+          files: count,
+          bytes: count,
+          offline: z.boolean(),
+          /** Titles of Studio projects using this picture; while there are any, it can't be removed. */
+          usedIn: z.array(z.string()),
+        }),
+      ),
+      total: count,
+    }),
+  },
+  'cleanup:duplicates': {
+    input: z.undefined(),
+    output: z.object({
+      groups: z.array(
+        z.object({
+          assetId: id,
+          copies: z.array(z.object({ locationId: id, fileName, folderName: z.string(), subfolder: z.string(), bytes: count, offline: z.boolean() })),
+        }),
+      ),
+      total: count,
+    }),
+  },
+  // Main re-checks every file before removing it. "forever" also asks in a native macOS dialog the UI can't skip.
+  'cleanup:remove': {
+    input: z
+      .object({ pictures: z.array(id).max(1000), copies: z.array(id).max(1000), mode: removeMode })
+      .refine((v) => v.pictures.length + v.copies.length > 0, 'nothing to remove'),
+    output: z.discriminatedUnion('status', [
+      z.object({ status: z.literal('cancelled') }),
+      /** A scan or another removal is running; nothing was touched. */
+      z.object({ status: z.literal('busy') }),
+      z.object({
+        status: z.literal('done'),
+        mode: removeMode,
+        removed: count,
+        bytes: count,
+        refused: z.array(z.object({ fileName, folderName: z.string(), reason: RefusalReason })),
+        blocked: z.array(z.object({ fileName, projects: z.array(z.string()) })),
+      }),
+    ]),
+  },
+  'cleanup:history': {
+    input: z.undefined(),
+    output: z.array(z.object({ removedAt: z.number().int(), mode: removeMode, fileName, folderName: z.string(), sizeBytes: count })),
   },
 } as const
 

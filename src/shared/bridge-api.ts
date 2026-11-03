@@ -53,6 +53,13 @@ export interface NearmoraApi {
   revealExport(input: CommandInput<'export:reveal'>): Promise<IpcResult<CommandOutput<'export:reveal'>>>
   storageUsage(): Promise<IpcResult<CommandOutput<'settings:storage'>>>
   clearCache(input: CommandInput<'settings:clearCache'>): Promise<IpcResult<CommandOutput<'settings:clearCache'>>>
+  /** Marks pictures "Don't need" (or clears the mark). Nothing is removed by marking. */
+  markUnneeded(input: CommandInput<'cleanup:mark'>): Promise<IpcResult<CommandOutput<'cleanup:mark'>>>
+  listUnneeded(): Promise<IpcResult<CommandOutput<'cleanup:unneeded'>>>
+  listDuplicates(): Promise<IpcResult<CommandOutput<'cleanup:duplicates'>>>
+  /** Removes the chosen pictures and copies, by catalogue id. Main checks each file and confirms "forever" natively. */
+  removePhotos(input: CommandInput<'cleanup:remove'>): Promise<IpcResult<CommandOutput<'cleanup:remove'>>>
+  removalHistory(): Promise<IpcResult<CommandOutput<'cleanup:history'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */
   onEvent(listener: (event: MainEvent) => void): () => void
 }

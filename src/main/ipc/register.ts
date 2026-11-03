@@ -17,6 +17,7 @@ import {
   undoAlbumEdit,
 } from '../catalog/repositories/album-edits'
 import { createAlbum, listAlbums } from '../catalog/repositories/albums'
+import { listDuplicates, listRemovals, listUnneeded, setUnneeded } from '../catalog/repositories/clean-up'
 import { setFavorites } from '../catalog/repositories/favorites'
 import { queryAlbumPhotos, queryLibrary } from '../catalog/repositories/library'
 import { listMoments, updateMoment } from '../catalog/repositories/moments'
@@ -32,6 +33,7 @@ import { saveReview, undoReview } from '../catalog/repositories/review'
 import { addToSet, nearbyPhotos, removeFromSet, ungroupSet } from '../catalog/repositories/set-edits'
 import { getSetDetail, listSets } from '../catalog/repositories/sets'
 import type { LibraryService } from '../library/library-service'
+import { planRemoval, removePhotos, type RemoveDeps } from '../library/remove-photos'
 import { clearCacheFolder, storageUsage } from '../library/storage'
 import type { ExportService } from '../studio/export-service'
 import { createRouter, type Handlers } from './router'
@@ -41,10 +43,12 @@ export interface HandlerContext {
   library: LibraryService
   exports: ExportService
   paths: { catalogFile: string; thumbnailsDir: string; previewsDir: string }
+  /** What Clean up needs to remove files: app-data folders to stay out of, and the Trash step. */
+  removal: RemoveDeps
 }
 
 // One handler per command in ipc-contract.ts. The Handlers type makes a missing one a compile error.
-export function createHandlers({ db, library, exports, paths }: HandlerContext): Handlers {
+export function createHandlers({ db, library, exports, paths, removal }: HandlerContext): Handlers {
   return {
     'app:getInfo': () => ({ name: app.getName(), version: app.getVersion() }),
 
@@ -138,7 +142,38 @@ export function createHandlers({ db, library, exports, paths }: HandlerContext):
       return { removed, rescanning }
     },
     'albums:photos': ({ albumId, afterPosition, limit }) => queryAlbumPhotos(db, { albumId, afterPosition: afterPosition ?? null, limit }),
+    'cleanup:mark': ({ assetIds, unneeded }) => setUnneeded(db, { assetIds, unneeded }),
+    'cleanup:unneeded': () => listUnneeded(db),
+    'cleanup:duplicates': () => listDuplicates(db),
+    'cleanup:remove': async ({ pictures, copies, mode }) => {
+      const request = { pictures, copies }
+      // Deleting forever is confirmed here in main, in a native dialog, so no UI bug or script can skip the question.
+      if (mode === 'forever') {
+        const { targets } = planRemoval(db, request)
+        if (targets.length > 0 && !(await confirmDeleteForever(targets.length, [...new Set(targets.map((t) => t.folderName))]))) {
+          return { status: 'cancelled' as const }
+        }
+      }
+      const outcome = await library.withoutScans(() => removePhotos(removal, request, mode))
+      return outcome === 'busy' ? { status: 'busy' as const } : { status: 'done' as const, mode, ...outcome }
+    },
+    'cleanup:history': () => listRemovals(db),
   }
+}
+
+// "Cancel" is the default and the Escape choice, so pressing Return or Escape out of habit never deletes anything.
+async function confirmDeleteForever(files: number, folders: string[]): Promise<boolean> {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    message: `Delete ${files} ${files === 1 ? 'file' : 'files'} forever?`,
+    detail: `From ${folders.join(', ')}. They won’t go to the Trash, and they can’t be recovered afterwards.`,
+    buttons: ['Cancel', 'Delete forever'],
+    defaultId: 0,
+    cancelId: 0,
+  }
+  const { response } = window ? await dialog.showMessageBox(window, options) : await dialog.showMessageBox(options)
+  return response === 1
 }
 
 // A stale revision is an expected outcome the UI handles (reload and keep the draft), not an error.
