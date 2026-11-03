@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import exifr from 'exifr'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
-import { FORMATS } from '@shared/studio/formats'
+import { FORMAT_IDS, FORMATS } from '@shared/studio/formats'
 import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/backup'
 import type { Catalog } from '../../src/main/catalog/database'
 import { createProject, getProject, setDesign } from '../../src/main/catalog/repositories/projects'
@@ -79,7 +79,7 @@ describe('rendering an export file', () => {
         height,
         background: '#f8f0e8',
         quality: 90,
-        border: NO_BORDER,
+        border: NO_BORDER, ppi: null,
         layers: [
           { sourcePath: photo, crop: { cx: 0.25, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 48, y: 48, width: 480, height: cellHeight } },
           { sourcePath: photo, crop: { cx: 0.75, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 552, y: 48, width: 480, height: cellHeight } },
@@ -100,9 +100,9 @@ describe('rendering an export file', () => {
     await twoTone(photo, { split: 'rows', orientation: 6 })
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
     expect(await colourAt(out, 540, 540)).toBe('red')
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, layers: [{ sourcePath: photo, crop: { cx: 0.1, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [{ sourcePath: photo, crop: { cx: 0.1, cy: 0.5, zoom: 3 }, fit: 'fill', cell }] })
     expect(await colourAt(out, 540, 540)).toBe('blue')
   })
 
@@ -115,10 +115,23 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }] })
+    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }] })
     const meta = await sharp(out).metadata()
     expect({ exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc }).toEqual({ exif: undefined, xmp: undefined, iptc: undefined })
     expect(await exifr.parse(out, { gps: true, xmp: true, iptc: true, tiff: true, exif: true })).toBeUndefined()
+  })
+
+  it('a print file records 300 pixels per inch without adding EXIF or anything else that could identify it', async () => {
+    const dir = tempDir()
+    const photo = join(dir, 'tagged.jpg')
+    await twoTone(photo, { split: 'columns' })
+    const out = join(dir, 'print.jpg')
+    const cell = { x: 0, y: 0, width: 2400, height: 2400 }
+    await renderCanvas({ outputPath: out, width: 2400, height: 2400, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: 300, layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }] })
+    const meta = await sharp(out).metadata()
+    expect({ density: meta.density, exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc }).toEqual({ density: 300, exif: undefined, xmp: undefined, iptc: undefined })
+    expect(await exifr.parse(out, { gps: true, xmp: true, iptc: true, tiff: true, exif: true })).toBeUndefined()
+    expect(await colourAt(out, 600, 1200)).toBe('red') // the image itself still decodes as drawn
   })
 
   it('keeps colour at full resolution, so fine coloured detail isn’t smeared (owner’s review)', async () => {
@@ -132,7 +145,7 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     // The cell is the photo's own size, so nothing is resampled and every output pixel should match the source.
-    await renderCanvas({ outputPath: out, width: w, height: h, background: '#ffffff', quality: 92, border: NO_BORDER, layers: [{ sourcePath: stripes, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 0, y: 0, width: w, height: h } }] })
+    await renderCanvas({ outputPath: out, width: w, height: h, background: '#ffffff', quality: 92, border: NO_BORDER, ppi: null, layers: [{ sourcePath: stripes, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 0, y: 0, width: w, height: h } }] })
     expect((await sharp(out).metadata()).chromaSubsampling).toBe('4:4:4')
     const back = await sharp(out).raw().toBuffer()
     let error = 0
@@ -153,7 +166,7 @@ describe('rendering an export file', () => {
       height: 1080,
       background: '#ffffff',
       quality: 90,
-      border: { width: 60, color: '#f8f0e8' },
+      border: { width: 60, color: '#f8f0e8' }, ppi: null,
       layers: [{ sourcePath: photo, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell }],
     })
     expect(result).toEqual({ ok: true })
@@ -177,7 +190,7 @@ describe('rendering an export file', () => {
         height: 1080,
         background: '#ffffff',
         quality: 90,
-        border: { width: border, color: '#f8f0e8' },
+        border: { width: border, color: '#f8f0e8' }, ppi: null,
         layers: [{ sourcePath: photo, crop: { cx: 0.9, cy: 0.5, zoom: 3 }, fit: 'fit', cell }],
       })
     // No border: 1000 × 750, centred, so 125 px of background above and below. The crop is ignored.
@@ -203,7 +216,7 @@ describe('rendering an export file', () => {
       height: 1080,
       background: '#f8f0e8',
       quality: 90,
-      border: NO_BORDER,
+      border: NO_BORDER, ppi: null,
       layers: [{ sourcePath: clear, crop: { cx: 0.5, cy: 0.5, zoom: 1 }, fit: 'fill', cell: { x: 0, y: 0, width: 1080, height: 1080 } }],
     })
     expect(await colourAt(out, 540, 540)).toBe('cream')
@@ -255,6 +268,29 @@ describe('exporting a project', () => {
     expect(fingerprintFolder(photos)).toEqual(before)
     expect(db.prepare(`SELECT status FROM job WHERE kind = 'export'`).pluck().all()).toEqual(['done', 'done'])
   })
+
+  // S3: print sizes go through the same staged, verified export; the largest is 4800 × 7200 (34.6 megapixels).
+  it('exports every sharing and print size at its exact pixel size, verified, with no metadata beyond print density', async () => {
+    const { db, profile, project } = await exportable()
+    for (const format of FORMAT_IDS) {
+      setDesign(db, { projectId: project.id, design: { ...designOf(getProject(db, project.id)), format } })
+      const destination = tempDir()
+      const outcome = await runExport({ db, render }, await ready(db, project.id, destination, profile.dir))
+      if (outcome.status !== 'done') throw new Error(`${format}: ${JSON.stringify(outcome)}`)
+      const meta = await sharp(join(outcome.folder, outcome.files[0]!)).metadata()
+      const print = FORMATS[format].use === 'print'
+      expect({ format, width: meta.width, height: meta.height, chroma: meta.chromaSubsampling, exif: meta.exif, xmp: meta.xmp, density: meta.density }).toEqual({
+        format,
+        width: FORMATS[format].width,
+        height: FORMATS[format].height,
+        chroma: '4:4:4',
+        exif: undefined,
+        xmp: undefined,
+        // Print files record 300 pixels per inch (in a JFIF header, not EXIF); sharing files record none (sharp reports 72).
+        density: print ? 300 : 72,
+      })
+    }
+  }, 120_000)
 
   it('refuses a destination inside a photo folder or inside Nearmora’s data, or one it can’t write to', async () => {
     const { db, profile, photos, project } = await exportable()

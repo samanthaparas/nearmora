@@ -5,7 +5,7 @@
  * Originals are only read.
  */
 
-import { rmSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
 import sharp from 'sharp'
 import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
 import { MAX_INPUT_PIXELS } from './limits'
@@ -18,6 +18,8 @@ export interface RenderRequest {
   background: string
   /** The frame around each photo, in canvas pixels (width 0 means none). */
   border: { width: number; color: string }
+  /** For print sizes, the pixels per inch recorded in the file, so print software sizes it correctly. */
+  ppi: number | null
   quality: number
   layers: Array<{ sourcePath: string; crop: Crop; fit: Fit; cell: Rect }>
 }
@@ -25,6 +27,16 @@ export interface RenderRequest {
 export type RenderResult = { ok: true } | { ok: false; reason: 'disk_full' | 'unreadable' | 'failed' }
 
 const open = (path: string) => sharp(path, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
+
+/**
+ * Records a print density in a standard JFIF header (18 bytes: units in inches, the same density across and down),
+ * inserted right after the JPEG's start marker. Unlike an EXIF block, it carries nothing but the density.
+ */
+export function withPrintDensity(jpeg: Buffer, ppi: number): Buffer {
+  if (jpeg[0] !== 0xff || jpeg[1] !== 0xd8 || (jpeg[2] === 0xff && jpeg[3] === 0xe0)) throw new Error('Unexpected JPEG header')
+  const header = Buffer.from([0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, ppi >> 8, ppi & 0xff, ppi >> 8, ppi & 0xff, 0x00, 0x00])
+  return Buffer.concat([jpeg.subarray(0, 2), header, jpeg.subarray(2)])
+}
 
 // A canvas rectangle in whole pixels, as sharp places composites.
 const snap = (rect: Rect) => {
@@ -74,14 +86,15 @@ export async function renderCanvas(request: RenderRequest): Promise<RenderResult
   }
 
   try {
-    await sharp({ create: { width: request.width, height: request.height, channels: 3, background: request.background } })
+    const encoded = await sharp({ create: { width: request.width, height: request.height, channels: 3, background: request.background } })
       .composite(composites)
       .flatten({ background: request.background }) // any transparency becomes the background colour, on purpose
       .toColourspace('srgb')
       // Full-resolution colour (4:4:4): the default stores colour at half resolution, which visibly smears saturated
       // edges such as red petals. mozjpeg's encoder keeps the larger file in check (owner's review, R5).
       .jpeg({ quality: request.quality, chromaSubsampling: '4:4:4', mozjpeg: true })
-      .toFile(request.outputPath)
+      .toBuffer()
+    writeFileSync(request.outputPath, request.ppi ? withPrintDensity(encoded, request.ppi) : encoded)
     return { ok: true }
   } catch (error: unknown) {
     rmSync(request.outputPath, { force: true })
