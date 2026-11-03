@@ -1,5 +1,6 @@
 /*
- * Styles for the Library and Sources screens: folder toolbar, status lines, removal review, moments, filters and the grid.
+ * Styles for the Library and Sources screens: folder toolbar, status lines, removal review, moments, filters and the grid
+ * (and the Settings lists, including Licences).
  * Colors and spacing come from the design tokens so the screen stays consistent with the rest of the app.
  */
 
@@ -313,6 +314,33 @@
 .library__arrange-bar button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Settings → Licences: one line per package, opening to its full licence text, which wraps rather than scrolls. */
+.settings__licences {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings__licences summary {
+  min-height: var(--nm-target-min);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.settings__licence-text {
+  margin: 0 0 var(--nm-space-2);
+  padding: var(--nm-space-2);
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--nm-text-small);
+  background: var(--nm-surface-raised);
+  border-radius: var(--nm-radius-card);
 }
 
 /* Settings: a simple term-and-description list. */

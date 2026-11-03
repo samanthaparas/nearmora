@@ -3,8 +3,10 @@
  * When a new capability is added, its handler goes here.
  */
 
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { commands, type CommandName } from '@shared/ipc-contract'
+import { commands, type CommandName, type CommandOutput } from '@shared/ipc-contract'
 import { channelFor } from '@shared/ipc-channels'
 import type { Catalog } from '../catalog/database'
 import { CatalogError } from '../catalog/errors'
@@ -52,6 +54,12 @@ export interface HandlerContext {
 export function createHandlers({ db, library, exports, paths, removal }: HandlerContext): Handlers {
   return {
     'app:getInfo': () => ({ name: app.getName(), version: app.getVersion() }),
+    // Written next to the main bundle by the build. A development run started without it shows none, not an error.
+    'app:licences': () => {
+      const file = join(__dirname, 'third-party-notices.json')
+      // The router checks the shape against the contract before anything reaches the UI.
+      return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as CommandOutput<'app:licences'>) : []
+    },
 
     // The folder picker runs here in main, so the path never passes through the UI.
     'sources:add': async () => {
