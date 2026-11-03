@@ -12,6 +12,7 @@ import { channelFor, EVENT_CHANNEL } from '@shared/ipc-channels'
 // which would let the page send any message it liked.
 const api: NearmoraApi = {
   getAppInfo: () => ipcRenderer.invoke(channelFor('app:getInfo')),
+  licences: () => ipcRenderer.invoke(channelFor('app:licences')),
   addSource: () => ipcRenderer.invoke(channelFor('sources:add')),
   listSources: () => ipcRenderer.invoke(channelFor('sources:list')),
   rescanSource: (input) => ipcRenderer.invoke(channelFor('sources:rescan'), input),

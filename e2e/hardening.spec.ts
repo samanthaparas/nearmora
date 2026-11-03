@@ -354,6 +354,21 @@ test('quitting right after a drag keeps it, and a damaged project or template is
   await again.close()
 })
 
+// The fonts and open-source software the app ships are listed with their licences, as those licences ask.
+test('Settings lists the licence of every font and package the app ships, each with its full text', async () => {
+  const { app } = await launchApp(tempFolder('profile'))
+  const page = await app.firstWindow()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  const list = page.getByRole('list', { name: 'Fonts and open-source software' })
+  for (const name of [/^@fontsource\/caveat .* · OFL-1\.1$/, /^react \S+ · MIT$/, /^sharp \S+ · Apache-2\.0$/, /^@img\/sharp-libvips-darwin-arm64 .* · LGPL-3\.0-or-later$/, /^electron \S+ · MIT$/]) {
+    await expect(list.getByText(name)).toBeVisible()
+  }
+  const sharpEntry = list.getByRole('listitem').filter({ has: page.getByText(/^sharp \S+ · Apache-2\.0$/) })
+  await sharpEntry.getByText(/^sharp /).click()
+  await expect(sharpEntry.getByText('Apache License', { exact: false })).toBeVisible()
+  await app.close()
+})
+
 test('the checks themselves work: axe reports injected problems, and the socket check flags a real listener', async () => {
   const { app } = await launchApp(tempFolder('profile'))
   const page = await app.firstWindow()

@@ -115,6 +115,12 @@ check('no source, tests or docs in app.asar', leaked.length === 0, leaked.slice(
 const bundledUiPackages = ['react', 'react-dom', '@fontsource-variable'].filter((p) => files.some((f) => f.startsWith(`/node_modules/${p}/`)))
 check('UI-only packages not shipped (Vite already bundles them)', bundledUiPackages.length === 0, bundledUiPackages.join(', '))
 check('native modules unpacked', existsSync(join(RESOURCES, 'app.asar.unpacked/node_modules/better-sqlite3')))
+const notices = files.includes('/out/main/third-party-notices.json')
+  ? JSON.parse(asar.extractFile(archive, 'out/main/third-party-notices.json').toString('utf8'))
+  : []
+check('licence notices ship in the app, each with its text', notices.length > 0 && notices.every((n) => n.text.length > 0), `${notices.length} packages`)
+check('every shipped package has a notice', ['better-sqlite3', 'sharp', '@img/sharp-libvips-darwin-arm64', 'zod', 'exifr', 'electron'].every((p) => notices.some((n) => n.name === p)))
+check('Chromium licences ship inside the app', existsSync(join(RESOURCES, 'LICENSES.chromium.html')))
 check('no stray files in Resources', !readdirSync(RESOURCES).some((f) => f === 'app' || f.endsWith('.ts')))
 
 if (failures.length) {

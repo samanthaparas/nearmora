@@ -30,7 +30,7 @@ Earlier phases' own tests (S1–S6) still pass. The full suite for this change w
   - Ten seconds now, in two runs.
   - The output is byte-for-byte the same, checked on six designs (bordered grid, fitted photos, a flipped photo, a photo partly off the canvas, a seamless strip, a playful layout).
   - A permanent test compares the two paths.
-- **The packaged self-test with networking denied ran out of time** once it gained the Studio render. Inside the no-network sandbox, Chromium's GPU process can't start, and Chromium quits after a few retries, which the slightly longer self-test now reached. The self-test draws nothing, so it no longer starts the GPU. Verified both ways: without the Studio render the offline self-test passed before the fix, and with it the self-test passes after the fix.
+- **The packaged self-test with networking denied ran out of time** once it gained the Studio render. Inside the no-network sandbox, Chromium's GPU process can't start, and Chromium quits after a few retries, which the slightly longer self-test now reached. The self-test draws nothing, so it now turns hardware acceleration off and runs Chromium's remaining GPU work inside its own process, leaving no GPU process to fail. Turning acceleration off alone was not enough: it passed once, then failed 3 times out of 3 after merging with the licence notices, because Chromium still started a GPU process. With both, the offline self-test passed 5 times out of 5. Verified the cause both ways: without the Studio render, the offline self-test passed before any fix.
 
 ## Performance (`npm run measure:studio`)
 
