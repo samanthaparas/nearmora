@@ -256,3 +256,37 @@
   border: 0;
   border-radius: 0;
 }
+
+/* Customize (S6a): photos on the preview can be picked and dragged. Dragging uses the pointer, not the page scroll. */
+.studio__canvas--arrange {
+  cursor: grab;
+  touch-action: none;
+}
+
+/* The Arrange controls and the always-visible list of hidden photos. */
+.studio__arrange-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: var(--nm-space-1);
+}
+
+.studio__arrange-grid input {
+  width: 100%;
+}
+
+.studio__arrange:focus-visible {
+  outline: 3px solid var(--nm-focus-ring);
+  outline-offset: 4px;
+}
+
+/* An emptied place in the photo strip (S6a): words, not just a blank, so it reads as empty on purpose. */
+.strip__empty {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 2px dashed var(--nm-text-muted);
+  border-radius: 6px;
+  color: var(--nm-text-muted);
+  font-size: var(--nm-text-small);
+}

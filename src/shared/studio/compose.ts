@@ -8,7 +8,7 @@ import type { Rect } from '../layout'
 import { FORMATS, type FormatId } from './formats'
 import type { Params, ResolvedParams } from './params'
 import { BACKGROUNDS } from './params'
-import type { Decor } from './scene'
+import { roundedRect, transformPath, type Decor } from './scene'
 import { findTemplate, formatsFor, type Mode, type TemplateDefinition } from './templates'
 
 /** One photo on one output canvas. `slot` is the project's photo position it shows. */
@@ -24,6 +24,12 @@ export interface PhotoElement {
   mask: string | null
   /** A card behind the photo, turned with it, or null. */
   frame: { pad: number; color: string } | null
+  /** Mirrored left to right (S6a). */
+  flip: boolean
+  /** Hidden by the person: not drawn or exported, but listed so it can be shown again (S6a). */
+  hidden: boolean
+  /** Locked by the person: the editor won't move or resize it (S6a). */
+  locked: boolean
 }
 
 export interface Composition {
@@ -71,6 +77,25 @@ export const captionText =
   (id: string): string =>
     params.text?.[id] ?? template.captions?.find((c) => c.id === id)?.default ?? ''
 
+/**
+ * Photos in drawing order, back to front: the person's order where they set one (bring forward, send back), then any
+ * photos it doesn't mention in their layout order. Unknown or repeated positions in a stored order are ignored.
+ */
+export function layerOrder(elements: PhotoElement[], order: readonly number[] | undefined): PhotoElement[] {
+  if (!order) return elements
+  const bySlot = new Map(elements.map((e) => [e.slot, e]))
+  const seen = new Set<number>()
+  const ordered: PhotoElement[] = []
+  for (const slot of order) {
+    const e = bySlot.get(slot)
+    if (e && !seen.has(slot)) {
+      seen.add(slot)
+      ordered.push(e)
+    }
+  }
+  return [...ordered, ...elements.filter((e) => !seen.has(e.slot))]
+}
+
 export function compose(input: ComposeInput): Composition {
   const template = findTemplate(input.templateId, input.templateVersion)
   if (!template) throw new UnknownTemplateError(`Unknown template ${input.templateId} v${input.templateVersion}`)
@@ -85,6 +110,32 @@ export function compose(input: ComposeInput): Composition {
   const scale = Math.min(slide.width, height) / 1080
   const spacing = { margin: resolved.margin * scale, gutter: resolved.gutter * scale }
   const slots = template.slots({ width, height }, spacing, input.photoCount)
+  const elements = slots.slice(0, input.photoCount).map((slot, index): PhotoElement => {
+    // The person's own changes to this photo's place (S6a), on top of the layout's.
+    const edit = input.params.edits?.[String(index)]
+    const rect = edit?.rect ? { x: edit.rect.x * width, y: edit.rect.y * height, width: edit.rect.width * width, height: edit.rect.height * height } : slot.rect
+    // A shaped photo's outline moves and scales with it; a plain one can have rounded corners instead.
+    let mask = slot.mask ?? null
+    if (mask && edit?.rect) {
+      const sx = rect.width / slot.rect.width
+      const sy = rect.height / slot.rect.height
+      mask = transformPath(mask, sx, sy, rect.x - slot.rect.x * sx, rect.y - slot.rect.y * sy)
+    }
+    if (!mask && edit?.rounding) mask = roundedRect(rect, edit.rounding * scale)
+    return {
+      id: `photo-${index}`,
+      type: 'photo',
+      slot: index,
+      canvas: slot.canvas,
+      rect,
+      rotation: edit?.rotation ?? slot.rotation ?? 0,
+      mask,
+      frame: slot.frame ?? null,
+      flip: edit?.flip === true,
+      hidden: edit?.hidden === true,
+      locked: edit?.locked === true,
+    }
+  })
   return {
     width,
     height,
@@ -93,16 +144,7 @@ export function compose(input: ComposeInput): Composition {
     border: { width: resolved.borderWidth * scale, color: resolved.borderColor },
     canvasCount: slots.reduce((most, slot) => Math.max(most, slot.canvas + 1), 0),
     slices,
-    elements: slots.slice(0, input.photoCount).map((slot, index) => ({
-      id: `photo-${index}`,
-      type: 'photo',
-      slot: index,
-      canvas: slot.canvas,
-      rect: slot.rect,
-      rotation: slot.rotation ?? 0,
-      mask: slot.mask ?? null,
-      frame: slot.frame ?? null,
-    })),
+    elements: layerOrder(elements, input.params.order),
     ...(template.decor?.({ width, height }, spacing, captionText(template, input.params)) ?? { under: [], over: [] }),
   }
 }

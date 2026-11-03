@@ -20,6 +20,7 @@ import { backupCatalog, restoreCatalogBackup } from '../../src/main/catalog/back
 import type { Catalog } from '../../src/main/catalog/database'
 import { createProject, getProject, setDesign } from '../../src/main/catalog/repositories/projects'
 import { designOf, updateItem } from '../../src/shared/studio/design'
+import { emptyPlace, setEdit } from '../../src/shared/studio/arrange'
 import { setSourceStatus } from '../../src/main/catalog/repositories/sources'
 import { scanSource } from '../../src/main/library/scan'
 import { addSourceFolder } from '../../src/main/library/source-folders'
@@ -475,6 +476,31 @@ describe('exporting a project', () => {
     const { db: db2, profile: profile2, project: collage } = await exportable('collage')
     const plain = await prepareExport(db2, { projectId: collage.id, destinationDir: tempDir(), appDataDir: profile2.dir, wholeDesign: true })
     expect(plain.status === 'ready' && plain.plan.outputs.flatMap((o) => o.files.map((f) => f.fileName))).toEqual(['Equal split.jpg'])
+  }, 60_000)
+
+  // S6a: the person's changes are drawn in the exported file exactly as the editor shows them.
+  it('exports flipped, rounded, hidden and emptied photos as the editor shows them', async () => {
+    const { db, profile, project } = await exportable('collage') // a.jpg: red left half, blue right half
+    const exportNow = async (change: (d: ReturnType<typeof designOf>) => ReturnType<typeof designOf>) => {
+      setDesign(db, { projectId: project.id, design: change(designOf(getProject(db, project.id))) })
+      const outcome = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
+      if (outcome.status !== 'done') throw new Error(JSON.stringify(outcome))
+      return join(outcome.folder, outcome.files[0]!)
+    }
+    // The left photo's left quarter is red as laid out; flipped, the blue half is on the left.
+    const quarter = { x: 48 + 480 * 0.25, y: 540 }
+    expect(await colourAt(await exportNow((d) => d), quarter.x, quarter.y)).toBe('red')
+    const flipped = await exportNow((d) => setEdit(d, 0, { flip: true }))
+    expect(await colourAt(flipped, quarter.x, quarter.y)).toBe('blue')
+    // Rounded corners: the corner of the photo's place shows the background; its middle is still the photo.
+    const rounded = await exportNow((d) => setEdit(d, 0, { rounding: 120, flip: undefined }))
+    expect(await colourAt(rounded, 48 + 4, 48 + 4)).toBe('cream')
+    expect(await colourAt(rounded, quarter.x, quarter.y)).toBe('red')
+    // Hidden, or taken out of its place: the right photo's place shows the background.
+    const right = { x: 552 + 240, y: 540 }
+    expect(await colourAt(await exportNow((d) => d), right.x, right.y)).not.toBe('cream')
+    expect(await colourAt(await exportNow((d) => setEdit(d, 1, { hidden: true })), right.x, right.y)).toBe('cream')
+    expect(await colourAt(await exportNow((d) => emptyPlace(setEdit(d, 1, { hidden: undefined }), 1)), right.x, right.y)).toBe('cream')
   }, 60_000)
 
   it('numbers carousel files with two digits, so ten slides sort in posting order', async () => {

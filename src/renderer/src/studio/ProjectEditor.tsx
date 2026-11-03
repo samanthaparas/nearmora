@@ -8,8 +8,10 @@
  * print size, are named before export.
  */
 
-import { useState, type KeyboardEvent } from 'react'
-import { clampCrop, DEFAULT_CROP, MAX_ZOOM, photoArea, type Crop } from '@shared/layout'
+import { useRef, useState, type KeyboardEvent } from 'react'
+import { clampCrop, DEFAULT_CROP, MAX_ZOOM, photoArea, type Crop, type Rect } from '@shared/layout'
+import { placeEdit, setEdit } from '@shared/studio/arrange'
+import { snapMove, snapResize, type Guide } from '@shared/studio/snap'
 import { captionText, compose, resolveParams, UnknownTemplateError, type Composition } from '@shared/studio/compose'
 import { moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '@shared/studio/design'
 import { FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
@@ -21,7 +23,8 @@ import { missingCharacters } from '@shared/studio/text'
 import { ColourChoice } from './ColourChoice'
 import { ExportPanel } from './ExportPanel'
 import { ReplacePhoto } from './ReplacePhoto'
-import { StudioCanvas } from './StudioCanvas'
+import { ArrangePanel, HiddenPhotos } from './ArrangePanel'
+import { StudioCanvas, type Drag } from './StudioCanvas'
 import { SwipePreview } from './SwipePreview'
 import { TemplateIcon } from './TemplateIcon'
 import { useProjectEditing } from './use-project-editing'
@@ -49,6 +52,9 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   const [replacing, setReplacing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [swiping, setSwiping] = useState(false)
+  // A drag on the preview (S6a): the photo's place when it started, and the lines it's snapping to now.
+  const dragStart = useRef<Rect | null>(null)
+  const [snapGuides, setSnapGuides] = useState<Guide[]>([])
 
   if (!project || !design) return <p>{status === 'All changes saved' ? 'Opening project…' : status}</p>
   let composition: Composition
@@ -65,14 +71,15 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   const position = Math.min(selected, design.items.length - 1)
   const item = design.items[position]!
   // Photo details (size, offline, file name) come from the last save; a just-replaced photo has none until it lands.
-  const detailOf = (assetId: string) => project.items.find((i) => i.assetId === assetId)
+  const detailOf = (assetId: string | null) => (assetId ? project.items.find((i) => i.assetId === assetId) : undefined)
   const unavailable = design.items.map((i) => detailOf(i.assetId)).filter((d) => d && !d.available)
   const title = titleDraft ?? project.title
+  const emptyPlaces = design.items.filter((i) => i.assetId === null).length
 
   const setParams = (params: Partial<Params>) => ({ ...design, params: { ...design.params, ...params } })
 
   // Crops are kept within the photo before they're stored, measured against the photo's area inside its border.
-  function cropFor(assetId: string, at: number, next: Crop): Crop {
+  function cropFor(assetId: string | null, at: number, next: Crop): Crop {
     const detail = detailOf(assetId)
     const cell = photoArea(composition.elements[at]!.rect, composition.border.width)
     return detail?.width && detail.height ? clampCrop({ width: detail.width, height: detail.height }, cell, next) : next
@@ -101,6 +108,25 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
     else if (event.key === '-') zoom(-ZOOM_STEP)
   }
 
+  // Dragging a photo on the preview (S6a): moved or resized from where it started, snapped to nearby edges and centres
+  // (⌘ places it freely), saved live as one undo step for the whole drag.
+  function onDrag(drag: Drag) {
+    const element = composition.elements.find((e) => e.slot === drag.slot)
+    if (!element) return
+    dragStart.current ??= element.rect
+    const start = dragStart.current
+    const others = composition.elements.filter((e) => e.slot !== drag.slot && !e.hidden && e.canvas === element.canvas).map((e) => e.rect)
+    const threshold = drag.free ? 0 : (10 * Math.min(composition.width, composition.height)) / 1080
+    const MIN = 20
+    const snapped =
+      drag.kind === 'move'
+        ? snapMove({ ...start, x: start.x + drag.dx, y: start.y + drag.dy }, others, composition, threshold)
+        : snapResize({ ...start, width: Math.max(MIN, start.width + drag.dx), height: Math.max(MIN, start.height + drag.dy) }, others, composition, threshold)
+    live(setEdit(design!, drag.slot, { rect: placeEdit(composition, snapped.rect) }), `Photo ${drag.slot + 1} ${drag.kind === 'move' ? 'moved' : 'resized'}`)
+    setSnapGuides(drag.done ? [] : snapped.guides)
+    if (drag.done) dragStart.current = null
+  }
+
   // A carousel draws one canvas per slide; a seamless carousel draws one wide design, cut into slides.
   const slides = composition.mode === 'seamless' ? composition.slices : composition.canvasCount
   const seams = seamNotes(composition)
@@ -122,6 +148,12 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
       displayWidth={width}
       highlight={position}
       onWheelZoom={wheelZoom}
+      onSelect={(slot) => {
+        setSelected(slot)
+        setReplacing(false)
+      }}
+      onDrag={onDrag}
+      snapGuides={snapGuides}
       label={
         composition.mode === 'carousel'
           ? `Preview of slide ${canvasIndex + 1} of ${slides}`
@@ -380,21 +412,23 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             onLive={(colour) => live(setParams({ borderColor: colour }), 'Border colour changed')}
           />
 
-          {/* Pick the photo to adjust; its frame is outlined in the preview. */}
+          <HiddenPhotos design={design} composition={composition} change={change} />
+
+          {/* Pick the photo to adjust (or click it on the preview); its frame is outlined in the preview. */}
           <ol className="studio__items" aria-label="Photos in this project, in order">
             {design.items.map((i, at) => (
-              <li key={i.assetId} className="studio__item">
+              <li key={i.assetId ?? `empty-${at}`} className="studio__item">
                 <button
                   type="button"
                   className="strip__item"
                   aria-pressed={at === position}
-                  aria-label={`Adjust photo ${at + 1}${detailOf(i.assetId)?.available === false ? ', offline' : ''}`}
+                  aria-label={`Adjust photo ${at + 1}${i.assetId === null ? ', empty place' : detailOf(i.assetId)?.available === false ? ', offline' : ''}`}
                   onClick={() => {
                     setSelected(at)
                     setReplacing(false)
                   }}
                 >
-                  <img src={`nm-media://thumb/${i.assetId}`} alt="" />
+                  {i.assetId ? <img src={`nm-media://thumb/${i.assetId}`} alt="" /> : <span className="strip__empty">Empty</span>}
                   <span className="strip__label" aria-hidden="true">
                     {at + 1}
                   </span>
@@ -402,6 +436,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
               </li>
             ))}
           </ol>
+
+          <ArrangePanel design={design} composition={composition} position={position} change={change} live={live} />
 
           <div
             className="studio__adjust"
@@ -437,7 +473,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
                 Move later
               </button>
               <button type="button" className="button button--quiet" onClick={() => setReplacing(true)}>
-                Replace…
+                {item.assetId === null ? 'Fill with a photo…' : 'Replace…'}
               </button>
             </div>
             {/* Swap trades places with any other photo directly, without stepping one place at a time. */}
@@ -462,7 +498,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             {replacing ? (
               <ReplacePhoto
                 position={position}
-                exclude={design.items.map((i) => i.assetId)}
+                exclude={design.items.flatMap((i) => (i.assetId ? [i.assetId] : []))}
                 onCancel={() => setReplacing(false)}
                 onChoose={(assetId) => {
                   setReplacing(false)
@@ -512,7 +548,10 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           <ExportPanel
             projectId={projectId}
             blocked={unavailable.length > 0}
-            summary={`JPEG, ${sizeOf(design.format)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
+            summary={`JPEG, ${sizeOf(design.format)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}${
+              // Said before export, as chosen in S6a: empty places export as the background.
+              emptyPlaces > 0 ? `. ${emptyPlaces} empty ${emptyPlaces === 1 ? 'place shows' : 'places show'} the background` : ''
+            }`}
             offerWholeDesign={composition.mode === 'seamless'}
           />
 

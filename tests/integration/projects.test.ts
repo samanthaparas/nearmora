@@ -13,6 +13,8 @@ import {
   renameProject,
   setDesign,
 } from '../../src/main/catalog/repositories/projects'
+import { emptyPlace } from '../../src/shared/studio/arrange'
+import { listUnneeded, setUnneeded } from '../../src/main/catalog/repositories/clean-up'
 import { designOf, moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '../../src/shared/studio/design'
 import { setSourceStatus } from '../../src/main/catalog/repositories/sources'
 import { codeOf, openTestCatalog, seedAssets, seedSource, tempProfile } from './helpers'
@@ -27,6 +29,26 @@ async function library(file = tempProfile().catalogFile) {
 // Saves an edited copy of the project's current design, the way the editor does.
 type Catalog = Awaited<ReturnType<typeof openTestCatalog>>
 const edit = (db: Catalog, projectId: string, change: (design: Design) => Design) => setDesign(db, { projectId, design: change(designOf(getProject(db, projectId))) })
+
+describe('empty places (S6a)', () => {
+  it('a photo can be taken out of its place and put back, the project keeps at least one photo, and Clean up no longer counts it as used', async () => {
+    const { db, assets } = await library()
+    const project = createProject(db, { templateId: 'pair-equal-split', format: 'square', assetIds: assets.slice(0, 2) })
+    edit(db, project.id, (d) => emptyPlace(d, 1))
+    expect(getProject(db, project.id).items.map((i) => [i.assetId, i.available])).toEqual([
+      [assets[0], true],
+      [null, true], // empty, not offline: it never blocks export
+    ])
+    expect(listProjects(db)[0]).toMatchObject({ coverAssetId: assets[0], photoCount: 2 })
+    setUnneeded(db, { assetIds: [assets[1]!], unneeded: true })
+    expect(listUnneeded(db).items[0]).toMatchObject({ assetId: assets[1], usedIn: [] })
+
+    // The last photo can't be taken out, and an empty place can be filled again.
+    expect(codeOf(() => edit(db, project.id, (d) => emptyPlace(d, 0)))).toBe('INVALID_INPUT')
+    edit(db, project.id, (d) => replaceItem(d, 1, assets[2]!))
+    expect(getProject(db, project.id).items.map((i) => i.assetId)).toEqual([assets[0], assets[2]])
+  })
+})
 
 describe('creating projects', () => {
   it('enforces the photo count for each layout, and each photo once', async () => {

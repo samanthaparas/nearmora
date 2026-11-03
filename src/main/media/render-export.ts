@@ -38,7 +38,7 @@ export interface RenderRequest {
 
 export type RenderLayer =
   | Extract<Layer, { kind: 'shape' }>
-  | { kind: 'photo'; sourcePath: string; crop: Crop; fit: Fit; element: Pick<PhotoElement, 'rect' | 'rotation' | 'mask' | 'frame'> }
+  | { kind: 'photo'; sourcePath: string; crop: Crop; fit: Fit; element: Pick<PhotoElement, 'rect' | 'rotation' | 'mask' | 'frame'> & { flip?: boolean } }
 
 export type RenderResult = { ok: true } | { ok: false; reason: 'disk_full' | 'unreadable' | 'failed' }
 
@@ -103,6 +103,8 @@ async function canvasSvg(request: RenderRequest): Promise<string> {
       .rotate() // apply EXIF orientation first; the crop below is in upright coordinates
       .extract(pixelRect(shown, place.src))
       .resize(dest.width, dest.height, { fit: 'fill' })
+      // A flipped photo (S6a) is mirrored left to right within its place, as the preview draws it.
+      .flop(layer.element.flip === true)
       .toColourspace('srgb')
       .png({ compressionLevel: 1 })
       .toBuffer()

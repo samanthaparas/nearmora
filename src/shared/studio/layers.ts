@@ -31,7 +31,8 @@ export function layers(composition: Composition, canvas: number): Layer[] {
       })
   return [
     ...decor(composition.under),
-    ...composition.elements.filter((e) => e.canvas === canvas).map((element): Layer => ({ kind: 'photo', element })),
+    // Hidden photos are left out of every drawing, the preview's and the export's alike (S6a).
+    ...composition.elements.filter((e) => e.canvas === canvas && !e.hidden).map((element): Layer => ({ kind: 'photo', element })),
     ...decor(composition.over),
   ]
 }

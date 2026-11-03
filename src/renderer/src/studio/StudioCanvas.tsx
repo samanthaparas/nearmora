@@ -5,15 +5,17 @@
  * may be tilted, on cards or cut to a shape (ADR-0017). A pinch or mouse wheel over a photo zooms that photo.
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type PointerEvent } from 'react'
 import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
 import type { Composition, PhotoElement } from '@shared/studio/compose'
 import { layers, type Layer } from '@shared/studio/layers'
 import { cutPositions } from '@shared/studio/slices'
+import type { Guide } from '@shared/studio/snap'
 import { useWheelZoom } from '../wheel-zoom'
 
 export interface CanvasItem {
-  assetId: string
+  /** Null for an emptied place (S6a): the editor draws a placeholder there; posted slides show the background. */
+  assetId: string | null
   crop: Crop
   fit: Fit
 }
@@ -89,7 +91,16 @@ function drawPhoto(context: CanvasRenderingContext2D, e: PhotoElement, image: HT
   }
   if (e.mask) context.clip(new Path2D(e.mask))
   const { src, dest } = place
+  // A flipped photo (S6a) is mirrored left to right within its place, as the export's sharp `flop` does.
+  if (e.flip) {
+    context.translate(2 * dest.x + dest.width, 0)
+    context.scale(-1, 1)
+  }
   context.drawImage(image, src.x, src.y, src.width, src.height, dest.x, dest.y, dest.width, dest.height)
+  if (e.flip) {
+    context.scale(-1, 1)
+    context.translate(-(2 * dest.x + dest.width), 0)
+  }
   if (e.mask && border.width > 0) {
     context.strokeStyle = border.color
     context.lineWidth = 2 * border.width
@@ -98,7 +109,22 @@ function drawPhoto(context: CanvasRenderingContext2D, e: PhotoElement, image: HT
   context.restore()
 }
 
-export function StudioCanvas({ composition, items, canvasIndex, displayWidth, highlight, label, onWheelZoom, guides = true }: {
+/** A drag on the preview (S6a): which photo, moving it or resizing it by its corner, and how far, in canvas pixels. */
+export interface Drag {
+  slot: number
+  kind: 'move' | 'resize'
+  dx: number
+  dy: number
+  /** True on the last report, when the pointer is let go. */
+  done: boolean
+  /** ⌘ held: place it freely, without snapping. */
+  free: boolean
+}
+
+/** How close to a photo's bottom-right corner (in screen pixels) a press resizes it instead of moving it. */
+const HANDLE = 18
+
+export function StudioCanvas({ composition, items, canvasIndex, displayWidth, highlight, label, onWheelZoom, guides = true, placeholders = true, onSelect, onDrag, snapGuides = [] }: {
   composition: Composition
   /** The project's photos by position; element `slot` numbers index into this. */
   items: readonly CanvasItem[]
@@ -111,7 +137,17 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
   onWheelZoom?: (position: number, factor: number) => void
   /** Draw a seamless design's cut guides (the swipe preview turns them off, to show the slides as posted). */
   guides?: boolean
+  /** Mark empty places with a dashed outline (editor only; the swipe preview shows them as posted, empty). */
+  placeholders?: boolean
+  /** A press on a photo selects it (S6a). */
+  onSelect?: (slot: number) => void
+  /** Dragging a selected, unlocked photo moves it, or resizes it from its bottom-right corner (S6a). */
+  onDrag?: (drag: Drag) => void
+  /** Lines the dragged photo snapped to, drawn while dragging (editor only). */
+  snapGuides?: readonly Guide[]
 }) {
+  // The drag in progress: where it started, in canvas pixels.
+  const dragging = useRef<{ slot: number; kind: Drag['kind']; x: number; y: number; moved: boolean } | null>(null)
   const ref = useRef<HTMLCanvasElement>(null)
   const size = { width: composition.width, height: composition.height }
   const scale = displayWidth / size.width
@@ -147,8 +183,8 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
 
     // The same drawing order the export uses (layers.ts); everything is drawn once every photo has loaded or failed.
     const order = layers(composition, canvasIndex)
-    const photos = order.flatMap((l) => (l.kind === 'photo' && items[l.element.slot] ? [l.element] : []))
-    void Promise.allSettled(photos.map((e) => loadImage(items[e.slot]!.assetId))).then((loaded) => {
+    const photos = order.flatMap((l) => (l.kind === 'photo' && items[l.element.slot]?.assetId ? [l.element] : []))
+    void Promise.allSettled(photos.map((e) => loadImage(items[e.slot]!.assetId!))).then((loaded) => {
       if (cancelled) return
       const imageOf = new Map(photos.map((e, i) => [e.slot, loaded[i]?.status === 'fulfilled' ? loaded[i].value : null]))
       for (const layer of order) {
@@ -157,6 +193,16 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
           const image = imageOf.get(layer.element.slot)
           const item = items[layer.element.slot]
           if (image && item) drawPhoto(context, layer.element, image, item, composition.border)
+          // An emptied place: a dashed outline, editor only, so it can be found and filled again.
+          else if (item && item.assetId === null && placeholders) {
+            context.save()
+            turn(context, layer.element)
+            context.setLineDash([16 / scale, 10 / scale])
+            context.lineWidth = 3 / scale
+            context.strokeStyle = '#7a6570'
+            context.stroke(new Path2D(layer.element.mask ?? rectPath(layer.element.rect)))
+            context.restore()
+          }
         }
       }
       const selected = composition.elements.find((e) => e.canvas === canvasIndex && e.slot === highlight)
@@ -166,6 +212,22 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
         context.strokeStyle = '#5b414b'
         context.lineWidth = 8 / scale
         context.stroke(new Path2D(selected.mask ?? rectPath(selected.rect)))
+        context.restore()
+      }
+      // Snap guides while a photo is dragged (editor only): the canvas edge, centre or other photo it lines up with.
+      for (const guide of snapGuides) {
+        context.save()
+        context.strokeStyle = '#b05a7a'
+        context.lineWidth = 2 / scale
+        context.beginPath()
+        if (guide.axis === 'x') {
+          context.moveTo(guide.at, 0)
+          context.lineTo(guide.at, size.height)
+        } else {
+          context.moveTo(0, guide.at)
+          context.lineTo(size.width, guide.at)
+        }
+        context.stroke()
         context.restore()
       }
       // A seamless design's cuts, as dashed lines (editor only, never exported): white under plum, so they show on
@@ -188,8 +250,55 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
     return () => {
       cancelled = true
     }
-  }, [composition, items, canvasIndex, displayWidth, displayHeight, scale, size.width, size.height, highlight, guides])
+  }, [composition, items, canvasIndex, displayWidth, displayHeight, scale, size.width, size.height, highlight, guides, placeholders, snapGuides])
+
+  // Pointer position in canvas pixels (the canvas may be shown smaller than its width when the window is narrow).
+  const at = (event: PointerEvent<HTMLCanvasElement>) => {
+    const box = event.currentTarget.getBoundingClientRect()
+    return { x: ((event.clientX - box.left) * size.width) / box.width, y: ((event.clientY - box.top) * size.height) / box.height, perPixel: size.width / box.width }
+  }
+  const interactive = Boolean(onSelect || onDrag)
+  function onPointerDown(event: PointerEvent<HTMLCanvasElement>) {
+    if (!interactive || event.button !== 0) return
+    const p = at(event)
+    // The front-most visible photo under the pointer (tilt is ignored for picking; the outline shows what was picked).
+    const hit = [...composition.elements]
+      .reverse()
+      .find((e) => e.canvas === canvasIndex && !e.hidden && p.x >= e.rect.x && p.x <= e.rect.x + e.rect.width && p.y >= e.rect.y && p.y <= e.rect.y + e.rect.height)
+    if (!hit) return
+    onSelect?.(hit.slot)
+    if (hit.locked || !onDrag) return
+    const corner = Math.hypot(hit.rect.x + hit.rect.width - p.x, hit.rect.y + hit.rect.height - p.y) <= HANDLE * p.perPixel
+    dragging.current = { slot: hit.slot, kind: corner ? 'resize' : 'move', x: p.x, y: p.y, moved: false }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  function onPointerMove(event: PointerEvent<HTMLCanvasElement>) {
+    const drag = dragging.current
+    if (!drag || !onDrag) return
+    const p = at(event)
+    drag.moved = true
+    onDrag({ slot: drag.slot, kind: drag.kind, dx: p.x - drag.x, dy: p.y - drag.y, done: false, free: event.metaKey })
+  }
+  function onPointerUp(event: PointerEvent<HTMLCanvasElement>) {
+    const drag = dragging.current
+    dragging.current = null
+    if (!drag || !onDrag || !drag.moved) return
+    const p = at(event)
+    onDrag({ slot: drag.slot, kind: drag.kind, dx: p.x - drag.x, dy: p.y - drag.y, done: true, free: event.metaKey })
+  }
 
   // Shrinks to fit narrow windows and 200% zoom (no sideways scrolling); the canvas keeps its shape from its pixel size.
-  return <canvas ref={ref} className="studio__canvas" role="img" aria-label={label} style={{ width: displayWidth, maxWidth: '100%', height: 'auto' }} />
+  return (
+    <canvas
+      ref={ref}
+      className={`studio__canvas${interactive ? ' studio__canvas--arrange' : ''}`}
+      role="img"
+      aria-label={label}
+      style={{ width: displayWidth, maxWidth: '100%', height: 'auto' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    />
+  )
 }

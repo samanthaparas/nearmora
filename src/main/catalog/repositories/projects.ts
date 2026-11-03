@@ -31,7 +31,8 @@ export interface ProjectSummary {
 
 export interface ProjectItem {
   position: number
-  assetId: string
+  /** Null when the person took the photo out of this place, leaving it empty (S6a). */
+  assetId: string | null
   crop: Crop
   fit: Fit
   width: number | null
@@ -66,7 +67,7 @@ const storedFormat = (format: string): FormatId => {
   return format
 }
 
-function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ assetId: string; crop: Crop; fit: Fit }>): void {
+function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ assetId: string | null; crop: Crop; fit: Fit }>): void {
   const insert = db.prepare('INSERT INTO project_item (project_id, position, asset_id, crop_cx, crop_cy, crop_zoom, fit) VALUES (?, ?, ?, ?, ?, ?, ?)')
   items.forEach(({ assetId, crop, fit }, position) => {
     try {
@@ -113,7 +114,7 @@ export function listProjects(db: Catalog): ProjectSummary[] {
       .prepare(
         `SELECT p.id, p.title, p.template_id AS templateId, p.template_version AS templateVersion, p.format, p.updated_at AS updatedAt,
                 COUNT(i.position) AS photoCount,
-                (SELECT asset_id FROM project_item c WHERE c.project_id = p.id ORDER BY c.position LIMIT 1) AS coverAssetId
+                (SELECT asset_id FROM project_item c WHERE c.project_id = p.id AND c.asset_id IS NOT NULL ORDER BY c.position LIMIT 1) AS coverAssetId
          FROM project p LEFT JOIN project_item i ON i.project_id = p.id
          GROUP BY p.id ORDER BY p.updated_at DESC, p.id`,
       )
@@ -130,17 +131,18 @@ export function getProject(db: Catalog, projectId: string): ProjectDetail {
   const rows = db
     .prepare(
       `SELECT i.position, i.asset_id, i.crop_cx, i.crop_cy, i.crop_zoom, i.fit, a.width, a.height,
-              EXISTS (SELECT 1 FROM asset_location l JOIN source s ON s.id = l.source_id
-                      WHERE l.asset_id = a.id AND l.availability = 'available' AND s.status = 'active') AS available,
+              -- An empty place has nothing to reach, so it never counts as offline.
+              CASE WHEN i.asset_id IS NULL THEN 1 ELSE EXISTS (SELECT 1 FROM asset_location l JOIN source s ON s.id = l.source_id
+                      WHERE l.asset_id = a.id AND l.availability = 'available' AND s.status = 'active') END AS available,
               (SELECT l.relative_path FROM asset_location l WHERE l.asset_id = a.id ORDER BY l.availability = 'available' DESC, l.relative_path LIMIT 1) AS relative_path,
               (SELECT s.display_name FROM asset_location l JOIN source s ON s.id = l.source_id WHERE l.asset_id = a.id
                ORDER BY l.availability = 'available' DESC, l.relative_path LIMIT 1) AS folder_name
-       FROM project_item i JOIN asset a ON a.id = i.asset_id
+       FROM project_item i LEFT JOIN asset a ON a.id = i.asset_id
        WHERE i.project_id = ? ORDER BY i.position`,
     )
     .all(projectId) as Array<{
     position: number
-    asset_id: string
+    asset_id: string | null
     crop_cx: number
     crop_cy: number
     crop_zoom: number
@@ -205,7 +207,10 @@ export function setDesign(db: Catalog, input: { projectId: string; design: Desig
   if (!formatsFor(template).includes(design.format)) throw new CatalogError('INVALID_INPUT', `${template.name} can’t be made at that size`)
   const count = design.items.length
   if (count < template.photos.min || count > template.photos.max) throw new CatalogError('INVALID_INPUT', `${template.name} doesn’t take ${count} photos`)
-  if (new Set(design.items.map((i) => i.assetId)).size !== count) throw new CatalogError('INVALID_INPUT', 'Each photo can be used once per project')
+  // Empty places (S6a) don't count as photos; at least one photo must stay, and each photo is used once.
+  const photos = design.items.flatMap((i) => (i.assetId ? [i.assetId] : []))
+  if (photos.length === 0) throw new CatalogError('INVALID_INPUT', 'A project needs at least one photo')
+  if (new Set(photos).size !== photos.length) throw new CatalogError('INVALID_INPUT', 'Each photo can be used once per project')
   db.transaction(() => {
     const result = db
       .prepare('UPDATE project SET template_id = ?, template_version = ?, format = ?, params_json = ?, updated_at = ? WHERE id = ?')

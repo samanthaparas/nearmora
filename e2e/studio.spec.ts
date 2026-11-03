@@ -502,6 +502,78 @@ test('swipe preview: slides side by side, then one at a time; a mat for carousel
   await app.close()
 })
 
+test('Customize: drag, resize, nudge, flip, lock, hide and show, layer order and an empty place, all kept after a restart', async () => {
+  let { app } = await launchApp(profile)
+  let page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (const i of [0, 1, 2, 3]) await pick.nth(i).click()
+  await page.getByRole('region', { name: 'Four photos' }).getByRole('button', { name: /^Classic grid/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Classic grid' })).toBeVisible()
+  const saved = (text: string) => expect(page.getByText(`${text}. All changes saved.`)).toBeVisible()
+
+  // Exact size, typed.
+  await expect(page.getByRole('heading', { name: 'Arrange photo 1' })).toBeVisible()
+  await page.getByLabel('Width', { exact: true }).fill('300')
+  await saved('Photo 1 resized')
+
+  // Drag photo 2 on the preview: pressing it selects it, dragging moves it.
+  const canvas = page.locator('.studio__canvas').first()
+  await canvas.scrollIntoViewIfNeeded()
+  const box = (await canvas.boundingBox())!
+  await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.25)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.3, { steps: 5 })
+  await page.mouse.up()
+  await saved('Photo 2 moved')
+  await expect(page.getByRole('heading', { name: 'Arrange photo 2' })).toBeVisible()
+  const left = page.getByLabel('Left', { exact: true })
+  const before = Number(await left.inputValue())
+
+  // The arrow keys nudge it, from the Arrange controls.
+  await page.getByRole('region', { name: 'Arrange photo 2' }).focus()
+  await page.keyboard.press('Shift+ArrowRight')
+  await saved('Photo 2 nudged')
+  await expect(left).toHaveValue(String(before + 10))
+
+  // Flip, layer order, and lock: a locked photo's place can't be typed or nudged.
+  await page.getByLabel('Flip left to right').check()
+  await saved('Photo 2 flipped')
+  await page.getByRole('button', { name: 'Bring forward' }).click()
+  await saved('Photo 2 brought forward')
+  await page.getByLabel('Lock in place').check()
+  await expect(left).toBeDisabled()
+
+  // Hide, then find it in the list of hidden photos and show it again.
+  await page.getByRole('button', { name: 'Hide' }).click()
+  const hidden = page.getByRole('region', { name: 'Hidden photos (1)' })
+  await expect(hidden).toBeVisible()
+  await hidden.getByRole('button', { name: 'Show photo 2' }).click()
+  await saved('Photo 2 shown again')
+  await expect(page.getByRole('region', { name: /^Hidden photos/ })).toHaveCount(0)
+
+  // Take photo 3 out: its place stays, empty, and export says so.
+  await page.getByRole('button', { name: 'Adjust photo 3' }).click()
+  await page.getByRole('button', { name: 'Take out of its place' }).click()
+  await saved('Photo 3 taken out; its place is empty')
+  await expect(page.getByRole('button', { name: 'Adjust photo 3, empty place' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Export' })).toContainText('1 empty place shows the background')
+  await expect(page.getByRole('button', { name: 'Fill with a photo…' })).toBeVisible()
+  await app.close()
+
+  ;({ app } = await launchApp(profile))
+  page = await app.firstWindow()
+  await nav(page, 'Memory Studio')
+  await page.getByRole('button', { name: /Classic grid/ }).first().click()
+  await expect(page.getByRole('button', { name: 'Adjust photo 3, empty place' })).toBeVisible()
+  await expect(page.getByLabel('Width', { exact: true })).toHaveValue('300')
+  await page.getByRole('button', { name: 'Adjust photo 2' }).click()
+  await expect(page.getByRole('heading', { name: 'Arrange photo 2 (locked)' })).toBeVisible()
+  await expect(page.getByLabel('Flip left to right')).toBeChecked()
+  await expect(page.getByLabel('Left', { exact: true })).toHaveValue(String(before + 10))
+  await app.close()
+})
+
 test('captions wrap and keep the line breaks typed, the same after a restart', async () => {
   let { app } = await launchApp(profile)
   let page = await app.firstWindow()

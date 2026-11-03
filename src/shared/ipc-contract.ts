@@ -80,7 +80,8 @@ const ProjectDetail = z.object({
   items: z.array(
     z.object({
       position: count,
-      assetId: id,
+      // Null for a place emptied in the editor (S6a).
+      assetId: id.nullable(),
       crop,
       fit: z.enum(['fill', 'fit']),
       width: z.number().int().nullable(),
