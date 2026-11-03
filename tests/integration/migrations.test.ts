@@ -218,3 +218,27 @@ describe('schema v5: templates', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM asset').get()).toEqual({ n: 4 })
   })
 })
+
+describe('schema v7: empty places', () => {
+  it('keeps every project photo, crop and fit, and lets a place be empty while photos still can’t vanish from under a project', async () => {
+    const { catalogFile, backupDir } = tempProfile()
+    const old = await openTestCatalog(catalogFile, { migrations: MIGRATIONS.slice(0, 6) })
+    const assets = seedAssets(old, seedSource(old).sourceId, 2)
+    old.prepare(`INSERT INTO project (id, title, template_id, template_version, format, params_json, updated_at) VALUES ('p', 'Pair', 'pair-equal-split', 1, 'square', '{"v":1}', 1)`).run()
+    const add = old.prepare(`INSERT INTO project_item (project_id, position, asset_id, crop_cx, crop_cy, crop_zoom, fit) VALUES ('p', ?, ?, ?, 0.5, 1.5, ?)`)
+    add.run(0, assets[0], 0.2, 'fill')
+    add.run(1, assets[1], 0.8, 'fit')
+    old.close()
+
+    const db = await openTestCatalog(catalogFile, { backupDir })
+    expect(readSchemaVersion(db)).toBe(LATEST)
+    expect(getProject(db, 'p').items.map((i) => [i.assetId, i.crop, i.fit])).toEqual([
+      [assets[0], { cx: 0.2, cy: 0.5, zoom: 1.5 }, 'fill'],
+      [assets[1], { cx: 0.8, cy: 0.5, zoom: 1.5 }, 'fit'],
+    ])
+    db.prepare(`UPDATE project_item SET asset_id = NULL WHERE position = 1`).run()
+    expect(getProject(db, 'p').items[1]).toMatchObject({ assetId: null, available: true })
+    // A photo still in a project can't be deleted from the catalogue underneath it.
+    expect(() => db.prepare('DELETE FROM asset WHERE id = ?').run(assets[0])).toThrow(/FOREIGN KEY/)
+  })
+})

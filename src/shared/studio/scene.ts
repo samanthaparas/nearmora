@@ -135,3 +135,40 @@ export function ticket(r: Rect, notch: number): string {
 
 /** A closed shape through the given points. */
 export const polygon = (points: ReadonlyArray<readonly [number, number]>): string => `M${points.map(([x, y]) => `${n(x)} ${n(y)}`).join('L')}Z`
+
+/**
+ * Moves and scales a path: every point (x, y) becomes (x * sx + tx, y * sy + ty). Used when the person moves or resizes
+ * a shaped photo (S6a), so its circle, arch or torn edge follows it. Handles the absolute commands our shapes use
+ * (M L H V C Q A Z); an arc's radii scale with the axes, so a circle stretched one way becomes an ellipse.
+ */
+export function transformPath(d: string, sx: number, sy: number, tx: number, ty: number): string {
+  const X = (v: number) => n(v * sx + tx)
+  const Y = (v: number) => n(v * sy + ty)
+  return (d.match(/[MLHVCQAZ][^MLHVCQAZ]*/g) ?? [])
+    .map((part) => {
+      const command = part[0]!
+      const v = (part.slice(1).match(/-?\d*\.?\d+(?:e-?\d+)?/gi) ?? []).map(Number)
+      switch (command) {
+        case 'H':
+          return `H${v.map(X).join(' ')}`
+        case 'V':
+          return `V${v.map(Y).join(' ')}`
+        case 'A': {
+          const out: string[] = []
+          for (let i = 0; i + 6 < v.length; i += 7) {
+            out.push(`${n(v[i]! * Math.abs(sx))} ${n(v[i + 1]! * Math.abs(sy))} ${v[i + 2]} ${v[i + 3]} ${v[i + 4]} ${X(v[i + 5]!)} ${Y(v[i + 6]!)}`)
+          }
+          return `A${out.join(' ')}`
+        }
+        case 'Z':
+          return 'Z'
+        default: {
+          // M, L, C, Q: x y pairs.
+          const pairs: string[] = []
+          for (let i = 0; i + 1 < v.length; i += 2) pairs.push(`${X(v[i]!)} ${Y(v[i + 1]!)}`)
+          return `${command}${pairs.join(command === 'M' || command === 'L' ? 'L' : ' ')}`
+        }
+      }
+    })
+    .join('')
+}

@@ -10,7 +10,8 @@ import { FORMAT_IDS, type FormatId } from './formats'
 import { DEFAULT_PARAMS, ParamsSchema, type Params } from './params'
 
 export interface DesignItem {
-  assetId: string
+  /** Null for a place the person emptied (S6a): the layout keeps the place, ready to be filled again. */
+  assetId: string | null
   crop: Crop
   fit: Fit
 }
@@ -34,7 +35,7 @@ export const DesignSchema = z
       .array(
         z
           .object({
-            assetId: z.uuid(),
+            assetId: z.uuid().nullable(),
             crop: z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1), zoom: z.number().min(1).max(MAX_ZOOM) }).strict(),
             fit: z.enum(['fill', 'fit']),
           })

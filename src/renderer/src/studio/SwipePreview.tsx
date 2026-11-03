@@ -24,14 +24,14 @@ export function SwipePreview({ composition, items, slideWidth }: { composition: 
   // One slide as posted. A seamless slide is the whole design drawn once, shifted so only that slide's part shows.
   const slide = (i: number) => {
     if (!seamless) {
-      return <StudioCanvas key={i} composition={composition} items={items} canvasIndex={i} displayWidth={slideWidth} highlight={null} label={`Slide ${i + 1} of ${count}`} />
+      return <StudioCanvas key={i} composition={composition} items={items} canvasIndex={i} displayWidth={slideWidth} highlight={null} label={`Slide ${i + 1} of ${count}`} placeholders={false} />
     }
     const scale = slideWidth / (composition.width / count)
     const left = i === 0 ? 0 : cutPositions(composition.width, count)[i - 1]! * scale
     return (
       <div key={i} className="studio__swipe-slide" role="img" aria-label={`Slide ${i + 1} of ${count}`} style={{ width: slideWidth, height: composition.height * scale }}>
         <div aria-hidden="true" style={{ transform: `translateX(${-left}px)`, width: composition.width * scale }}>
-          <StudioCanvas composition={composition} items={items} canvasIndex={0} displayWidth={composition.width * scale} highlight={null} label="" guides={false} />
+          <StudioCanvas composition={composition} items={items} canvasIndex={0} displayWidth={composition.width * scale} highlight={null} label="" guides={false} placeholders={false} />
         </div>
       </div>
     )

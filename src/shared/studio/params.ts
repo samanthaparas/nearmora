@@ -1,5 +1,6 @@
 /**
- * A project's own settings on top of its template (background, margin, gutter, photo border, caption words). Stored as versioned JSON and
+ * A project's own settings on top of its template (background, margin, gutter, photo border, caption words, and each
+ * photo's own place, tilt, corners, flip, lock and visibility, with the layer order). Stored as versioned JSON and
  * checked with this schema whenever it is written or read, so a damaged or unknown value never reaches the drawing code.
  * Only settings the person changed are stored; everything else comes from the template's defaults.
  */
@@ -14,6 +15,28 @@ export const MAX_CAPTION = 160
 
 /** The widest photo border, in reference pixels. */
 export const MAX_BORDER = 60
+
+/** The roundest photo corner, in reference pixels. */
+export const MAX_ROUNDING = 300
+
+/** Most photos a layout holds (carousels take up to 10); edits and layer order are keyed by these positions. */
+const MAX_SLOTS = 20
+
+/**
+ * The person's own changes to one photo's place (S6a, ADR-0022). A moved or resized place is stored as fractions of
+ * the canvas, so it keeps its proportions if the size changes; everything not set comes from the layout.
+ */
+export const SlotEditSchema = z
+  .object({
+    rect: z.object({ x: z.number().min(-1).max(2), y: z.number().min(-1).max(2), width: z.number().gt(0).max(2), height: z.number().gt(0).max(2) }).strict().optional(),
+    rotation: z.number().min(-180).max(180).optional(),
+    rounding: z.number().min(0).max(MAX_ROUNDING).optional(),
+    flip: z.literal(true).optional(),
+    locked: z.literal(true).optional(),
+    hidden: z.literal(true).optional(),
+  })
+  .strict()
+export type SlotEdit = z.infer<typeof SlotEditSchema>
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, 'Colours are stored as #rrggbb')
 
@@ -30,6 +53,9 @@ export const ParamsSchema = z
     borderColor: hexColor.optional(),
     // Caption words by caption id (playful layouts), with any line breaks the person typed. An empty string removes it.
     text: z.record(z.string().regex(/^[a-z][a-z0-9-]{0,19}$/), z.string().max(MAX_CAPTION)).optional(),
+    // S6a: changes to each photo's place, by position ("0", "1", …), and the drawing order of positions, back to front.
+    edits: z.record(z.string().regex(/^(0|[1-9][0-9]?)$/), SlotEditSchema).optional(),
+    order: z.array(z.number().int().min(0).max(MAX_SLOTS - 1)).max(MAX_SLOTS).optional(),
   })
   .strict()
 export type Params = z.infer<typeof ParamsSchema>

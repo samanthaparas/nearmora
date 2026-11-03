@@ -37,7 +37,8 @@ export function printResolution(
   if (FORMATS[format].use !== 'print') return []
   return composition.elements.flatMap((element) => {
     const item = items[element.slot]
-    if (!item?.width || !item.height) return []
+    // Hidden photos aren't printed, and empty places (S6a) have no photo.
+    if (element.hidden || !item?.width || !item.height) return []
     const place = placePhoto({ width: item.width, height: item.height }, element.rect, item.crop, item.fit, composition.border.width)
     // Output pixels are printed at PRINT_PPI, so photo pixels per output pixel × PRINT_PPI is photo pixels per inch.
     const ppi = Math.floor((place.src.width / place.dest.width) * PRINT_PPI)

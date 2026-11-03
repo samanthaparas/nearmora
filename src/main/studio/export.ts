@@ -105,8 +105,13 @@ export async function prepareExport(
   )
   const unavailable: string[] = []
   const changed: string[] = []
-  const paths: string[] = []
+  const paths: Array<string | undefined> = []
   for (const item of project.items) {
+    // An emptied place (S6a) has no photo to check; it exports as the background.
+    if (item.assetId === null) {
+      paths.push(undefined)
+      continue
+    }
     const candidates = original.all(item.assetId) as Array<{ root_path: string; relative_path: string; size_bytes: number; mtime_ms: number; content_sha256: Buffer }>
     let found: string | undefined
     for (const c of candidates) {
@@ -147,10 +152,11 @@ export async function prepareExport(
   }))
   // Each file's drawing order, shared with the preview; photos gain the path of their verified original.
   for (const [canvas, output] of outputs.entries()) {
-    output.layers = layers(composition, canvas).map((layer): RenderLayer => {
-      if (layer.kind === 'shape') return layer
+    output.layers = layers(composition, canvas).flatMap((layer): RenderLayer[] => {
+      if (layer.kind === 'shape') return [layer]
       const item = project.items[layer.element.slot]!
-      return { kind: 'photo', sourcePath: paths[layer.element.slot]!, crop: item.crop, fit: item.fit, element: layer.element }
+      const sourcePath = paths[layer.element.slot]
+      return sourcePath ? [{ kind: 'photo', sourcePath, crop: item.crop, fit: item.fit, element: layer.element }] : []
     })
   }
   return {

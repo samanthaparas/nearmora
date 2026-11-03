@@ -144,7 +144,7 @@ describe('notes for photos that meet a cut', () => {
     border: { width: 0, color: '#ffffff' },
     canvasCount: 1,
     slices: 2,
-    elements: [{ id: 'photo-0', type: 'photo', slot: 0, canvas: 0, rect: { x, y: 0, width, height: 500 }, rotation: 0, mask: null, frame: null }],
+    elements: [{ id: 'photo-0', type: 'photo', slot: 0, canvas: 0, rect: { x, y: 0, width, height: 500 }, rotation: 0, mask: null, frame: null, flip: false, hidden: false, locked: false }],
     under: [],
     over: [],
   })
