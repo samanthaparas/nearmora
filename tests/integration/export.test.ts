@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_CROP, type Crop, type Fit, type Rect } from '@shared/layout'
 import { compose } from '@shared/studio/compose'
 import { layers } from '@shared/studio/layers'
+import { sliceWidths } from '@shared/studio/slices'
 import { PLAYFUL_TEMPLATES } from '@shared/studio/playful'
 import { PLAYFUL_QUARTETS } from '@shared/studio/playful-quartets'
 import { FORMAT_IDS, FORMATS } from '@shared/studio/formats'
@@ -79,6 +80,36 @@ const NO_BORDER = { width: 0, color: '#ffffff' }
 const cellCentre = { left: { x: 48 + 480 / 2, y: 540 }, right: { x: 48 + 480 + 24 + 480 / 2, y: 540 } } // two-photo collage, 1:1
 
 describe('rendering an export file', () => {
+  // S5a, ADR-0021: a seamless design is drawn once and cut, so lossless slices put side by side are the design itself.
+  it('cuts a design into slices that reassemble it pixel for pixel, including widths that don’t divide evenly', async () => {
+    const dir = tempDir()
+    const photo = join(dir, 'split.jpg')
+    await twoTone(photo, { split: 'columns' })
+    const composition = compose({ templateId: 'seamless-story-strip', templateVersion: 1, format: 'square', params: { v: 1 }, photoCount: 5 })
+    const strip = layers(composition, 0).map((l): RenderLayer => (l.kind === 'shape' ? l : { kind: 'photo', sourcePath: photo, crop: DEFAULT_CROP, fit: 'fill', element: l.element }))
+    const cases = [
+      { width: composition.width, height: composition.height, count: 3, layers: strip },
+      // 1001 px into 3: slices of 334, 334 and 333, with a photo running over both cuts.
+      { width: 1001, height: 300, count: 3, layers: [photoLayer(photo, DEFAULT_CROP, { x: 0, y: 0, width: 1001, height: 300 })] },
+    ]
+    for (const { width, height, count, layers: drawn } of cases) {
+      const request = { width, height, background: composition.background, border: NO_BORDER, ppi: null, quality: 92, layers: drawn, encoding: 'png' as const }
+      const whole = join(dir, `whole-${width}.png`)
+      const slices = Array.from({ length: count }, (_, i) => join(dir, `slice-${width}-${i}.png`))
+      expect(await renderCanvas({ ...request, outputPaths: [whole] })).toEqual({ ok: true })
+      expect(await renderCanvas({ ...request, outputPaths: slices })).toEqual({ ok: true })
+
+      const pieces = await Promise.all(slices.map((f) => sharp(f).raw().toBuffer({ resolveWithObject: true })))
+      expect(pieces.map((p) => p.info.width)).toEqual(sliceWidths(width, count))
+      // Put the slices side by side row by row, copying raw bytes (compositing could blend or convert them).
+      const joined = Buffer.concat(
+        Array.from({ length: height }, (_, row) => Buffer.concat(pieces.map(({ data, info }) => data.subarray(row * info.width * 3, (row + 1) * info.width * 3)))),
+      )
+      const original = await sharp(whole).raw().toBuffer()
+      expect(joined.equals(original), `${width} px into ${count}`).toBe(true)
+    }
+  }, 60_000)
+
   it('is exactly 1080 wide, square or portrait, and applies each crop to the right part of the photo', async () => {
     const dir = tempDir()
     const photo = join(dir, 'split.jpg')
@@ -88,7 +119,7 @@ describe('rendering an export file', () => {
       const { width, height } = FORMATS[format]
       const cellHeight = height - 96
       const request: RenderRequest = {
-        outputPath: out,
+        outputPaths: [out],
         width,
         height,
         background: '#f8f0e8',
@@ -114,9 +145,9 @@ describe('rendering an export file', () => {
     await twoTone(photo, { split: 'rows', orientation: 6 })
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.9, cy: 0.5, zoom: 3 }, cell, 'fill')] })
+    await renderCanvas({ outputPaths: [out], width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.9, cy: 0.5, zoom: 3 }, cell, 'fill')] })
     expect(await colourAt(out, 540, 540)).toBe('red')
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.1, cy: 0.5, zoom: 3 }, cell, 'fill')] })
+    await renderCanvas({ outputPaths: [out], width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.1, cy: 0.5, zoom: 3 }, cell, 'fill')] })
     expect(await colourAt(out, 540, 540)).toBe('blue')
   })
 
@@ -129,7 +160,7 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     const cell = { x: 0, y: 0, width: 1080, height: 1080 }
-    await renderCanvas({ outputPath: out, width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.5, cy: 0.5, zoom: 1 }, cell, 'fill')] })
+    await renderCanvas({ outputPaths: [out], width: 1080, height: 1080, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: null, layers: [photoLayer(photo, { cx: 0.5, cy: 0.5, zoom: 1 }, cell, 'fill')] })
     const meta = await sharp(out).metadata()
     expect({ exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc }).toEqual({ exif: undefined, xmp: undefined, iptc: undefined })
     expect(await exifr.parse(out, { gps: true, xmp: true, iptc: true, tiff: true, exif: true })).toBeUndefined()
@@ -141,7 +172,7 @@ describe('rendering an export file', () => {
     await twoTone(photo, { split: 'columns' })
     const out = join(dir, 'print.jpg')
     const cell = { x: 0, y: 0, width: 2400, height: 2400 }
-    await renderCanvas({ outputPath: out, width: 2400, height: 2400, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: 300, layers: [photoLayer(photo, { cx: 0.5, cy: 0.5, zoom: 1 }, cell, 'fill')] })
+    await renderCanvas({ outputPaths: [out], width: 2400, height: 2400, background: '#ffffff', quality: 90, border: NO_BORDER, ppi: 300, layers: [photoLayer(photo, { cx: 0.5, cy: 0.5, zoom: 1 }, cell, 'fill')] })
     const meta = await sharp(out).metadata()
     expect({ density: meta.density, exif: meta.exif, xmp: meta.xmp, iptc: meta.iptc }).toEqual({ density: 300, exif: undefined, xmp: undefined, iptc: undefined })
     expect(await exifr.parse(out, { gps: true, xmp: true, iptc: true, tiff: true, exif: true })).toBeUndefined()
@@ -159,7 +190,7 @@ describe('rendering an export file', () => {
 
     const out = join(dir, 'out.jpg')
     // The cell is the photo's own size, so nothing is resampled and every output pixel should match the source.
-    await renderCanvas({ outputPath: out, width: w, height: h, background: '#ffffff', quality: 92, border: NO_BORDER, ppi: null, layers: [photoLayer(stripes, { cx: 0.5, cy: 0.5, zoom: 1 }, { x: 0, y: 0, width: w, height: h }, 'fill')] })
+    await renderCanvas({ outputPaths: [out], width: w, height: h, background: '#ffffff', quality: 92, border: NO_BORDER, ppi: null, layers: [photoLayer(stripes, { cx: 0.5, cy: 0.5, zoom: 1 }, { x: 0, y: 0, width: w, height: h }, 'fill')] })
     expect((await sharp(out).metadata()).chromaSubsampling).toBe('4:4:4')
     const back = await sharp(out).raw().toBuffer()
     let error = 0
@@ -175,7 +206,7 @@ describe('rendering an export file', () => {
     const out = join(dir, 'out.jpg')
     const cell = { x: 40, y: 40, width: 1000, height: 1000 }
     const result = await renderCanvas({
-      outputPath: out,
+      outputPaths: [out],
       width: 1080,
       height: 1080,
       background: '#ffffff',
@@ -199,7 +230,7 @@ describe('rendering an export file', () => {
     const cell = { x: 40, y: 40, width: 1000, height: 1000 }
     const render = (border: number) =>
       renderCanvas({
-        outputPath: out,
+        outputPaths: [out],
         width: 1080,
         height: 1080,
         background: '#ffffff',
@@ -228,7 +259,7 @@ describe('rendering an export file', () => {
       const composition = compose({ templateId, templateVersion: 1, format: 'square', params, photoCount: 2 })
       const out = join(dir, `${templateId}.jpg`)
       const result = await renderCanvas({
-        outputPath: out,
+        outputPaths: [out],
         width: 1080,
         height: 1080,
         background: composition.background,
@@ -317,7 +348,7 @@ describe('rendering an export file', () => {
     await sharp({ create: { width: 200, height: 200, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toFile(clear)
     const out = join(dir, 'out.jpg')
     await renderCanvas({
-      outputPath: out,
+      outputPaths: [out],
       width: 1080,
       height: 1080,
       background: '#f8f0e8',
@@ -330,20 +361,20 @@ describe('rendering an export file', () => {
 })
 
 // A scanned folder of two-tone photos and a project, ready to export.
-async function exportable(kind: 'collage' | 'carousel' | 'quartet' = 'collage') {
+async function exportable(kind: 'collage' | 'carousel' | 'quartet' | 'seamless' | 'ten' = 'collage') {
   const profile = tempProfile()
   const db = await openTestCatalog(profile.catalogFile)
   const thumbnailsDir = join(profile.dir, 'thumbnails')
   mkdirSync(thumbnailsDir)
   const photos = join(tempDir(), 'Photos')
   mkdirSync(photos)
-  for (const [i, name] of ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg'].entries()) await twoTone(join(photos, name), { split: i === 1 ? 'rows' : 'columns', shade: i * 10 })
+  for (const [i, name] of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((n) => `${n}.jpg`).entries()) await twoTone(join(photos, name), { split: i === 1 ? 'rows' : 'columns', shade: i * 10 })
   const added = addSourceFolder(db, photos, profile.dir)
   if (!added.ok) throw new Error(added.reason)
   await scanSource({ db, thumbnailsDir, processImage }, added.source.id)
-  const count = { collage: 2, carousel: 3, quartet: 4 }[kind]
+  const count = { collage: 2, carousel: 3, quartet: 4, seamless: 3, ten: 10 }[kind]
   const assets = (db.prepare('SELECT asset_id FROM asset_location ORDER BY relative_path').pluck().all() as string[]).slice(0, count)
-  const templateId = { collage: 'pair-equal-split', carousel: 'carousel-full', quartet: 'quartet-classic-grid' }[kind]
+  const templateId = { collage: 'pair-equal-split', carousel: 'carousel-full', quartet: 'quartet-classic-grid', seamless: 'seamless-across-the-seam', ten: 'carousel-full' }[kind]
   const project = createProject(db, { templateId, format: 'square', assetIds: assets })
   return { db, profile, photos, sourceId: added.source.id, project }
 }
@@ -409,6 +440,31 @@ describe('exporting a project', () => {
       const meta = await sharp(join(outcome.folder, outcome.files[0]!)).metadata()
       expect({ templateId, width: meta.width, height: meta.height, density: meta.density, exif: meta.exif }).toEqual({ templateId, width: 2400, height: 3000, density: 300, exif: undefined })
     }
+  }, 60_000)
+
+  // S5a: a seamless design becomes numbered slides, each a slide wide, through the same checks and verification.
+  it('exports a seamless carousel as one numbered file per slide, each one slide wide', async () => {
+    const { db, profile, project } = await exportable('seamless')
+    for (const format of ['square', 'portrait'] as const) {
+      setDesign(db, { projectId: project.id, design: { ...designOf(getProject(db, project.id)), format } })
+      const outcome = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
+      if (outcome.status !== 'done') throw new Error(JSON.stringify(outcome))
+      expect(outcome.files).toEqual(['Across the seam 01.jpg', 'Across the seam 02.jpg'])
+      expect(readdirSync(outcome.folder).sort()).toEqual(outcome.files)
+      for (const file of outcome.files) {
+        const meta = await sharp(join(outcome.folder, file)).metadata()
+        expect([meta.width, meta.height, meta.chromaSubsampling, meta.exif]).toEqual([1080, FORMATS[format].height, '4:4:4', undefined])
+      }
+    }
+  }, 60_000)
+
+  it('numbers carousel files with two digits, so ten slides sort in posting order', async () => {
+    const { db, profile, project } = await exportable('ten')
+    const outcome = await runExport({ db, render }, await ready(db, project.id, tempDir(), profile.dir))
+    if (outcome.status !== 'done') throw new Error(JSON.stringify(outcome))
+    expect(outcome.files).toEqual(Array.from({ length: 10 }, (_, i) => `Carousel ${String(i + 1).padStart(2, '0')}.jpg`))
+    expect([...outcome.files].sort()).toEqual(outcome.files)
+    expect(readdirSync(outcome.folder).sort()).toEqual(outcome.files)
   }, 60_000)
 
   // S4c: every playful quartet goes through the full pipeline too, at a print size, with all four photos placed.

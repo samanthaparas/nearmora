@@ -5,12 +5,17 @@
  */
 
 import type { Rect } from '../layout'
+import { FORMAT_IDS, type FormatId } from './formats'
 import { PLAYFUL_TEMPLATES } from './playful'
 import { PLAYFUL_QUARTETS } from './playful-quartets'
 import type { Decor } from './scene'
+import { SEAMLESS_TEMPLATES } from './seamless'
 
-/** Single: one image. Carousel: one image per photo, in order. (Seamless carousels arrive in phase S5.) */
-export type Mode = 'single' | 'carousel'
+/**
+ * Single: one image. Carousel: one image per photo, in order. Seamless: one wide design, as wide as `slides` slides,
+ * cut into that many images so photos can run across the cuts (S5, ADR-0021).
+ */
+export type Mode = 'single' | 'carousel' | 'seamless'
 
 /** Where one photo goes: which output canvas, and its rectangle there in canvas pixels. */
 export interface Slot {
@@ -39,6 +44,10 @@ export interface TemplateDefinition {
   /** One short line for the template picker. */
   description: string
   mode: Mode
+  /** Seamless layouts: how many slides the design is cut into. */
+  slides?: number
+  /** The sizes this layout can be made at; all of them when absent (seamless carousels use sharing shapes only). */
+  formats?: readonly FormatId[]
   photos: { min: number; max: number }
   /** Margin and gutter in reference pixels (see params.ts); a playful layout may also have its own background. */
   defaults: { margin: number; gutter: number; background?: string }
@@ -359,7 +368,14 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
   },
   ...PLAYFUL_TEMPLATES,
   ...PLAYFUL_QUARTETS,
+  ...SEAMLESS_TEMPLATES,
 ]
+
+/** The sizes a template can be made at. */
+export const formatsFor = (template: TemplateDefinition): readonly FormatId[] => template.formats ?? FORMAT_IDS
+
+/** `format` if the template allows it, otherwise its first allowed size (used when switching layouts). */
+export const formatFor = (template: TemplateDefinition, format: FormatId): FormatId => (formatsFor(template).includes(format) ? format : formatsFor(template)[0]!)
 
 /** A template by id and version, or undefined if this version of the app doesn't know it. */
 export const findTemplate = (id: string, version: number): TemplateDefinition | undefined =>

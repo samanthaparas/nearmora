@@ -12,7 +12,7 @@ import { DEFAULT_CROP, type Crop, type Fit } from '@shared/layout'
 import { DesignSchema, type Design } from '@shared/studio/design'
 import { isFormatId, type FormatId } from '@shared/studio/formats'
 import { DEFAULT_PARAMS, readParams, type Params } from '@shared/studio/params'
-import { findTemplate, latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
+import { findTemplate, formatsFor, latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
 import type { Catalog } from '../database'
 import { CatalogError, isConstraintError } from '../errors'
 
@@ -81,6 +81,7 @@ function insertItems(db: Catalog, projectId: string, items: ReadonlyArray<{ asse
 export function createProject(db: Catalog, input: { templateId: string; format: string; assetIds: readonly string[]; title?: string }): ProjectDetail {
   const template = newestTemplate(input.templateId)
   const format = checkFormat(input.format)
+  if (!formatsFor(template).includes(format)) throw new CatalogError('INVALID_INPUT', `${template.name} can’t be made at that size`)
   const { min, max } = template.photos
   if (input.assetIds.length < min || input.assetIds.length > max) {
     throw new CatalogError('INVALID_INPUT', min === max ? `${template.name} takes exactly ${min} photos` : `${template.name} takes ${min}–${max} photos`)
@@ -201,6 +202,7 @@ export function setDesign(db: Catalog, input: { projectId: string; design: Desig
   const design = parsed.data
   const template = findTemplate(design.templateId, design.templateVersion)
   if (!template) throw new CatalogError('INVALID_INPUT', 'Unknown template')
+  if (!formatsFor(template).includes(design.format)) throw new CatalogError('INVALID_INPUT', `${template.name} can’t be made at that size`)
   const count = design.items.length
   if (count < template.photos.min || count > template.photos.max) throw new CatalogError('INVALID_INPUT', `${template.name} doesn’t take ${count} photos`)
   if (new Set(design.items.map((i) => i.assetId)).size !== count) throw new CatalogError('INVALID_INPUT', 'Each photo can be used once per project')

@@ -4,7 +4,7 @@
  * offline photos named, and delete a project with every original untouched.
  */
 
-import { renameSync } from 'node:fs'
+import { readdirSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { generateBurstFolder } from '../tests/support/generate-photos'
@@ -402,6 +402,51 @@ test('playful quartets: four photos in their own group, a label per photo that i
   await app.close()
 })
 
+test('seamless carousels: one wide design with its cuts, a note where a photo crosses one, and one file per slide', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  // The offline test above unplugs the folder; it stays "not connected" until reconnected, and export needs it.
+  await nav(page, 'Library')
+  // Wait until the folder's status line is shown, whichever state it's in, before deciding.
+  await expect(page.locator('.library__source').first()).toBeVisible()
+  const reconnect = page.getByRole('button', { name: 'Reconnect' })
+  if ((await reconnect.count()) > 0) {
+    await reconnect.click()
+    await expect(page.locator('p', { hasText: 'Burst · 6 photos' })).toBeVisible({ timeout: 20_000 })
+  }
+  await nav(page, 'Favorites')
+  const seamless = page.getByRole('region', { name: 'Seamless carousels' })
+  await expect(seamless.getByRole('button')).toHaveCount(2)
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (const i of [0, 1, 2]) await pick.nth(i).click()
+  // A print size chosen in the picker falls back to square: seamless carousels are made for sharing.
+  await page.getByLabel('Size for the new project').selectOption('print-8x10')
+  await seamless.getByRole('button', { name: /^Across the seam/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Across the seam' })).toBeVisible()
+  await expect(page.getByText('Across the seam · 3 photos · 1080 × 1080 · 2 slides')).toBeVisible()
+  await expect(page.getByRole('img', { name: /^Preview: across the seam, 2 square slides, cream background$/ })).toBeVisible()
+  await expect(page.getByText('Photo 2 runs across the edge between slides 1 and 2.', { exact: false })).toBeVisible()
+
+  // Only the slide shapes are offered.
+  const shapes = page.getByRole('group', { name: 'Shape of each slide' })
+  await expect(shapes.getByRole('radio')).toHaveCount(2)
+  await expect(page.getByRole('group', { name: 'Print size (300 pixels per inch)' })).toHaveCount(0)
+  await shapes.getByLabel('Portrait (1080 × 1350)').check()
+  await expect(page.getByText('Size changed. All changes saved.')).toBeVisible()
+
+  // Export: one numbered file per slide, each one slide wide.
+  const destination = tempFolder('seamless-export')
+  await app.evaluate(({ dialog }, chosen) => {
+    dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [chosen] })
+  }, destination)
+  const panel = page.getByRole('region', { name: 'Export' })
+  await panel.getByRole('button', { name: 'Export…' }).click()
+  await expect(panel).toContainText('Exported 2 files', { timeout: 30_000 })
+  const [folder] = readdirSync(destination)
+  expect(readdirSync(join(destination, folder!)).sort()).toEqual(['Across the seam 01.jpg', 'Across the seam 02.jpg'])
+  await app.close()
+})
+
 test('captions wrap and keep the line breaks typed, the same after a restart', async () => {
   let { app } = await launchApp(profile)
   let page = await app.firstWindow()
@@ -438,7 +483,7 @@ test('picker filters: by photo count, by style and by what fits the selection; t
   const page = await app.firstWindow()
   await nav(page, 'Favorites')
   const groups = page.locator('.studio__templates').getByRole('region')
-  await expect(groups).toHaveCount(5)
+  await expect(groups).toHaveCount(6)
 
   // Style: playful shows only the playful pairs and quartets.
   await page.getByRole('group', { name: 'Style' }).getByLabel('Playful').check()

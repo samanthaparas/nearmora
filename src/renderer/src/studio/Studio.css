@@ -152,6 +152,13 @@
   fill: var(--nm-lilac);
 }
 
+/* A seamless carousel's cuts, dashed like the editor's guides. */
+.studio__template-cut {
+  stroke: var(--nm-text);
+  stroke-width: 12;
+  stroke-dasharray: 40 30;
+}
+
 /* Quick edits: sliders with their value, colour swatches, and the replace-photo chooser. */
 .studio__choice--column {
   flex-direction: column;

@@ -72,7 +72,9 @@ describe('templates', () => {
     expect(templatesFor(2)).toHaveLength(19)
     expect(templatesFor(4).every((t) => t.id.startsWith('quartet-') || t.id === 'carousel-full')).toBe(true)
     expect(templatesFor(4)).toHaveLength(21)
-    expect(templatesFor(3).map((t) => t.id)).toEqual(['carousel-full'])
+    // Three and five photos: the carousel, and the seamless carousel that takes exactly that many (S5a).
+    expect(templatesFor(3).map((t) => t.id)).toEqual(['carousel-full', 'seamless-across-the-seam'])
+    expect(templatesFor(5).map((t) => t.id)).toEqual(['carousel-full', 'seamless-story-strip'])
     expect(templatesFor(1)).toEqual([])
   })
 

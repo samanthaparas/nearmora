@@ -9,7 +9,7 @@ import { FORMATS, type FormatId } from './formats'
 import type { Params, ResolvedParams } from './params'
 import { BACKGROUNDS } from './params'
 import type { Decor } from './scene'
-import { findTemplate, type Mode, type TemplateDefinition } from './templates'
+import { findTemplate, formatsFor, type Mode, type TemplateDefinition } from './templates'
 
 /** One photo on one output canvas. `slot` is the project's photo position it shows. */
 export interface PhotoElement {
@@ -33,8 +33,10 @@ export interface Composition {
   mode: Mode
   /** The frame around every photo, in canvas pixels (width 0 means none). */
   border: { width: number; color: string }
-  /** How many output files: one for a collage, one per slide for a carousel. */
+  /** How many canvases are drawn: one for a collage or a seamless design, one per slide for a carousel. */
   canvasCount: number
+  /** How many files a canvas is cut into: the slides of a seamless carousel, otherwise 1 (see slices.ts). */
+  slices: number
   /** Photos, in drawing order. */
   elements: PhotoElement[]
   /** Shapes and art drawn below the photos, and shapes, art and captions drawn above them. */
@@ -72,10 +74,15 @@ export const captionText =
 export function compose(input: ComposeInput): Composition {
   const template = findTemplate(input.templateId, input.templateVersion)
   if (!template) throw new UnknownTemplateError(`Unknown template ${input.templateId} v${input.templateVersion}`)
-  const { width, height } = FORMATS[input.format]
+  if (!formatsFor(template).includes(input.format)) throw new UnknownTemplateError(`${template.name} can't be made at ${input.format}`)
+  const slide = FORMATS[input.format]
+  // A seamless design is as wide as all its slides together; everything else is one canvas the size of the format.
+  const slices = template.mode === 'seamless' ? (template.slides ?? 1) : 1
+  const width = slide.width * slices
+  const height = slide.height
   const resolved = resolveParams(template, input.params)
-  // Reference pixels are pixels on a canvas whose shorter side is 1080; this scales them to this canvas.
-  const scale = Math.min(width, height) / 1080
+  // Reference pixels are pixels on a canvas (or slide) whose shorter side is 1080; this scales them to this one.
+  const scale = Math.min(slide.width, height) / 1080
   const spacing = { margin: resolved.margin * scale, gutter: resolved.gutter * scale }
   const slots = template.slots({ width, height }, spacing, input.photoCount)
   return {
@@ -85,6 +92,7 @@ export function compose(input: ComposeInput): Composition {
     mode: template.mode,
     border: { width: resolved.borderWidth * scale, color: resolved.borderColor },
     canvasCount: slots.reduce((most, slot) => Math.max(most, slot.canvas + 1), 0),
+    slices,
     elements: slots.slice(0, input.photoCount).map((slot, index) => ({
       id: `photo-${index}`,
       type: 'photo',

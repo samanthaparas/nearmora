@@ -6,7 +6,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react'
 import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
-import { latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
+import { formatFor, latestTemplates, type TemplateDefinition } from '@shared/studio/templates'
 import { TemplateIcon } from './TemplateIcon'
 import { PhotoGrid, altFor, libraryFetcher, type Photo } from '../library/PhotoGrid'
 import '../library/Library.css'
@@ -17,14 +17,15 @@ const hint = ({ photos: { min, max } }: TemplateDefinition) => (min === max ? `s
 
 // The picker's groups, in the order they're shown.
 type Count = 'two' | 'four' | 'carousel'
-const GROUPS: Array<{ title: string; count: Count; style: 'everyday' | 'playful' }> = [
+const GROUPS: Array<{ title: string; count: Count; style: 'everyday' | 'playful'; seamless?: true }> = [
   { title: 'Two photos', count: 'two', style: 'everyday' },
   { title: 'Playful pairs', count: 'two', style: 'playful' },
   { title: 'Four photos', count: 'four', style: 'everyday' },
   { title: 'Playful quartets', count: 'four', style: 'playful' },
   { title: 'Carousel', count: 'carousel', style: 'everyday' },
+  { title: 'Seamless carousels', count: 'carousel', style: 'everyday', seamless: true },
 ]
-const countOf = (t: TemplateDefinition): Count => (t.mode === 'carousel' ? 'carousel' : t.photos.max === 2 ? 'two' : 'four')
+const countOf = (t: TemplateDefinition): Count => (t.mode !== 'single' ? 'carousel' : t.photos.max === 2 ? 'two' : 'four')
 const styleOf = (t: TemplateDefinition) => t.style ?? 'everyday'
 
 // The picker's filters: what to show, and the size new projects start at (the drawings are drawn at that size).
@@ -52,7 +53,8 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
   const [format, setFormat] = useState<FormatId>('square')
 
   async function create(template: TemplateDefinition) {
-    const result = await window.nearmora.createProject({ templateId: template.id, format, assetIds: selected })
+    // Seamless carousels come in sharing shapes only; a print size chosen here falls back to square for them.
+    const result = await window.nearmora.createProject({ templateId: template.id, format: formatFor(template, format), assetIds: selected })
     if (!result.ok) return setMessage('That project couldn’t be created. Nothing was changed.')
     onOpenProject(result.data.id)
   }
@@ -149,7 +151,9 @@ export function Favorites({ onOpenProject }: { onOpenProject: (projectId: string
         // Layouts grouped by photo count and style, narrowed by the filters; only those that fit the selection are enabled.
         <div className="studio__templates">
           {GROUPS.filter((g) => (show === 'all' || show === 'fits' || show === g.count) && (style === 'all' || style === g.style)).map((group) => {
-            const templates = latestTemplates().filter((t) => countOf(t) === group.count && styleOf(t) === group.style && (show !== 'fits' || fitsSelection(t)))
+            const templates = latestTemplates().filter(
+              (t) => countOf(t) === group.count && styleOf(t) === group.style && (t.mode === 'seamless') === (group.seamless ?? false) && (show !== 'fits' || fitsSelection(t)),
+            )
             if (templates.length === 0) return null
             return (
               <section key={group.title} className="studio__template-group" aria-label={group.title}>
