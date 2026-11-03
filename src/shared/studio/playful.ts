@@ -6,7 +6,7 @@
  */
 
 import type { Rect } from '../layout'
-import { art, arch, ART, circle, COLORS, grow, roundedRect, type Decor } from './scene'
+import { art, arch, ART, circle, COLORS, filledArt, grow, polygon, roundedRect, ticket, torn, type Decor } from './scene'
 import type { Slot, TemplateDefinition } from './templates'
 
 type Size = { width: number; height: number }
@@ -35,17 +35,20 @@ const tall = (canvas: Size) => canvas.height >= canvas.width * 0.9
 const POSTCARD_TILT = [-4, 5] as const
 const CARD_PAD = 0.04 // of the photo's width
 
-function postcardGeometry(canvas: Size, spacing: Spacing) {
+// Two photo cards placed diagonally (stacked on tall canvases, side by side otherwise), with `band` (a share of the
+// shorter side) kept free for a caption. Shared by Postcards, Scrapbook and Colorblock.
+function postcardGeometry(canvas: Size, spacing: Spacing, band0 = 0.18, tilts: readonly [number, number] = POSTCARD_TILT) {
   const box = inner(canvas, spacing)
   const unit = Math.min(canvas.width, canvas.height)
-  const band = 0.11 * unit // room for the caption
+  const band = band0 * unit // room for a caption (two lines on Postcards)
   // The size a card takes once padded and turned, for a photo `w` wide (photos are 4 : 3 landscape).
   const extent = (w: number, tilt: number) => {
     const card = { width: w * (1 + 2 * CARD_PAD), height: w * 0.75 + 2 * w * CARD_PAD }
     const o = overhang(card.width, card.height, tilt)
     return { width: card.width + 2 * o.x, height: card.height + 2 * o.y }
   }
-  const k = { width: extent(1, POSTCARD_TILT[1]).width, height: extent(1, POSTCARD_TILT[1]).height } // per pixel of photo width
+  const steepest = Math.max(Math.abs(tilts[0]), Math.abs(tilts[1]))
+  const k = { width: extent(1, steepest).width, height: extent(1, steepest).height } // per pixel of photo width
   const stacked = tall(canvas)
   // Stacked: two cards and the caption band down the page, each card up to 70% of the width. Side by side otherwise.
   const w = stacked
@@ -59,12 +62,13 @@ function postcardGeometry(canvas: Size, spacing: Spacing) {
     const top = box.y + (box.height - (2 * card.height + spacing.gutter + band)) / 2
     const a = place(box.x, top)
     const b = place(box.x + box.width - card.width, top + card.height + spacing.gutter)
-    return { a, b, caption: { x: box.x + 0.04 * box.width, y: b.y + card.height + band * 0.55, width: box.width - card.width * 0.2, align: 'start' as const }, unit, box, card }
+    // The caption's first baseline sits just below the second card.
+    return { a, b, caption: { x: box.x + 0.04 * box.width, y: top + 2 * card.height + spacing.gutter + band * 0.42, width: box.width * 0.9, align: 'start' as const }, unit, box, card }
   }
   const left = box.x + (box.width - (2 * card.width + spacing.gutter)) / 2
   const a = place(left, box.y)
   const b = place(left + card.width + spacing.gutter, box.y + box.height - card.height)
-  return { a, b, caption: { x: left + card.width / 2, y: box.y + card.height + band * 0.7, width: card.width, align: 'middle' as const }, unit, box, card }
+  return { a, b, caption: { x: left + card.width / 2, y: box.y + card.height + band * 0.42, width: card.width, align: 'middle' as const }, unit, box, card }
 }
 
 const postcards: TemplateDefinition = {
@@ -89,7 +93,7 @@ const postcards: TemplateDefinition = {
     const { a, caption, unit, box } = postcardGeometry(canvas, spacing)
     const over: Decor[] = []
     const words = text('caption')
-    if (words) over.push({ type: 'text', canvas: 0, text: words, size: 0.065 * unit, maxWidth: caption.width, align: caption.align, color: COLORS.plum, at: { x: caption.x, y: caption.y, rotate: -3, scale: 1 } })
+    if (words) over.push({ type: 'text', canvas: 0, text: words, size: 0.065 * unit, maxWidth: caption.width, maxLines: 2, align: caption.align, color: COLORS.plum, at: { x: caption.x, y: caption.y, rotate: -3, scale: 1 } })
     // The postmark sits in the corner the first card leaves free.
     const size = Math.min(0.2 * unit, box.x + box.width - (a.x + a.width) - 0.02 * unit)
     if (size > 0.08 * unit) over.push(art(0, ART.postmark, box.x + box.width - size * 0.32, a.y + size * 0.3, size, COLORS.plum, -8))
@@ -257,4 +261,292 @@ const circleStory: TemplateDefinition = {
   },
 }
 
-export const PLAYFUL_TEMPLATES: readonly TemplateDefinition[] = [postcards, filmNight, windowLight, circleStory]
+// ---- Torn pages: two photos torn from a page, each on a slightly larger torn white sheet. ----
+
+function tornGeometry(canvas: Size, spacing: Spacing) {
+  const box = inner(canvas, spacing)
+  const unit = Math.min(canvas.width, canvas.height)
+  const paper = 0.024 * unit // how far the white sheet shows around the photo
+  const room = { width: box.width - 2 * paper, height: box.height - 2 * paper }
+  // 4 : 3 photos, stacked on tall canvases and side by side otherwise, centred.
+  const stacked = tall(canvas)
+  const w = stacked ? Math.min(room.width, (room.height - spacing.gutter - 2 * paper) / 2 / 0.75) : Math.min((room.width - spacing.gutter - 2 * paper) / 2, room.height / 0.75)
+  const h = 0.75 * w
+  const total = stacked ? 2 * h + spacing.gutter + 2 * paper : 2 * w + spacing.gutter + 2 * paper
+  const start = (stacked ? box.y + (box.height - total) / 2 : box.x + (box.width - total) / 2) + paper
+  const photos = [0, 1].map((i): Rect =>
+    stacked
+      ? { x: box.x + (box.width - w) / 2, y: start + i * (h + spacing.gutter + 2 * paper), width: w, height: h }
+      : { x: start + i * (w + spacing.gutter + 2 * paper), y: box.y + (box.height - h) / 2, width: w, height: h },
+  )
+  return { box, unit, paper, photos }
+}
+
+const tornPages: TemplateDefinition = {
+  id: 'pair-torn-pages',
+  version: 1,
+  name: 'Torn pages',
+  description: 'Two photos with soft torn-paper edges',
+  mode: 'single',
+  style: 'playful',
+  photos: { min: 2, max: 2 },
+  defaults: { margin: 90, gutter: 50, background: COLORS.blush },
+  slots(canvas, spacing) {
+    const { photos, unit } = tornGeometry(canvas, spacing)
+    return photos.map((rect, i): Slot => ({ canvas: 0, rect, mask: torn(rect, 11 + i, 0.012 * unit, 0.022 * unit) }))
+  },
+  decor(canvas, spacing) {
+    const { photos, unit, paper } = tornGeometry(canvas, spacing)
+    const under = photos.map((rect, i): Decor => ({ type: 'shape', canvas: 0, d: torn(grow(rect, paper), 41 + i, 0.014 * unit, 0.02 * unit), fill: COLORS.card }))
+    // A sprig in the space right of the second sheet (the margin, or more on wide canvases), when there's room.
+    const last = photos[1]!
+    const right = last.x + last.width + paper
+    const room = canvas.width - right
+    // The turned sprig is about 0.8 of its size wide; it's left out where it would be cramped.
+    const size = Math.min(0.14 * unit, room)
+    const over = size > 0.1 * unit ? [art(0, ART.sprig, right + room / 2, last.y + last.height * 0.3, size, COLORS.plum, 20)] : []
+    return { under, over }
+  },
+}
+
+// ---- Love letter: stationery on an envelope, two photos and a handwritten note with a heart. ----
+
+function letterGeometry(canvas: Size, spacing: Spacing) {
+  const box = inner(canvas, spacing)
+  const unit = Math.min(canvas.width, canvas.height)
+  // The sheet leaves the envelope showing at the top right.
+  const sheet: Rect = { x: box.x, y: box.y + 0.05 * unit, width: box.width - 0.05 * unit, height: box.height - 0.05 * unit }
+  const pad = 0.05 * unit
+  // Photos in a column on the right 55% of the sheet; the note fills the left.
+  const column = { x: sheet.x + sheet.width * 0.45, width: sheet.width * 0.55 - pad }
+  const h = Math.min(column.width * 0.8, (sheet.height - 2 * pad - spacing.gutter) / 2)
+  const w = Math.min(column.width, h / 0.8)
+  const top = sheet.y + (sheet.height - (2 * h + spacing.gutter)) / 2
+  const photos = [0, 1].map((i): Rect => ({ x: column.x + (column.width - w), y: top + i * (h + spacing.gutter), width: w, height: h }))
+  return { box, unit, sheet, photos, note: { x: sheet.x + sheet.width * 0.23, y: sheet.y + sheet.height * 0.34, width: sheet.width * 0.36 } }
+}
+
+const loveLetter: TemplateDefinition = {
+  id: 'pair-love-letter',
+  version: 1,
+  name: 'Love letter',
+  description: 'Stationery, two photos and a handwritten note',
+  mode: 'single',
+  style: 'playful',
+  photos: { min: 2, max: 2 },
+  defaults: { margin: 70, gutter: 30, background: COLORS.blush },
+  captions: [{ id: 'note', label: 'Note', default: 'Same brunch\nDifferent adventure' }],
+  slots(canvas, spacing) {
+    return letterGeometry(canvas, spacing).photos.map((rect): Slot => ({ canvas: 0, rect, frame: { pad: 0.012 * Math.min(canvas.width, canvas.height), color: COLORS.card } }))
+  },
+  decor(canvas, spacing, text) {
+    const { box, unit, sheet, note } = letterGeometry(canvas, spacing)
+    // The envelope behind the sheet, with its flap drawn as two lines meeting in a point.
+    const envelope: Rect = { x: box.x + 0.08 * unit, y: box.y, width: box.width - 0.08 * unit, height: Math.min(box.height * 0.5, 0.5 * unit) }
+    const flap = `M${envelope.x} ${envelope.y}L${envelope.x + envelope.width / 2} ${envelope.y + envelope.height * 0.55}L${envelope.x + envelope.width} ${envelope.y}`
+    const under: Decor[] = [
+      { type: 'shape', canvas: 0, d: roundedRect(envelope, 0.01 * unit), fill: COLORS.envelope },
+      { type: 'shape', canvas: 0, d: flap, stroke: { color: COLORS.paper, width: 0.004 * unit } },
+      { type: 'shape', canvas: 0, d: roundedRect(sheet, 0.006 * unit), fill: COLORS.paper },
+    ]
+    const over: Decor[] = []
+    const words = text('note')
+    if (words) over.push({ type: 'text', canvas: 0, text: words, size: 0.06 * unit, maxWidth: note.width, maxLines: 4, align: 'middle', color: COLORS.plum, at: { x: note.x, y: note.y, rotate: -8, scale: 1 } })
+    over.push(filledArt(0, ART.heart, note.x, sheet.y + sheet.height * 0.66, 0.05 * unit, COLORS.blush))
+    over.push(art(0, ART.sprig, sheet.x + 0.09 * unit, sheet.y + sheet.height - 0.09 * unit, 0.13 * unit, COLORS.plum, -25))
+    return { under, over }
+  },
+}
+
+// ---- Colorblock: two framed photos over soft lilac and sage blocks. ----
+
+const colorblock: TemplateDefinition = {
+  id: 'pair-colorblock',
+  version: 1,
+  name: 'Colorblock',
+  description: 'Two framed photos over lilac and sage blocks',
+  mode: 'single',
+  style: 'playful',
+  photos: { min: 2, max: 2 },
+  defaults: { margin: 90, gutter: 40 },
+  slots(canvas, spacing) {
+    const { a, b } = postcardGeometry(canvas, spacing, 0.04, [0, 0])
+    const frame = { pad: a.width * CARD_PAD, color: COLORS.card }
+    return [
+      { canvas: 0, rect: a, frame },
+      { canvas: 0, rect: b, frame },
+    ]
+  },
+  decor(canvas, spacing) {
+    const { a, unit, box } = postcardGeometry(canvas, spacing, 0.04, [0, 0])
+    const [W, H] = [canvas.width, canvas.height]
+    const under: Decor[] = [
+      { type: 'shape', canvas: 0, d: polygon([[0, 0], [W * 0.66, 0], [W * 0.4, H * 0.52], [0, H * 0.7]]), fill: COLORS.lilac, opacity: 0.55 },
+      { type: 'shape', canvas: 0, d: polygon([[W, H * 0.32], [W, H], [W * 0.28, H], [W * 0.58, H * 0.58]]), fill: COLORS.sage, opacity: 0.6 },
+    ]
+    const size = Math.min(0.15 * unit, box.x + box.width - (a.x + a.width) - 0.03 * unit)
+    const over = size > 0.06 * unit ? [art(0, ART.sprig, box.x + box.width - size * 0.45, a.y + size * 0.5, size, COLORS.plum, 15)] : []
+    return { under, over }
+  },
+}
+
+// ---- Scrapbook: two tilted prints held on with strips of tape, a sprig and a small heart. ----
+
+const SCRAPBOOK_TILT = [-3, 4] as const
+
+const scrapbook: TemplateDefinition = {
+  id: 'pair-scrapbook',
+  version: 1,
+  name: 'Scrapbook',
+  description: 'Two taped prints with a sprig and a heart',
+  mode: 'single',
+  style: 'playful',
+  photos: { min: 2, max: 2 },
+  defaults: { margin: 90, gutter: 70 },
+  slots(canvas, spacing) {
+    const { a, b } = postcardGeometry(canvas, spacing, 0.08, SCRAPBOOK_TILT)
+    const frame = { pad: a.width * CARD_PAD, color: COLORS.card }
+    return [
+      { canvas: 0, rect: a, rotation: SCRAPBOOK_TILT[0], frame },
+      { canvas: 0, rect: b, rotation: SCRAPBOOK_TILT[1], frame },
+    ]
+  },
+  decor(canvas, spacing) {
+    const { a, b, unit, box } = postcardGeometry(canvas, spacing, 0.08, SCRAPBOOK_TILT)
+    const pad = a.width * CARD_PAD
+    // A strip of tape across the middle of each card's top edge, turned with the card plus a little more.
+    const tape = (photo: Rect, tilt: number, color: string, extra: number): Decor => {
+      const t = (tilt * Math.PI) / 180
+      const reach = photo.height / 2 + pad
+      const length = photo.width * 0.3
+      const depth = photo.width * 0.075
+      return {
+        type: 'shape',
+        canvas: 0,
+        d: `M${-length / 2} ${-depth / 2}H${length / 2}V${depth / 2}H${-length / 2}Z`,
+        fill: color,
+        opacity: 0.85,
+        at: { x: photo.x + photo.width / 2 + reach * Math.sin(t), y: photo.y + photo.height / 2 - reach * Math.cos(t), rotate: tilt + extra, scale: 1 },
+      }
+    }
+    const over: Decor[] = [tape(a, SCRAPBOOK_TILT[0], COLORS.blush, -6), tape(b, SCRAPBOOK_TILT[1], COLORS.sage, 5)]
+    over.push(filledArt(0, ART.heart, box.x + box.width - 0.05 * unit, box.y + 0.05 * unit, 0.045 * unit, COLORS.blush))
+    over.push(art(0, ART.sprig, box.x + 0.07 * unit, box.y + box.height - 0.09 * unit, 0.15 * unit, COLORS.plum, -10))
+    return { under: [], over }
+  },
+}
+
+// ---- Then + now: two photos side by side, each with a short handwritten label, a heart between them. ----
+
+function thenNowGeometry(canvas: Size, spacing: Spacing) {
+  const box = inner(canvas, spacing)
+  const unit = Math.min(canvas.width, canvas.height)
+  const band = 0.15 * unit // the labels' row
+  // Portrait photos (2 : 3 at most) side by side above the labels, the whole group centred.
+  const w = Math.min((box.width - spacing.gutter) / 2, (box.height - band) / 1.2)
+  const h = Math.min(box.height - band, w * 1.5)
+  const left = box.x + (box.width - (2 * w + spacing.gutter)) / 2
+  const top = box.y + (box.height - (h + band)) / 2
+  const photos = [0, 1].map((i): Rect => ({ x: left + i * (w + spacing.gutter), y: top, width: w, height: h }))
+  return { unit, photos, labels: top + h + band * 0.62 }
+}
+
+const thenAndNow: TemplateDefinition = {
+  id: 'pair-then-now',
+  version: 1,
+  name: 'Then + now',
+  description: 'Two photos side by side with their own labels',
+  mode: 'single',
+  style: 'playful',
+  photos: { min: 2, max: 2 },
+  defaults: { margin: 80, gutter: 30 },
+  captions: [
+    { id: 'then', label: 'First label', default: 'then' },
+    { id: 'now', label: 'Second label', default: 'now' },
+  ],
+  slots(canvas, spacing) {
+    return thenNowGeometry(canvas, spacing).photos.map((rect): Slot => ({ canvas: 0, rect }))
+  },
+  decor(canvas, spacing, text) {
+    const { unit, photos, labels } = thenNowGeometry(canvas, spacing)
+    const over: Decor[] = []
+    for (const [i, id] of (['then', 'now'] as const).entries()) {
+      const words = text(id)
+      const photo = photos[i]!
+      if (words) over.push({ type: 'text', canvas: 0, text: words, size: 0.07 * unit, maxWidth: photo.width * 0.8, maxLines: 1, align: 'middle', color: COLORS.plum, at: { x: photo.x + photo.width / 2, y: labels, rotate: 0, scale: 1 } })
+    }
+    // A small heart between the labels, with a short line either side.
+    const mid = (photos[0]!.x + photos[0]!.width + photos[1]!.x) / 2
+    const y = labels - 0.02 * unit
+    const line = (from: number, to: number): Decor => ({ type: 'shape', canvas: 0, d: `M${from} ${y}H${to}`, stroke: { color: COLORS.plum, width: 0.0025 * unit } })
+    over.push(filledArt(0, ART.heart, mid, y, 0.04 * unit, COLORS.plum), line(mid - 0.09 * unit, mid - 0.035 * unit), line(mid + 0.035 * unit, mid + 0.09 * unit))
+    return { under: [], over }
+  },
+}
+
+// ---- Gallery ticket: two photos inside a notched ticket, with a title above and a note below. ----
+
+function ticketGeometry(canvas: Size, spacing: Spacing) {
+  const box = inner(canvas, spacing)
+  const unit = Math.min(canvas.width, canvas.height)
+  const pad = 0.06 * unit
+  const head = 0.13 * unit // the title's row
+  const foot = 0.12 * unit // the note's row
+  // Portrait photos side by side between the title and the note; the ticket is cut to fit around them.
+  const room = { width: box.width - 2 * pad, height: box.height - head - foot }
+  const w = Math.min((room.width - spacing.gutter) / 2, room.height / 1.3)
+  const h = Math.min(room.height, w * 1.4)
+  const ticketWidth = 2 * w + spacing.gutter + 2 * pad
+  const ticketHeight = h + head + foot
+  const outline: Rect = { x: box.x + (box.width - ticketWidth) / 2, y: box.y + (box.height - ticketHeight) / 2, width: ticketWidth, height: ticketHeight }
+  const photos = [0, 1].map((i): Rect => ({ x: outline.x + pad + i * (w + spacing.gutter), y: outline.y + head, width: w, height: h }))
+  return { unit, outline, photos, title: outline.y + head * 0.62, note: outline.y + head + h + foot * 0.6 }
+}
+
+const galleryTicket: TemplateDefinition = {
+  id: 'pair-gallery-ticket',
+  version: 1,
+  name: 'Gallery ticket',
+  description: 'Two photos inside a ticket, with a title and a note',
+  mode: 'single',
+  style: 'playful',
+  photos: { min: 2, max: 2 },
+  defaults: { margin: 70, gutter: 30, background: COLORS.sage },
+  captions: [
+    { id: 'title', label: 'Title', default: 'A day to keep' },
+    { id: 'note', label: 'Note', default: 'Good company, brighter places' },
+  ],
+  slots(canvas, spacing) {
+    return ticketGeometry(canvas, spacing).photos.map((rect): Slot => ({ canvas: 0, rect }))
+  },
+  decor(canvas, spacing, text) {
+    const { unit, outline, photos, title, note } = ticketGeometry(canvas, spacing)
+    const notch = 0.05 * unit
+    const under: Decor[] = [
+      { type: 'shape', canvas: 0, d: ticket(outline, notch), fill: COLORS.paper },
+      { type: 'shape', canvas: 0, d: ticket(grow(outline, -0.02 * unit), notch), stroke: { color: COLORS.plum, width: 0.0025 * unit } },
+    ]
+    const centre = outline.x + outline.width / 2
+    const width = photos[1]!.x + photos[1]!.width - photos[0]!.x
+    const over: Decor[] = []
+    const heading = text('title')
+    if (heading) over.push({ type: 'text', canvas: 0, text: heading, size: 0.06 * unit, maxWidth: width, maxLines: 1, align: 'middle', color: COLORS.plum, at: { x: centre, y: title, rotate: 0, scale: 1 } })
+    const words = text('note')
+    if (words) over.push({ type: 'text', canvas: 0, text: words, size: 0.045 * unit, maxWidth: width, maxLines: 1, align: 'middle', color: COLORS.plum, at: { x: centre, y: note, rotate: 0, scale: 1 } })
+    return { under, over }
+  },
+}
+
+// In the order of the concept board.
+export const PLAYFUL_TEMPLATES: readonly TemplateDefinition[] = [
+  postcards,
+  filmNight,
+  tornPages,
+  windowLight,
+  loveLetter,
+  colorblock,
+  scrapbook,
+  thenAndNow,
+  circleStory,
+  galleryTicket,
+]

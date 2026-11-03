@@ -136,7 +136,8 @@
 }
 
 .library__field input,
-.library__field select {
+.library__field select,
+.library__field textarea {
   min-height: var(--nm-target-min);
   padding: 0 var(--nm-space-1);
   border: 1px solid var(--nm-text-muted);
@@ -145,6 +146,12 @@
   color: var(--nm-text);
   font: inherit;
   font-weight: 400;
+}
+
+/* Multi-line fields (Studio captions) keep the same look, with room above and below the text. */
+.library__field textarea {
+  padding: var(--nm-space-1);
+  resize: vertical;
 }
 
 .library__field--search input {

@@ -21,22 +21,77 @@ function font(): opentype.Font {
 }
 
 export interface Outline {
-  /** SVG path data, with the text's baseline at y = 0 and its anchor (start, middle or end) at x = 0. */
+  /** SVG path data. The first line's baseline is at y = 0, each line anchored (start, middle or end) at x = 0. */
   d: string
-  /** The size actually used: smaller than asked when the text would be wider than its space. */
+  /** The size actually used: smaller than asked when the text needed it to fit. */
   size: number
+  /** The lines as drawn, after wrapping (and an ellipsis if the text ran past its last line). */
+  lines: string[]
 }
 
-/** The outline of one line of text at a size, shrunk to fit `maxWidth`, anchored as asked. */
-export function textOutline(words: string, size: number, maxWidth: number, align: Align): Outline {
+/** Space between baselines, as a multiple of the font size. */
+export const LINE_HEIGHT = 1.2
+// Text never shrinks below this share of the size asked for; past that it wraps, then ends with an ellipsis.
+const SMALLEST = 0.6
+
+// Breaks text into lines no wider than `maxWidth` at `size`: at the person's own line breaks, then between words.
+// A single word wider than the line is split between letters.
+function wrap(f: opentype.Font, text: string, size: number, maxWidth: number): string[] {
+  const lines: string[] = []
+  for (const paragraph of text.split('\n')) {
+    let line = ''
+    for (const word of paragraph.split(/ +/)) {
+      const candidate = line ? `${line} ${word}` : word
+      if (f.getAdvanceWidth(candidate, size) <= maxWidth) {
+        line = candidate
+        continue
+      }
+      if (line) lines.push(line)
+      line = ''
+      // A word too long for any line is cut between letters.
+      for (const letter of word) {
+        if (line && f.getAdvanceWidth(line + letter, size) > maxWidth) {
+          lines.push(line)
+          line = ''
+        }
+        line += letter
+      }
+    }
+    lines.push(line)
+  }
+  return lines
+}
+
+/**
+ * The outline of a caption: wrapped to `maxWidth` across at most `maxLines` lines, each line anchored as asked.
+ * If it doesn't fit, it first gets smaller (down to 60% of `size`), then the last line ends with an ellipsis.
+ * Both the preview and the export draw this one result, so every line breaks in the same place in both.
+ */
+export function textOutline(words: string, size: number, maxWidth: number, align: Align, maxLines = 1): Outline {
   const f = font()
   // Characters the font can't draw are left out rather than shown as empty boxes (the editor names them).
-  const text = [...words].filter((c) => c.trim() === '' || f.charToGlyphIndex(c) !== 0).join('')
-  const natural = f.getAdvanceWidth(text, size)
-  const fitted = natural > maxWidth ? (size * maxWidth) / natural : size
-  const width = f.getAdvanceWidth(text, fitted)
-  const x = align === 'start' ? 0 : align === 'middle' ? -width / 2 : -width
-  return { d: f.getPath(text, x, 0, fitted).toPathData(2), size: fitted }
+  const text = [...words.replace(/\r/g, '')].filter((c) => c === '\n' || c.trim() === '' || f.charToGlyphIndex(c) !== 0).join('').trim()
+  let fitted = size
+  let lines = wrap(f, text, fitted, maxWidth)
+  while (lines.length > maxLines && fitted > size * SMALLEST) {
+    fitted = Math.max(size * SMALLEST, fitted * 0.92)
+    lines = wrap(f, text, fitted, maxWidth)
+  }
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines)
+    let last = kept[maxLines - 1]!
+    while (last && f.getAdvanceWidth(`${last}…`, fitted) > maxWidth) last = last.slice(0, -1)
+    kept[maxLines - 1] = `${last.trimEnd()}…`
+    lines = kept
+  }
+  const d = lines
+    .map((line, i) => {
+      const width = f.getAdvanceWidth(line, fitted)
+      const x = align === 'start' ? 0 : align === 'middle' ? -width / 2 : -width
+      return f.getPath(line, x, i * fitted * LINE_HEIGHT, fitted).toPathData(2)
+    })
+    .join('')
+  return { d, size: fitted, lines }
 }
 
 /** Characters the caption font can't draw (they would show as empty boxes), so the editor can say so. */

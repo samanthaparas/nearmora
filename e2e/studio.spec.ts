@@ -330,7 +330,7 @@ test('playful pairs: picked from their own group, with an editable caption that 
   let page = await app.firstWindow()
   await nav(page, 'Favorites')
   const playful = page.getByRole('region', { name: 'Playful pairs' })
-  await expect(playful.getByRole('button')).toHaveCount(4)
+  await expect(playful.getByRole('button')).toHaveCount(10)
   const pick = page.getByRole('button', { name: /^Select: / })
   await pick.nth(0).click()
   await pick.nth(1).click()
@@ -361,5 +361,70 @@ test('playful pairs: picked from their own group, with an editable caption that 
   await expect(page.getByText('Layout changed to Circle story. All changes saved.')).toBeVisible()
   await expect(page.getByRole('img', { name: /^Preview: circle story, square, cream background$/ })).toBeVisible()
   await expect(page.getByLabel('Caption', { exact: true })).toHaveCount(0)
+  await app.close()
+})
+
+test('captions wrap and keep the line breaks typed, the same after a restart', async () => {
+  let { app } = await launchApp(profile)
+  let page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  await pick.nth(2).click()
+  await pick.nth(3).click()
+  await page.getByRole('region', { name: 'Playful pairs' }).getByRole('button', { name: /^Love letter/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Love letter' })).toBeVisible()
+  // The default note has a line break; the preview's description reads it as a pause.
+  const note = page.getByLabel('Note', { exact: true })
+  await expect(note).toHaveValue('Same brunch\nDifferent adventure')
+  await expect(page.getByRole('img', { name: /caption “Same brunch, Different adventure”$/ })).toBeVisible()
+  // Return adds a line break in the text box (it doesn't submit anything).
+  await note.fill('')
+  await note.pressSequentially('Lisbon')
+  await note.press('Enter')
+  await note.pressSequentially('the long way home')
+  await expect(page.getByText('Note changed. All changes saved.')).toBeVisible()
+  await expect(page.getByRole('img', { name: /caption “Lisbon, the long way home”$/ })).toBeVisible()
+  await app.close()
+
+  ;({ app } = await launchApp(profile))
+  page = await app.firstWindow()
+  await nav(page, 'Memory Studio')
+  await page.getByRole('button', { name: /Love letter/ }).first().click()
+  await expect(page.getByLabel('Note', { exact: true })).toHaveValue('Lisbon\nthe long way home')
+  await app.close()
+})
+
+test('picker filters: by photo count, by style and by what fits the selection; the chosen size is the new project’s', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  await nav(page, 'Favorites')
+  const groups = page.locator('.studio__templates').getByRole('region')
+  await expect(groups).toHaveCount(4)
+
+  // Style: playful shows only the playful pairs.
+  await page.getByRole('group', { name: 'Style' }).getByLabel('Playful').check()
+  await expect(groups).toHaveCount(1)
+  await expect(page.getByRole('region', { name: 'Playful pairs' })).toBeVisible()
+  // Playful and four photos: nothing yet, and it says so.
+  await page.getByRole('group', { name: 'Show' }).getByLabel('Four photos').check()
+  await expect(groups).toHaveCount(0)
+  await expect(page.getByText('No layouts match these filters.')).toBeVisible()
+
+  // Everyday layouts that fit a selection of two photos: the two-photo layouts and the carousel, all enabled.
+  await page.getByRole('group', { name: 'Style' }).getByLabel('Any style').check()
+  await page.getByRole('group', { name: 'Show' }).getByLabel('Fit my selection').check()
+  await expect(page.getByText('No layouts match these filters and your selection.')).toBeVisible() // nothing selected yet
+  const pick = page.getByRole('button', { name: /^Select: / })
+  await pick.nth(0).click()
+  await pick.nth(1).click()
+  await expect(page.getByRole('region', { name: 'Four photos' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Two photos' }).getByRole('button')).toHaveCount(8)
+  await expect(page.locator('.studio__templates').getByRole('button', { disabled: true })).toHaveCount(0)
+
+  // The size chosen here is the size the new project starts at.
+  await page.getByLabel('Size for the new project').selectOption('portrait')
+  await page.getByRole('region', { name: 'Two photos' }).getByRole('button', { name: /^Stacked/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Stacked' })).toBeVisible()
+  await expect(page.getByLabel('Portrait (1080 × 1350)')).toBeChecked()
   await app.close()
 })

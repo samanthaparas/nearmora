@@ -119,7 +119,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           : `Preview: ${template.name.toLowerCase()}, ${FORMATS[design.format].label.toLowerCase()}, ${colourName(resolved.background)} background${
               resolved.borderWidth > 0 ? `, ${colourName(resolved.borderColor)} border` : ''
             }${(template.captions ?? [])
-              .map((c) => captionText(template, design.params)(c.id).trim())
+              // Line breaks are read as pauses: "Same brunch, Different adventure".
+              .map((c) => captionText(template, design.params)(c.id).trim().replace(/\s*\n\s*/g, ', '))
               .filter(Boolean)
               .map((words) => `, caption “${words}”`)
               .join('')}`
@@ -250,7 +251,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
                       if (t.id !== design.templateId) change({ ...design, templateId: t.id, templateVersion: t.version }, `Layout changed to ${t.name}`)
                     }}
                   >
-                    <TemplateIcon template={t} />
+                    <TemplateIcon template={t} format={design.format} />
                     <span>{t.name}</span>
                   </button>
                 </li>
@@ -258,15 +259,20 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             </ul>
           </section>
 
-          {/* Playful layouts' captions: typed text shows at once and is saved (as one undo step) when typing pauses. */}
+          {/* Playful layouts' captions: typed text shows at once and is saved (as one undo step) when typing pauses.
+              Line breaks are kept; the drawing wraps long lines the same way in the preview and the export. */}
           {template.captions?.map((caption) => {
             const words = captionText(template, design.params)(caption.id)
             const missing = missingCharacters(words)
             return (
-              <label key={caption.id} className="library__field">
-                <span>{caption.label}</span>
-                <input
+              // The label points at the text box by id: wrapped around a textarea, the label would also take in its text.
+              <div key={caption.id} className="library__field">
+                <label htmlFor={`caption-${caption.id}`}>{caption.label}</label>
+                {/* A text box, so Return adds a line break; the layout wraps longer lines and limits how many show. */}
+                <textarea
+                  id={`caption-${caption.id}`}
                   value={words}
+                  rows={2}
                   maxLength={MAX_CAPTION}
                   aria-describedby={missing.length > 0 ? `missing-${caption.id}` : undefined}
                   onChange={(e) => live(setParams({ text: { ...design.params.text, [caption.id]: e.target.value } }), `${caption.label} changed`)}
@@ -276,7 +282,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
                     The caption font can’t draw {missing.join(' ')}, so {missing.length === 1 ? 'it is' : 'they are'} left out.
                   </span>
                 ) : null}
-              </label>
+              </div>
             )
           })}
 

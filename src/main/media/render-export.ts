@@ -79,7 +79,8 @@ async function canvasSvg(request: RenderRequest): Promise<string> {
       const paint = `fill="${attr(layer.fill ?? 'none')}"${layer.fillRule ? ` fill-rule="${layer.fillRule}"` : ''}`
       const stroke = layer.stroke ? ` stroke="${attr(layer.stroke.color)}" stroke-width="${layer.stroke.width}" stroke-linecap="round" stroke-linejoin="round"` : ''
       const at = layer.at ? ` transform="${attr(svgTransform(layer.at))}"` : ''
-      parts.push(`<path d="${attr(layer.d)}" ${paint}${stroke}${at}/>`)
+      const opacity = layer.opacity !== undefined ? ` opacity="${layer.opacity}"` : ''
+      parts.push(`<path d="${attr(layer.d)}" ${paint}${stroke}${opacity}${at}/>`)
       continue
     }
     const metadata = await open(layer.sourcePath).metadata()
