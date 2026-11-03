@@ -35,7 +35,7 @@ export function quad(room: Rect, gap: number, aspect: number, below = 0): Rect[]
 }
 
 /** Something decorations must stay clear of: a photo's footprint (round for circle photos), or a caption's box. */
-interface KeepOut {
+export interface KeepOut {
   rect: Rect
   round?: boolean
 }
@@ -47,7 +47,7 @@ function footprint(slot: Slot): Rect {
   return { x: card.x - o.x, y: card.y - o.y, width: card.width + 2 * o.x, height: card.height + 2 * o.y }
 }
 
-const keepOutOf = (slots: readonly Slot[]): KeepOut[] => slots.map((slot) => ({ rect: footprint(slot), round: slot.mask === circle(slot.rect) }))
+export const keepOutOf = (slots: readonly Slot[]): KeepOut[] => slots.map((slot) => ({ rect: footprint(slot), round: slot.mask === circle(slot.rect) }))
 
 function clearOf(box: Rect, keepOut: readonly KeepOut[], gap: number): boolean {
   return keepOut.every(({ rect, round }) => {
@@ -68,7 +68,7 @@ function clearOf(box: Rect, keepOut: readonly KeepOut[], gap: number): boolean {
  * (as fractions of the canvas) at the largest size first, shrinking down to `min`. Art that can't fit is left out,
  * so decorations never cover a photo at any size. A placed piece is added to `keepOut` so the next one avoids it.
  */
-function placeArt(canvas: Size, keepOut: KeepOut[], spots: ReadonlyArray<readonly [number, number]>, max: number, min: number, rotate: number) {
+export function placeArt(canvas: Size, keepOut: KeepOut[], spots: ReadonlyArray<readonly [number, number]>, max: number, min: number, rotate: number) {
   const t = (rotate * Math.PI) / 180
   const turn = Math.abs(Math.cos(t)) + Math.abs(Math.sin(t)) // art is drawn in a square box; this is its turned extent
   const gap = 0.01 * unitOf(canvas)
@@ -90,7 +90,7 @@ function placeArt(canvas: Size, keepOut: KeepOut[], spots: ReadonlyArray<readonl
 }
 
 // Spots to try for art, in order: the four corners, then the middle of each side.
-const CORNERS = [[1, 0], [0, 1], [1, 1], [0, 0], [0.5, 0], [0.5, 1], [0, 0.5], [1, 0.5]] as const
+export const CORNERS = [[1, 0], [0, 1], [1, 1], [0, 0], [0.5, 0], [0.5, 1], [0, 0.5], [1, 0.5]] as const
 
 // The box a caption can take: up to `maxLines` lines below its first baseline, `maxWidth` wide around its anchor.
 function captionBox(x: number, y: number, size: number, maxWidth: number, maxLines: number, align: 'start' | 'middle'): Rect {

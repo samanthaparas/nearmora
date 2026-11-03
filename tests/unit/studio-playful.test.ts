@@ -320,6 +320,26 @@ describe('playful quartets: decorations never cover a photo', () => {
   })
 })
 
+describe('playful seamless carousels: decorations never cover a photo (S5b)', () => {
+  // The same check as the quartets, on the whole wide design, at both slide shapes and three spacings.
+  it.each(['square', 'portrait'] as const)('%s', (format) => {
+    for (const params of [{ v: 1 as const }, { v: 1 as const, margin: 0, gutter: 0 }, { v: 1 as const, margin: 200, gutter: 120 }]) {
+      const composition = compose({ templateId: 'seamless-scattered-postcards', templateVersion: 1, format, params, photoCount: 5 })
+      for (const e of composition.elements) {
+        const p = footprint(e)
+        expect([p.x >= -1e-9, p.y >= -1e-9, p.x + p.width <= composition.width + 1e-9, p.y + p.height <= composition.height + 1e-9]).toEqual([true, true, true, true])
+      }
+      for (const decor of composition.over) {
+        const box = placedBounds(decor)
+        for (const e of composition.elements) {
+          const p = footprint(e)
+          expect(box.right <= p.x || p.x + p.width <= box.left || box.bottom <= p.y || p.y + p.height <= box.top, `${format} ${JSON.stringify(params)}`).toBe(true)
+        }
+      }
+    }
+  })
+})
+
 describe('each playful quartet keeps its character at every size', () => {
   it.each(FORMAT_IDS)('%s', (format) => {
     // Postcard stack: four cards tilted alternately, and a postmark when there's room for it.

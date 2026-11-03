@@ -97,7 +97,9 @@ describe('rendering an export file', () => {
       const whole = join(dir, `whole-${width}.png`)
       const slices = Array.from({ length: count }, (_, i) => join(dir, `slice-${width}-${i}.png`))
       expect(await renderCanvas({ ...request, outputPaths: [whole] })).toEqual({ ok: true })
-      expect(await renderCanvas({ ...request, outputPaths: slices })).toEqual({ ok: true })
+      // The slices, and (as a seamless export can ask for) the whole design from the same pixels in the same pass.
+      const alsoWhole = join(dir, `also-whole-${width}.png`)
+      expect(await renderCanvas({ ...request, outputPaths: slices, wholePath: alsoWhole })).toEqual({ ok: true })
 
       const pieces = await Promise.all(slices.map((f) => sharp(f).raw().toBuffer({ resolveWithObject: true })))
       expect(pieces.map((p) => p.info.width)).toEqual(sliceWidths(width, count))
@@ -107,6 +109,7 @@ describe('rendering an export file', () => {
       )
       const original = await sharp(whole).raw().toBuffer()
       expect(joined.equals(original), `${width} px into ${count}`).toBe(true)
+      expect((await sharp(alsoWhole).raw().toBuffer()).equals(original)).toBe(true)
     }
   }, 60_000)
 
@@ -456,6 +459,22 @@ describe('exporting a project', () => {
         expect([meta.width, meta.height, meta.chromaSubsampling, meta.exif]).toEqual([1080, FORMATS[format].height, '4:4:4', undefined])
       }
     }
+  }, 60_000)
+
+  it('can also save the whole seamless design as one wide file, named to sort after the slides (S5b)', async () => {
+    const { db, profile, project } = await exportable('seamless')
+    const prepared = await prepareExport(db, { projectId: project.id, destinationDir: tempDir(), appDataDir: profile.dir, wholeDesign: true })
+    if (prepared.status !== 'ready') throw new Error(JSON.stringify(prepared))
+    const outcome = await runExport({ db, render }, prepared.plan)
+    if (outcome.status !== 'done') throw new Error(JSON.stringify(outcome))
+    expect(outcome.files).toEqual(['Across the seam 01.jpg', 'Across the seam 02.jpg', 'Across the seam whole design.jpg'])
+    expect([...outcome.files].sort()).toEqual(outcome.files)
+    const widths = await Promise.all(outcome.files.map(async (f) => (await sharp(join(outcome.folder, f)).metadata()).width))
+    expect(widths).toEqual([1080, 1080, 2160])
+    // A collage or standard carousel has no whole design to add: the option changes nothing for them.
+    const { db: db2, profile: profile2, project: collage } = await exportable('collage')
+    const plain = await prepareExport(db2, { projectId: collage.id, destinationDir: tempDir(), appDataDir: profile2.dir, wholeDesign: true })
+    expect(plain.status === 'ready' && plain.plan.outputs.flatMap((o) => o.files.map((f) => f.fileName))).toEqual(['Equal split.jpg'])
   }, 60_000)
 
   it('numbers carousel files with two digits, so ten slides sort in posting order', async () => {

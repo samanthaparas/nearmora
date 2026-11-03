@@ -46,6 +46,8 @@ export interface TemplateDefinition {
   mode: Mode
   /** Seamless layouts: how many slides the design is cut into. */
   slides?: number
+  /** Carousels whose margin setting is a mat around each slide's photo (Carousel version 2 on). */
+  mat?: true
   /** The sizes this layout can be made at; all of them when absent (seamless carousels use sharing shapes only). */
   formats?: readonly FormatId[]
   photos: { min: number; max: number }
@@ -365,6 +367,23 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
     defaults: { margin: 0, gutter: 0 },
     slots: (canvas, _spacing, photoCount) =>
       Array.from({ length: photoCount }, (_, index) => ({ canvas: index, rect: { x: 0, y: 0, width: canvas.width, height: canvas.height } })),
+  },
+  // Version 2 (S5b) adds a mat: the margin setting becomes a border of background around each slide's photo, so a
+  // photo shown whole ("fit") sits on a mat instead of being cropped. With no mat it draws exactly like version 1.
+  {
+    id: 'carousel-full',
+    version: 2,
+    name: 'Carousel',
+    description: 'One photo per slide, with an optional mat',
+    mode: 'carousel',
+    mat: true,
+    photos: { min: 2, max: 10 },
+    defaults: { margin: 0, gutter: 0 },
+    slots: (canvas, spacing, photoCount) =>
+      Array.from({ length: photoCount }, (_, index) => ({
+        canvas: index,
+        rect: { x: spacing.margin, y: spacing.margin, width: canvas.width - 2 * spacing.margin, height: canvas.height - 2 * spacing.margin },
+      })),
   },
   ...PLAYFUL_TEMPLATES,
   ...PLAYFUL_QUARTETS,

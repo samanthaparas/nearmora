@@ -21,8 +21,12 @@ export function createExportService(deps: {
 
   return {
     /** Checks first; if all is well, starts the export in the background and returns its job id. */
-    async start(projectId: string, destinationDir: string): Promise<{ status: 'started'; jobId: string; fileCount: number } | ExportRefusal> {
-      const prepared = await prepareExport(deps.db, { projectId, destinationDir, appDataDir: deps.appDataDir })
+    async start(
+      projectId: string,
+      destinationDir: string,
+      options: { wholeDesign?: boolean } = {},
+    ): Promise<{ status: 'started'; jobId: string; fileCount: number } | ExportRefusal> {
+      const prepared = await prepareExport(deps.db, { projectId, destinationDir, appDataDir: deps.appDataDir, wholeDesign: options.wholeDesign ?? false })
       if (prepared.status === 'refused') return prepared
       const { plan } = prepared
       const controller = new AbortController()

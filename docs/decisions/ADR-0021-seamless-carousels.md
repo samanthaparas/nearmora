@@ -1,6 +1,6 @@
 # ADR-0021: Seamless carousels are one design, cut by the remainder rule
 
-Date: 2026-11-03 · Status: accepted (Studio expansion, phase S5a)
+Date: 2026-11-03 · Status: accepted (Studio expansion, phases S5a and S5b)
 
 ## Context
 
@@ -45,4 +45,24 @@ Nearmora already had standard carousels (one photo per slide) and collages. S5a 
   - The catalogue refusing other sizes.
   - An end-to-end run: picker, guides, note, size choice and a two-file export.
 - **Control runs** broke each rule in turn (overlapping slices, rounding each slice, no edge note, no size check, unpadded numbers); a test failed every time.
-- **Still to come in S5b:** the swipe preview, a mat for standard carousels, two playful seamless layouts, and the optional whole-design file.
+
+## S5b additions
+
+- **A swipe preview for every carousel.**
+  - Slides side by side, with a gap like the apps show, then one at a time with Previous and Next or the arrow keys.
+  - A seamless slide is the whole design drawn once and shifted, so the preview is cut exactly where the export cuts.
+  - The slide transition is skipped when "Reduce motion" is on.
+  - The help text says plainly that apps add their own gap and compress photos, and that nothing is posted from here.
+- **A mat for standard carousels, as Carousel version 2.** The margin setting becomes a border of background around each slide's photo, so a photo shown whole sits on a mat instead of being cropped.
+  - Layouts never change once shipped, so version 1 is kept: projects made with it look exactly as before, even with a margin left over from another layout.
+  - The editor offers "Use the newer Carousel" instead of upgrading silently.
+- **Two playful seamless layouts,** using S4c's art-placement rule:
+  - Film roll: one strip of film across three slides, five frames;
+  - Scattered postcards: five tilted cards high and low, with a postmark and a sprig.
+- **"Also save the whole design as one wide file"** in Export, off by default. It's cut from the same pixels as the slides in the same pass, and named "Title whole design.jpg" so it sorts after them. Collages and standard carousels don't offer it.
+- **Tests and control runs:**
+  - The mat: version 2 without a mat equals version 1.
+  - The whole-design file: it matches the slides byte for byte as PNG, and is the right width.
+  - Decorations never covering a photo, at three spacings.
+  - An end-to-end run of the swipe preview, the mat and a four-file export.
+  - Breaking the mat, the whole-design file, the export option or the arrow keys each made a test fail.

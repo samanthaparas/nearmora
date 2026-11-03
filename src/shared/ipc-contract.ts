@@ -318,7 +318,8 @@ export const commands = {
   'projects:delete': { input: z.object({ projectId: id }), output: z.object({ deleted: z.literal(true) }) },
   // Export (AC7, AC8). Main opens the destination picker; nothing is written until every check passes.
   'export:start': {
-    input: z.object({ projectId: id }),
+    // `wholeDesign`: a seamless carousel also saves its whole design as one wide file, next to the slides.
+    input: z.object({ projectId: id, wholeDesign: z.boolean().optional() }),
     output: z.discriminatedUnion('status', [
       z.object({ status: z.literal('started'), jobId: id, fileCount: count }),
       z.object({ status: z.literal('cancelled') }),

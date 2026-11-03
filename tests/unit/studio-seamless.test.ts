@@ -47,9 +47,11 @@ const make = (templateId: string, format: FormatId, params: Parameters<typeof co
 
 describe('seamless layouts', () => {
   it('are one wide design, as wide as all their slides, made at sharing shapes only', () => {
-    expect(seamless.map((t) => [t.name, t.slides, t.photos.min])).toEqual([
-      ['Across the seam', 2, 3],
-      ['Story strip', 3, 5],
+    expect(seamless.map((t) => [t.name, t.slides, t.photos.min, t.style ?? 'everyday'])).toEqual([
+      ['Across the seam', 2, 3, 'everyday'],
+      ['Story strip', 3, 5, 'everyday'],
+      ['Film roll', 3, 5, 'playful'],
+      ['Scattered postcards', 3, 5, 'playful'],
     ])
     for (const template of seamless) {
       expect(formatsFor(template)).toEqual(['square', 'portrait'])
@@ -70,11 +72,34 @@ describe('seamless layouts', () => {
       expect(middle.x + middle.width / 2).toBeCloseTo(across.width / 2, 6)
       expect(seamNotes(across)).toEqual([{ slot: 1, kind: 'crosses', cut: 1 }])
 
-      const strip = make('seamless-story-strip', format)
-      expect(seamNotes(strip)).toEqual([
-        { slot: 1, kind: 'crosses', cut: 1 },
-        { slot: 3, kind: 'crosses', cut: 2 },
-      ])
+      // Story strip, and the playful Film roll and Scattered postcards: the second and fourth photos run over the cuts.
+      for (const id of ['seamless-story-strip', 'seamless-film-roll', 'seamless-scattered-postcards']) {
+        expect(seamNotes(make(id, format)), `${id} at ${format}`).toEqual([
+          { slot: 1, kind: 'crosses', cut: 1 },
+          { slot: 3, kind: 'crosses', cut: 2 },
+        ])
+      }
+    }
+  })
+
+  it('Film roll keeps every frame on its strip of film; Scattered postcards tilts its cards high and low', () => {
+    for (const format of ['square', 'portrait'] as const) {
+      const roll = make('seamless-film-roll', format)
+      const strip = roll.under[0]!
+      expect(strip.type === 'shape' && strip.fillRule).toBe('evenodd')
+      const numbers = (strip as { d: string }).d.match(/-?\d*\.?\d+/g)!.map(Number)
+      const [xs, ys] = [numbers.filter((_, i) => i % 2 === 0), numbers.filter((_, i) => i % 2 === 1)]
+      for (const e of roll.elements) {
+        expect(e.rect.x).toBeGreaterThan(Math.min(...xs))
+        expect(e.rect.x + e.rect.width).toBeLessThan(Math.max(...xs))
+        expect(e.rect.y).toBeGreaterThan(Math.min(...ys))
+      }
+
+      const cards = make('seamless-scattered-postcards', format)
+      expect(cards.elements.map((e) => Math.sign(e.rotation))).toEqual([-1, 1, -1, 1, -1])
+      expect(cards.elements.every((e) => e.frame?.color === '#ffffff')).toBe(true)
+      const [first, second] = cards.elements
+      expect(first!.rect.y).toBeLessThan(second!.rect.y) // high, then low
     }
   })
 
@@ -92,6 +117,20 @@ describe('seamless layouts', () => {
         }
       }
     }
+  })
+})
+
+describe('Carousel version 2: a mat around each slide (S5b)', () => {
+  const carousel = (version: number, params: Parameters<typeof compose>[0]['params']) =>
+    compose({ templateId: 'carousel-full', templateVersion: version, format: 'portrait', params, photoCount: 3 })
+
+  it('draws exactly like version 1 without a mat, and insets every slide’s photo by the mat when there is one', () => {
+    expect(carousel(2, { v: 1 })).toEqual(carousel(1, { v: 1 }))
+    const matted = carousel(2, { v: 1, margin: 100 })
+    expect(matted.elements.map((e) => e.rect)).toEqual(Array.from({ length: 3 }, () => ({ x: 100, y: 100, width: 880, height: 1150 })))
+    // Projects made with version 1 keep their look, even with a margin left over from another layout.
+    expect(carousel(1, { v: 1, margin: 100 }).elements[0]!.rect).toEqual({ x: 0, y: 0, width: 1080, height: 1350 })
+    expect(latestTemplates().find((t) => t.id === 'carousel-full')?.version).toBe(2)
   })
 })
 

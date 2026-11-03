@@ -1,6 +1,7 @@
 /**
  * The Export section of a project (AC7, AC8): what will be made (format, size, number of files), a reminder that
- * exporting creates new files and publishes nothing, progress with Cancel, and the result with "Show in Finder".
+ * exporting creates new files and publishes nothing, progress with Cancel, and the result with "Show in Finder". A
+ * seamless carousel can also save its whole design as one wide file.
  * The destination is chosen in the macOS dialog that main opens; this screen never sees a path.
  */
 
@@ -29,8 +30,10 @@ const REFUSALS = {
   unwritable: () => 'Nearmora can’t write to that folder. Choose another place.',
 }
 
-export function ExportPanel({ projectId, summary, blocked }: { projectId: string; summary: string; blocked: boolean }) {
+export function ExportPanel({ projectId, summary, blocked, offerWholeDesign = false }: { projectId: string; summary: string; blocked: boolean; offerWholeDesign?: boolean }) {
   const [state, setState] = useState<ExportState>({ kind: 'idle' })
+  // Off by default: the slides are what gets posted; the whole design is an extra for keeping or printing.
+  const [wholeDesign, setWholeDesign] = useState(false)
 
   // Follows this export's progress events from main.
   useEffect(
@@ -51,7 +54,7 @@ export function ExportPanel({ projectId, summary, blocked }: { projectId: string
 
   async function start() {
     setState({ kind: 'running', jobId: '', done: 0, total: 0 })
-    const result = await window.nearmora.startExport({ projectId })
+    const result = await window.nearmora.startExport({ projectId, wholeDesign: offerWholeDesign && wholeDesign })
     if (!result.ok) return setState({ kind: 'message', text: FAILURES['failed']! })
     const data = result.data
     if (data.status === 'cancelled') return setState({ kind: 'idle' })
@@ -69,6 +72,12 @@ export function ExportPanel({ projectId, summary, blocked }: { projectId: string
         {summary}. Exporting creates new files in a new folder you choose. It doesn’t change your photos, publish or share anything, and photo details
         like location are left out.
       </p>
+      {offerWholeDesign ? (
+        <label className="library__check">
+          <input type="checkbox" checked={wholeDesign} onChange={(e) => setWholeDesign(e.target.checked)} />
+          <span>Also save the whole design as one wide file</span>
+        </label>
+      ) : null}
       <div className="library__source-actions" aria-live="polite">
         {state.kind === 'running' ? (
           <>
