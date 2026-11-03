@@ -201,3 +201,58 @@
     transition: none;
   }
 }
+
+/* The swipe preview (S5b): slides side by side, or one at a time sliding across like a swipe. */
+.studio__swipe {
+  margin-top: var(--nm-space-2);
+}
+
+.studio__swipe-row {
+  display: flex;
+  overflow-x: auto;
+  padding-bottom: var(--nm-space-1);
+}
+
+.studio__swipe-slide {
+  flex: none;
+  overflow: hidden;
+}
+
+.studio__swipe-viewport {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.studio__swipe-track {
+  display: flex;
+  transition: transform 300ms ease;
+}
+
+.studio__swipe-track > * {
+  flex: none;
+}
+
+.studio__swipe-one:focus-visible {
+  outline: 3px solid var(--nm-focus-ring);
+  outline-offset: 4px;
+}
+
+/* People who ask for less motion see the next slide straight away. */
+@media (prefers-reduced-motion: reduce) {
+  .studio__swipe-track {
+    transition: none;
+  }
+}
+
+/* Each slide gets a thin edge, so slides with the same background still read as separate; the editor canvas's own
+   rounded border is dropped inside them, since a slide is cut square. */
+.studio__swipe-slide,
+.studio__swipe-row > .studio__canvas,
+.studio__swipe-track > .studio__canvas {
+  outline: 1px solid var(--nm-text-muted);
+}
+
+.studio__swipe-slide .studio__canvas {
+  border: 0;
+  border-radius: 0;
+}

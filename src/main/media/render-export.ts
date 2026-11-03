@@ -6,7 +6,7 @@
  */
 
 import { rmSync, writeFileSync } from 'node:fs'
-import sharp from 'sharp'
+import sharp, { type Sharp } from 'sharp'
 import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
 import type { PhotoElement } from '@shared/studio/compose'
 import { svgTransform, type Layer } from '@shared/studio/layers'
@@ -19,6 +19,8 @@ export interface RenderRequest {
    * many slices by the remainder rule (slices.ts), so the slices fit back together exactly.
    */
   outputPaths: readonly string[]
+  /** Also saves the whole canvas here, from the same pixels and with the same settings (a seamless design's whole view). */
+  wholePath?: string
   /** JPEG for every export. PNG (lossless) is used only by tests, to prove slices reassemble pixel for pixel. */
   encoding?: 'jpeg' | 'png'
   width: number
@@ -145,22 +147,22 @@ export async function renderCanvas(request: RenderRequest): Promise<RenderResult
       .toBuffer({ resolveWithObject: true })
     const raw = { width: canvas.info.width, height: canvas.info.height, channels: canvas.info.channels }
     // Every file is cut from the same pixels and encoded with the same settings, so slides match where they meet.
-    let left = 0
-    for (const [i, width] of sliceWidths(raw.width, request.outputPaths.length).entries()) {
-      const piece = sharp(canvas.data, { raw }).extract({ left, top: 0, width, height: raw.height })
-      left += width
-      if (request.encoding === 'png') {
-        writeFileSync(request.outputPaths[i]!, await piece.png().toBuffer())
-        continue
-      }
+    const save = async (piece: Sharp, path: string) => {
+      if (request.encoding === 'png') return writeFileSync(path, await piece.png().toBuffer())
       // Full-resolution colour (4:4:4): the default stores colour at half resolution, which visibly smears saturated
       // edges such as red petals. mozjpeg's encoder keeps the larger file in check (owner's review, R5).
       const encoded = await piece.jpeg({ quality: request.quality, chromaSubsampling: '4:4:4', mozjpeg: true }).toBuffer()
-      writeFileSync(request.outputPaths[i]!, request.ppi ? withPrintDensity(encoded, request.ppi) : encoded)
+      writeFileSync(path, request.ppi ? withPrintDensity(encoded, request.ppi) : encoded)
     }
+    let left = 0
+    for (const [i, width] of sliceWidths(raw.width, request.outputPaths.length).entries()) {
+      await save(sharp(canvas.data, { raw }).extract({ left, top: 0, width, height: raw.height }), request.outputPaths[i]!)
+      left += width
+    }
+    if (request.wholePath) await save(sharp(canvas.data, { raw }), request.wholePath)
     return { ok: true }
   } catch (error: unknown) {
-    for (const path of request.outputPaths) rmSync(path, { force: true })
+    for (const path of [...request.outputPaths, ...(request.wholePath ? [request.wholePath] : [])]) rmSync(path, { force: true })
     const message = error instanceof Error ? `${error.message} ${'code' in error ? String(error.code) : ''}` : String(error)
     return { ok: false, reason: /ENOSPC|No space left/i.test(message) ? 'disk_full' : 'failed' }
   }

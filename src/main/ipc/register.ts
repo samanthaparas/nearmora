@@ -113,7 +113,7 @@ export function createHandlers({ db, library, exports, paths, removal }: Handler
       return { deleted: true as const }
     },
     // The destination picker runs here in main; the path never reaches the UI.
-    'export:start': async ({ projectId }) => {
+    'export:start': async ({ projectId, wholeDesign }) => {
       const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
       const options: Electron.OpenDialogOptions = {
         title: 'Choose where to save the exported files',
@@ -123,7 +123,7 @@ export function createHandlers({ db, library, exports, paths, removal }: Handler
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
       const path = picked.filePaths[0]
       if (picked.canceled || !path) return { status: 'cancelled' as const }
-      return exports.start(projectId, path)
+      return exports.start(projectId, path, { wholeDesign: wholeDesign ?? false })
     },
     'export:cancel': ({ jobId }) => ({ cancelled: exports.cancel(jobId) }),
     'export:reveal': ({ jobId }) => {

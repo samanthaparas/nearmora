@@ -37,8 +37,11 @@ export interface ExportPlan {
   border: { width: number; color: string }
   /** Pixels per inch recorded in print-size files; null for sharing sizes. */
   ppi: number | null
-  /** Each canvas to draw, and the files it becomes: one, or a seamless design's slides with their widths. */
-  outputs: Array<{ files: Array<{ fileName: string; width: number }>; layers: RenderLayer[] }>
+  /**
+   * Each canvas to draw, and the files it becomes: one, or a seamless design's slides with their widths, plus (if
+   * asked for) the whole design as one wide file, marked `whole`.
+   */
+  outputs: Array<{ files: Array<{ fileName: string; width: number; whole?: true }>; layers: RenderLayer[] }>
 }
 
 /** Every file an export writes, in order. */
@@ -79,7 +82,7 @@ function sha256(path: string): Promise<Buffer> {
  */
 export async function prepareExport(
   db: Catalog,
-  input: { projectId: string; destinationDir: string; appDataDir: string },
+  input: { projectId: string; destinationDir: string; appDataDir: string; wholeDesign?: boolean },
 ): Promise<{ status: 'ready'; plan: ExportPlan } | ExportRefusal> {
   // Outputs never go inside a photo folder (it would be scanned as photos) or inside Nearmora's own data.
   let destination: string
@@ -134,7 +137,11 @@ export async function prepareExport(
   const outputs: ExportPlan['outputs'] = Array.from({ length: composition.canvasCount }, (_, i) => ({
     files:
       composition.mode === 'seamless'
-        ? sliceWidths(composition.width, composition.slices).map((width, slice) => ({ fileName: numbered(slice), width }))
+        ? [
+            ...sliceWidths(composition.width, composition.slices).map((width, slice) => ({ fileName: numbered(slice), width })),
+            // Named so it sorts after the numbered slides.
+            ...(input.wholeDesign ? [{ fileName: `${name} whole design.jpg`, width: composition.width, whole: true as const }] : []),
+          ]
         : [{ fileName: composition.mode === 'carousel' ? numbered(i) : `${name}.jpg`, width: composition.width }],
     layers: [],
   }))
@@ -233,7 +240,8 @@ export async function runExport(
   for (const [index, output] of plan.outputs.entries()) {
     if (options.signal?.aborted) return finish({ status: 'cancelled' })
     const result = await deps.render({
-      outputPaths: output.files.map((f) => join(staging, f.fileName)),
+      outputPaths: output.files.filter((f) => !f.whole).map((f) => join(staging, f.fileName)),
+      ...(output.files.some((f) => f.whole) ? { wholePath: join(staging, output.files.find((f) => f.whole)!.fileName) } : {}),
       width: plan.width,
       height: plan.height,
       background: plan.background,

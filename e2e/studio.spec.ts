@@ -18,6 +18,18 @@ let before: ReturnType<typeof fingerprintFolder>
 const nav = (page: Page, name: string) => page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name }).click()
 const cropNote = (page: Page) => page.locator('.studio__adjust .review__note').innerText()
 
+// The offline test unplugs the folder; it stays "not connected" until reconnected, and export needs it. This waits for
+// the folder's status line, whichever state it's in, then reconnects only if needed.
+async function ensureConnected(page: Page) {
+  await nav(page, 'Library')
+  await expect(page.locator('.library__source').first()).toBeVisible()
+  const reconnect = page.getByRole('button', { name: 'Reconnect' })
+  if ((await reconnect.count()) > 0) {
+    await reconnect.click()
+    await expect(page.locator('p', { hasText: 'Burst · 6 photos' })).toBeVisible({ timeout: 20_000 })
+  }
+}
+
 test.beforeAll(async () => {
   root = (await generateBurstFolder(join(tempFolder('photos'), 'Burst'), 5)).root
   before = fingerprintFolder(root)
@@ -405,17 +417,9 @@ test('playful quartets: four photos in their own group, a label per photo that i
 test('seamless carousels: one wide design with its cuts, a note where a photo crosses one, and one file per slide', async () => {
   const { app } = await launchApp(profile)
   const page = await app.firstWindow()
-  // The offline test above unplugs the folder; it stays "not connected" until reconnected, and export needs it.
-  await nav(page, 'Library')
-  // Wait until the folder's status line is shown, whichever state it's in, before deciding.
-  await expect(page.locator('.library__source').first()).toBeVisible()
-  const reconnect = page.getByRole('button', { name: 'Reconnect' })
-  if ((await reconnect.count()) > 0) {
-    await reconnect.click()
-    await expect(page.locator('p', { hasText: 'Burst · 6 photos' })).toBeVisible({ timeout: 20_000 })
-  }
+  await ensureConnected(page)
   await nav(page, 'Favorites')
-  const seamless = page.getByRole('region', { name: 'Seamless carousels' })
+  const seamless = page.getByRole('region', { name: 'Seamless carousels', exact: true })
   await expect(seamless.getByRole('button')).toHaveCount(2)
   const pick = page.getByRole('button', { name: /^Select: / })
   for (const i of [0, 1, 2]) await pick.nth(i).click()
@@ -444,6 +448,57 @@ test('seamless carousels: one wide design with its cuts, a note where a photo cr
   await expect(panel).toContainText('Exported 2 files', { timeout: 30_000 })
   const [folder] = readdirSync(destination)
   expect(readdirSync(join(destination, folder!)).sort()).toEqual(['Across the seam 01.jpg', 'Across the seam 02.jpg'])
+  await app.close()
+})
+
+test('swipe preview: slides side by side, then one at a time; a mat for carousels; the whole design as an extra file', async () => {
+  const { app } = await launchApp(profile)
+  const page = await app.firstWindow()
+  await ensureConnected(page)
+  await nav(page, 'Favorites')
+  const pick = page.getByRole('button', { name: /^Select: / })
+  for (const i of [0, 1, 2, 3, 4]) await pick.nth(i).click()
+  await page.getByRole('region', { name: 'Playful seamless carousels' }).getByRole('button', { name: /^Scattered postcards/ }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Scattered postcards' })).toBeVisible()
+
+  // Side by side: three slides, cut exactly as they'll be exported.
+  await page.getByRole('button', { name: 'Preview the swipe' }).click()
+  const swipe = page.getByRole('region', { name: 'Swipe preview' })
+  await expect(swipe.getByRole('img', { name: /^Slide \d of 3$/ })).toHaveCount(3)
+  // One at a time: the buttons and the arrow keys move between slides.
+  await swipe.getByLabel('One at a time').check()
+  await expect(swipe.getByText('Slide 1 of 3', { exact: true })).toBeVisible()
+  await expect(swipe.getByRole('button', { name: '← Previous' })).toBeDisabled()
+  await swipe.getByRole('button', { name: 'Next →' }).click()
+  await expect(swipe.getByText('Slide 2 of 3', { exact: true })).toBeVisible()
+  await swipe.getByLabel(/^Slide 2 of 3\. Use the arrow keys/).press('ArrowRight')
+  await expect(swipe.getByText('Slide 3 of 3', { exact: true })).toBeVisible()
+  await expect(swipe.getByRole('button', { name: 'Next →' })).toBeDisabled()
+
+  // Export with the whole design too: three slides and one wide file.
+  const destination = tempFolder('whole-export')
+  await app.evaluate(({ dialog }, chosen) => {
+    dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [chosen] })
+  }, destination)
+  const panel = page.getByRole('region', { name: 'Export' })
+  await panel.getByLabel('Also save the whole design as one wide file').check()
+  await panel.getByRole('button', { name: 'Export…' }).click()
+  await expect(panel).toContainText('Exported 4 files', { timeout: 30_000 })
+  const [folder] = readdirSync(destination)
+  expect(readdirSync(join(destination, folder!)).sort()).toEqual([
+    'Scattered postcards 01.jpg',
+    'Scattered postcards 02.jpg',
+    'Scattered postcards 03.jpg',
+    'Scattered postcards whole design.jpg',
+  ])
+
+  // A standard carousel offers a mat instead of spacing, and has no whole design to add.
+  await page.getByRole('region', { name: 'Layout' }).getByRole('button', { name: 'Carousel', exact: true }).click()
+  await expect(page.getByText('Layout changed to Carousel. All changes saved.')).toBeVisible()
+  await page.getByRole('slider', { name: 'Mat' }).fill('80')
+  await expect(page.getByText('Mat changed. All changes saved.')).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Spacing' })).toHaveCount(0)
+  await expect(panel.getByLabel('Also save the whole design as one wide file')).toHaveCount(0)
   await app.close()
 })
 
@@ -483,20 +538,20 @@ test('picker filters: by photo count, by style and by what fits the selection; t
   const page = await app.firstWindow()
   await nav(page, 'Favorites')
   const groups = page.locator('.studio__templates').getByRole('region')
-  await expect(groups).toHaveCount(6)
+  await expect(groups).toHaveCount(7)
 
-  // Style: playful shows only the playful pairs and quartets.
+  // Style: playful shows only the playful pairs, quartets and seamless carousels.
   await page.getByRole('group', { name: 'Style' }).getByLabel('Playful').check()
-  await expect(groups).toHaveCount(2)
+  await expect(groups).toHaveCount(3)
   await expect(page.getByRole('region', { name: 'Playful pairs' })).toBeVisible()
   // Playful and four photos: just the playful quartets.
   await page.getByRole('group', { name: 'Show' }).getByLabel('Four photos').check()
   await expect(groups).toHaveCount(1)
   await expect(page.getByRole('region', { name: 'Playful quartets' }).getByRole('button')).toHaveCount(10)
-  // Playful carousels don't exist, and it says so.
+  // Playful carousels: the playful seamless ones.
   await page.getByRole('group', { name: 'Show' }).getByLabel('Carousel').check()
-  await expect(groups).toHaveCount(0)
-  await expect(page.getByText('No layouts match these filters.')).toBeVisible()
+  await expect(groups).toHaveCount(1)
+  await expect(page.getByRole('region', { name: 'Playful seamless carousels' }).getByRole('button')).toHaveCount(2)
 
   // Everyday layouts that fit a selection of two photos: the two-photo layouts and the carousel, all enabled.
   await page.getByRole('group', { name: 'Style' }).getByLabel('Any style').check()

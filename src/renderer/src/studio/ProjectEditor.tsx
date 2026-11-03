@@ -3,7 +3,8 @@
  * border, and for each photo its order, swap, replace, fit or fill, crop and zoom. Every edit is saved at once, can be
  * undone and redone (buttons, or ⌘Z and ⇧⌘Z), and "Reset to layout defaults" brings back the layout's own look.
  * The preview is drawn from the same composition as the export; a seamless carousel shows its whole design with
- * the cuts marked, and notes photos that meet a cut. Photos that can't be reached, and photos too small for the chosen
+ * the cuts marked, and notes photos that meet a cut; carousels can be previewed as they'll be swiped, and standard
+ * carousels can have a mat. Photos that can't be reached, and photos too small for the chosen
  * print size, are named before export.
  */
 
@@ -15,12 +16,13 @@ import { FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
 import { BACKGROUNDS, BORDER_COLORS, MAX_BORDER, MAX_CAPTION, type Params } from '@shared/studio/params'
 import { printResolution } from '@shared/studio/resolution'
 import { seamNotes } from '@shared/studio/slices'
-import { findTemplate, formatFor, formatsFor, templatesFor } from '@shared/studio/templates'
+import { findTemplate, formatFor, formatsFor, latestTemplates, templatesFor } from '@shared/studio/templates'
 import { missingCharacters } from '@shared/studio/text'
 import { ColourChoice } from './ColourChoice'
 import { ExportPanel } from './ExportPanel'
 import { ReplacePhoto } from './ReplacePhoto'
 import { StudioCanvas } from './StudioCanvas'
+import { SwipePreview } from './SwipePreview'
 import { TemplateIcon } from './TemplateIcon'
 import { useProjectEditing } from './use-project-editing'
 
@@ -46,6 +48,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
   const [titleDraft, setTitleDraft] = useState<string | null>(null)
   const [replacing, setReplacing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [swiping, setSwiping] = useState(false)
 
   if (!project || !design) return <p>{status === 'All changes saved' ? 'Opening project…' : status}</p>
   let composition: Composition
@@ -56,6 +59,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
     return <p role="alert">This project uses a layout this version of Nearmora doesn’t know. It is kept as it is; a newer version can open it.</p>
   }
   const template = findTemplate(design.templateId, design.templateVersion)!
+  // A project keeps the layout version it was made with; a newer one is offered, never applied without asking.
+  const newer = latestTemplates().find((t) => t.id === template.id && t.version > template.version)
   const resolved = resolveParams(template, design.params)
   const position = Math.min(selected, design.items.length - 1)
   const item = design.items[position]!
@@ -182,6 +187,15 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           ) : (
             preview(0, previewWidth(480, 560))
           )}
+          {/* Carousels: see the slides as they'll be swiped, side by side or one at a time (shown on request). */}
+          {composition.mode !== 'single' ? (
+            <>
+              <button type="button" className="button button--quiet" aria-expanded={swiping} onClick={() => setSwiping(!swiping)}>
+                {swiping ? 'Hide the swipe preview' : 'Preview the swipe'}
+              </button>
+              {swiping ? <SwipePreview composition={composition} items={design.items} slideWidth={240} /> : null}
+            </>
+          ) : null}
           {/* Seamless carousels: where photos meet a cut, said plainly. Crossing a cut is the point; the gap is a fact. */}
           {seams.length > 0 ? (
             <div className="library__confirm" role="status">
@@ -257,6 +271,14 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           </form>
 
           {/* Any layout that takes this many photos; photos keep their order, crops and fit. */}
+          {newer ? (
+            <p className="review__note">
+              {newer.name} has a newer version: {newer.description.toLowerCase()}.{' '}
+              <button type="button" className="button button--quiet" onClick={() => change({ ...design, templateVersion: newer.version }, `Layout updated to the newer ${newer.name}`)}>
+                Use the newer {newer.name}
+              </button>
+            </p>
+          ) : null}
           <section aria-labelledby="layout-title">
             <h3 id="layout-title" className="studio__template-title">
               Layout
@@ -330,7 +352,13 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             onLive={(colour) => live(setParams({ background: colour }), 'Background changed')}
           />
 
-          {/* Carousel slides are one photo edge to edge, so spacing only applies to collages and seamless designs. */}
+          {/* A carousel slide holds one photo, so its only spacing is a mat around it (Carousel version 2). */}
+          {composition.mode === 'carousel' && template.mat ? (
+            <fieldset className="studio__choice studio__choice--column">
+              <legend>Mat</legend>
+              {slider('Mat', resolved.margin, MAX_SPACING, (margin) => setParams({ margin }))}
+            </fieldset>
+          ) : null}
           {composition.mode !== 'carousel' ? (
             <fieldset className="studio__choice studio__choice--column">
               <legend>Spacing</legend>
@@ -485,6 +513,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             projectId={projectId}
             blocked={unavailable.length > 0}
             summary={`JPEG, ${sizeOf(design.format)} pixels, ${slides} ${slides === 1 ? 'file' : 'files'}`}
+            offerWholeDesign={composition.mode === 'seamless'}
           />
 
           <button type="button" className="button button--quiet" onClick={() => setConfirmDelete(true)}>

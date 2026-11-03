@@ -98,7 +98,7 @@ function drawPhoto(context: CanvasRenderingContext2D, e: PhotoElement, image: HT
   context.restore()
 }
 
-export function StudioCanvas({ composition, items, canvasIndex, displayWidth, highlight, label, onWheelZoom }: {
+export function StudioCanvas({ composition, items, canvasIndex, displayWidth, highlight, label, onWheelZoom, guides = true }: {
   composition: Composition
   /** The project's photos by position; element `slot` numbers index into this. */
   items: readonly CanvasItem[]
@@ -109,6 +109,8 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
   label: string
   /** Pinch or wheel over a photo: its position, and how much to zoom (above 1 zooms in). */
   onWheelZoom?: (position: number, factor: number) => void
+  /** Draw a seamless design's cut guides (the swipe preview turns them off, to show the slides as posted). */
+  guides?: boolean
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const size = { width: composition.width, height: composition.height }
@@ -168,7 +170,7 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
       }
       // A seamless design's cuts, as dashed lines (editor only, never exported): white under plum, so they show on
       // any photo. They come from the same slicing rule the export cuts with.
-      for (const x of composition.slices > 1 ? cutPositions(composition.width, composition.slices) : []) {
+      for (const x of guides && composition.slices > 1 ? cutPositions(composition.width, composition.slices) : []) {
         context.save()
         context.lineWidth = 3 / scale
         context.setLineDash([12 / scale, 8 / scale])
@@ -186,7 +188,7 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
     return () => {
       cancelled = true
     }
-  }, [composition, items, canvasIndex, displayWidth, displayHeight, scale, size.width, size.height, highlight])
+  }, [composition, items, canvasIndex, displayWidth, displayHeight, scale, size.width, size.height, highlight, guides])
 
   // Shrinks to fit narrow windows and 200% zoom (no sideways scrolling); the canvas keeps its shape from its pixel size.
   return <canvas ref={ref} className="studio__canvas" role="img" aria-label={label} style={{ width: displayWidth, maxWidth: '100%', height: 'auto' }} />

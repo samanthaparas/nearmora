@@ -74,7 +74,7 @@ describe('templates', () => {
     expect(templatesFor(4)).toHaveLength(21)
     // Three and five photos: the carousel, and the seamless carousel that takes exactly that many (S5a).
     expect(templatesFor(3).map((t) => t.id)).toEqual(['carousel-full', 'seamless-across-the-seam'])
-    expect(templatesFor(5).map((t) => t.id)).toEqual(['carousel-full', 'seamless-story-strip'])
+    expect(templatesFor(5).map((t) => t.id)).toEqual(['carousel-full', 'seamless-story-strip', 'seamless-film-roll', 'seamless-scattered-postcards'])
     expect(templatesFor(1)).toEqual([])
   })
 
