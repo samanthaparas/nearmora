@@ -8,7 +8,7 @@ import { basename } from 'node:path'
 import type { MainEvent } from '@shared/ipc-contract'
 import type { Catalog } from '../catalog/database'
 import type { RenderRequest, RenderResult } from '../media/render-export'
-import { prepareExport, runExport, type ExportRefusal } from './export'
+import { planFiles, prepareExport, runExport, type ExportRefusal } from './export'
 
 export function createExportService(deps: {
   db: Catalog
@@ -34,7 +34,7 @@ export function createExportService(deps: {
         onProgress: (done, total) => deps.emit({ type: 'export', jobId, projectId, state: 'running', done, total }),
       })
         .then((outcome) => {
-          const total = plan.outputs.length
+          const total = planFiles(plan).length
           if (outcome.status === 'done') {
             finished.set(jobId, outcome.folder)
             deps.emit({ type: 'export', jobId, projectId, state: 'done', done: total, total, folderName: basename(outcome.folder) })
@@ -42,7 +42,7 @@ export function createExportService(deps: {
           else deps.emit({ type: 'export', jobId, projectId, state: 'failed', done: 0, total, reason: outcome.reason })
         })
         .finally(() => running.delete(jobId))
-      return { status: 'started', jobId, fileCount: plan.outputs.length }
+      return { status: 'started', jobId, fileCount: planFiles(plan).length }
     },
     cancel(jobId: string): boolean {
       const controller = running.get(jobId)

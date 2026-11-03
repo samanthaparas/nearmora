@@ -1,5 +1,5 @@
 /**
- * Renders one export file (a collage, or one carousel slide) from the original photos, using the same shared layout
+ * Renders one export canvas (a collage, a carousel slide, or a seamless carousel's whole design cut into its slides) from the original photos, using the same shared layout
  * math and drawing order as the on-screen preview (AC7, ADR-0017). The output is a fresh sRGB JPEG with full-resolution colour and no metadata at all: no location, camera,
  * EXIF, XMP or IPTC (sharp writes none unless asked). Transparency is flattened onto the chosen background.
  * Originals are only read.
@@ -10,10 +10,17 @@ import sharp from 'sharp'
 import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
 import type { PhotoElement } from '@shared/studio/compose'
 import { svgTransform, type Layer } from '@shared/studio/layers'
+import { sliceWidths } from '@shared/studio/slices'
 import { MAX_INPUT_PIXELS } from './limits'
 
 export interface RenderRequest {
-  outputPath: string
+  /**
+   * Where the files go. One path: the whole canvas. Several: the canvas is drawn once and cut left to right into that
+   * many slices by the remainder rule (slices.ts), so the slices fit back together exactly.
+   */
+  outputPaths: readonly string[]
+  /** JPEG for every export. PNG (lossless) is used only by tests, to prove slices reassemble pixel for pixel. */
+  encoding?: 'jpeg' | 'png'
   width: number
   height: number
   /** Background colour as #rrggbb. */
@@ -129,17 +136,31 @@ export async function renderCanvas(request: RenderRequest): Promise<RenderResult
 
   try {
     // `unlimited`: the SVG is our own, and embeds full-size photo pieces that exceed the parser's default size guard.
-    const encoded = await sharp(Buffer.from(svg), { unlimited: true, limitInputPixels: false })
-      .flatten({ background: request.background }) // any transparency becomes the background colour, on purpose
+    // Drawn once, to raw pixels; any transparency becomes the background colour, on purpose.
+    const canvas = await sharp(Buffer.from(svg), { unlimited: true, limitInputPixels: false })
+      .flatten({ background: request.background })
       .toColourspace('srgb')
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    const raw = { width: canvas.info.width, height: canvas.info.height, channels: canvas.info.channels }
+    // Every file is cut from the same pixels and encoded with the same settings, so slides match where they meet.
+    let left = 0
+    for (const [i, width] of sliceWidths(raw.width, request.outputPaths.length).entries()) {
+      const piece = sharp(canvas.data, { raw }).extract({ left, top: 0, width, height: raw.height })
+      left += width
+      if (request.encoding === 'png') {
+        writeFileSync(request.outputPaths[i]!, await piece.png().toBuffer())
+        continue
+      }
       // Full-resolution colour (4:4:4): the default stores colour at half resolution, which visibly smears saturated
       // edges such as red petals. mozjpeg's encoder keeps the larger file in check (owner's review, R5).
-      .jpeg({ quality: request.quality, chromaSubsampling: '4:4:4', mozjpeg: true })
-      .toBuffer()
-    writeFileSync(request.outputPath, request.ppi ? withPrintDensity(encoded, request.ppi) : encoded)
+      const encoded = await piece.jpeg({ quality: request.quality, chromaSubsampling: '4:4:4', mozjpeg: true }).toBuffer()
+      writeFileSync(request.outputPaths[i]!, request.ppi ? withPrintDensity(encoded, request.ppi) : encoded)
+    }
     return { ok: true }
   } catch (error: unknown) {
-    rmSync(request.outputPath, { force: true })
+    for (const path of request.outputPaths) rmSync(path, { force: true })
     const message = error instanceof Error ? `${error.message} ${'code' in error ? String(error.code) : ''}` : String(error)
     return { ok: false, reason: /ENOSPC|No space left/i.test(message) ? 'disk_full' : 'failed' }
   }

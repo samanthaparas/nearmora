@@ -1,6 +1,6 @@
 /**
- * Draws one output canvas (a collage, or one carousel slide) from the project's composition, the same element list
- * the export draws (AC7). Uses the large preview image, or the thumbnail when that's
+ * Draws one output canvas (a collage, one carousel slide, or a seamless carousel's whole design with its cuts marked)
+ * from the project's composition, the same element list the export draws (AC7). Uses the large preview image, or the thumbnail when that's
  * not available. It draws the same layers, in the same order, as the export: shapes, art and captions, and photos that
  * may be tilted, on cards or cut to a shape (ADR-0017). A pinch or mouse wheel over a photo zooms that photo.
  */
@@ -9,6 +9,7 @@ import { useEffect, useRef } from 'react'
 import { placePhoto, type Crop, type Fit, type Rect } from '@shared/layout'
 import type { Composition, PhotoElement } from '@shared/studio/compose'
 import { layers, type Layer } from '@shared/studio/layers'
+import { cutPositions } from '@shared/studio/slices'
 import { useWheelZoom } from '../wheel-zoom'
 
 export interface CanvasItem {
@@ -163,6 +164,22 @@ export function StudioCanvas({ composition, items, canvasIndex, displayWidth, hi
         context.strokeStyle = '#5b414b'
         context.lineWidth = 8 / scale
         context.stroke(new Path2D(selected.mask ?? rectPath(selected.rect)))
+        context.restore()
+      }
+      // A seamless design's cuts, as dashed lines (editor only, never exported): white under plum, so they show on
+      // any photo. They come from the same slicing rule the export cuts with.
+      for (const x of composition.slices > 1 ? cutPositions(composition.width, composition.slices) : []) {
+        context.save()
+        context.lineWidth = 3 / scale
+        context.setLineDash([12 / scale, 8 / scale])
+        for (const [colour, offset] of [['#ffffff', 0], ['#5b414b', 10 / scale]] as const) {
+          context.strokeStyle = colour
+          context.lineDashOffset = offset
+          context.beginPath()
+          context.moveTo(x, 0)
+          context.lineTo(x, size.height)
+          context.stroke()
+        }
         context.restore()
       }
     })

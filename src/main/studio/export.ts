@@ -12,6 +12,7 @@ import sharp from 'sharp'
 import { compose } from '@shared/studio/compose'
 import { FORMATS, PRINT_PPI } from '@shared/studio/formats'
 import { layers } from '@shared/studio/layers'
+import { sliceWidths } from '@shared/studio/slices'
 import type { Catalog } from '../catalog/database'
 import { getProject } from '../catalog/repositories/projects'
 import { listSources } from '../catalog/repositories/sources'
@@ -36,8 +37,12 @@ export interface ExportPlan {
   border: { width: number; color: string }
   /** Pixels per inch recorded in print-size files; null for sharing sizes. */
   ppi: number | null
-  outputs: Array<{ fileName: string; layers: RenderLayer[] }>
+  /** Each canvas to draw, and the files it becomes: one, or a seamless design's slides with their widths. */
+  outputs: Array<{ files: Array<{ fileName: string; width: number }>; layers: RenderLayer[] }>
 }
+
+/** Every file an export writes, in order. */
+export const planFiles = (plan: Pick<ExportPlan, 'outputs'>): string[] => plan.outputs.flatMap((o) => o.files.map((f) => f.fileName))
 
 export type ExportOutcome =
   | { status: 'done'; folder: string; files: string[] }
@@ -124,9 +129,13 @@ export async function prepareExport(
   // The same composition the editor's preview draws: same template, format, settings and photo positions.
   const composition = compose({ ...project, photoCount: project.items.length })
   const name = safeName(project.title)
+  // Slides are numbered, zero-padded, so they sort in posting order everywhere (01 … 09, 10).
+  const numbered = (i: number) => `${name} ${String(i + 1).padStart(2, '0')}.jpg`
   const outputs: ExportPlan['outputs'] = Array.from({ length: composition.canvasCount }, (_, i) => ({
-    // Carousel slides are numbered so they sort in order everywhere.
-    fileName: composition.mode === 'carousel' ? `${name} ${String(i + 1).padStart(2, '0')}.jpg` : `${name}.jpg`,
+    files:
+      composition.mode === 'seamless'
+        ? sliceWidths(composition.width, composition.slices).map((width, slice) => ({ fileName: numbered(slice), width }))
+        : [{ fileName: composition.mode === 'carousel' ? numbered(i) : `${name}.jpg`, width: composition.width }],
     layers: [],
   }))
   // Each file's drawing order, shared with the preview; photos gain the path of their verified original.
@@ -174,11 +183,11 @@ function freshFolderName(destination: string, title: string, now: Date): string 
  * sizes) records the print density; and nothing else is in the folder.
  */
 async function verifyOutputs(staging: string, plan: ExportPlan): Promise<boolean> {
-  const expected = plan.outputs.map((o) => o.fileName).sort()
-  if (JSON.stringify(readdirSync(staging).sort()) !== JSON.stringify(expected)) return false
-  for (const fileName of expected) {
+  const expected = plan.outputs.flatMap((o) => o.files)
+  if (JSON.stringify(readdirSync(staging).sort()) !== JSON.stringify(expected.map((f) => f.fileName).sort())) return false
+  for (const { fileName, width } of expected) {
     const meta = await sharp(join(staging, fileName)).metadata()
-    if (meta.format !== 'jpeg' || meta.width !== plan.width || meta.height !== plan.height) return false
+    if (meta.format !== 'jpeg' || meta.width !== width || meta.height !== plan.height) return false
     if (meta.chromaSubsampling !== '4:4:4') return false
     if (meta.exif || meta.xmp || meta.iptc) return false
     if (plan.ppi && meta.density !== plan.ppi) return false
@@ -224,7 +233,7 @@ export async function runExport(
   for (const [index, output] of plan.outputs.entries()) {
     if (options.signal?.aborted) return finish({ status: 'cancelled' })
     const result = await deps.render({
-      outputPath: join(staging, output.fileName),
+      outputPaths: output.files.map((f) => join(staging, f.fileName)),
       width: plan.width,
       height: plan.height,
       background: plan.background,
@@ -234,7 +243,7 @@ export async function runExport(
       layers: output.layers,
     })
     if (!result.ok) return finish({ status: 'failed', reason: result.reason })
-    options.onProgress?.(index + 1, plan.outputs.length)
+    options.onProgress?.(plan.outputs.slice(0, index + 1).reduce((n, o) => n + o.files.length, 0), planFiles(plan).length)
   }
   if (options.signal?.aborted) return finish({ status: 'cancelled' })
   if (!(await verifyOutputs(staging, plan))) return finish({ status: 'failed', reason: 'verify_failed' })
@@ -243,7 +252,7 @@ export async function runExport(
   try {
     const folder = freshFolderName(plan.destinationDir, plan.title, deps.now?.() ?? new Date())
     renameSync(staging, folder)
-    return finish({ status: 'done', folder, files: plan.outputs.map((o) => o.fileName) })
+    return finish({ status: 'done', folder, files: planFiles(plan) })
   } catch {
     return finish({ status: 'failed', reason: 'failed' })
   }

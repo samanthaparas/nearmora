@@ -2,18 +2,20 @@
  * Editing one Memory Studio project (AC6) with Quick edits: layout, captions (playful layouts), sharing or print size, background colour, margin, gutter, photo
  * border, and for each photo its order, swap, replace, fit or fill, crop and zoom. Every edit is saved at once, can be
  * undone and redone (buttons, or ⌘Z and ⇧⌘Z), and "Reset to layout defaults" brings back the layout's own look.
- * The preview is drawn from the same composition as the export. Photos that can't be reached, and photos too small for
- * the chosen print size, are named before export.
+ * The preview is drawn from the same composition as the export; a seamless carousel shows its whole design with
+ * the cuts marked, and notes photos that meet a cut. Photos that can't be reached, and photos too small for the chosen
+ * print size, are named before export.
  */
 
 import { useState, type KeyboardEvent } from 'react'
 import { clampCrop, DEFAULT_CROP, MAX_ZOOM, photoArea, type Crop } from '@shared/layout'
 import { captionText, compose, resolveParams, UnknownTemplateError, type Composition } from '@shared/studio/compose'
 import { moveItem, replaceItem, resetDesign, swapItems, updateItem, type Design } from '@shared/studio/design'
-import { FORMAT_IDS, FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
+import { FORMATS, formatLabel, type FormatId } from '@shared/studio/formats'
 import { BACKGROUNDS, BORDER_COLORS, MAX_BORDER, MAX_CAPTION, type Params } from '@shared/studio/params'
 import { printResolution } from '@shared/studio/resolution'
-import { findTemplate, templatesFor } from '@shared/studio/templates'
+import { seamNotes } from '@shared/studio/slices'
+import { findTemplate, formatFor, formatsFor, templatesFor } from '@shared/studio/templates'
 import { missingCharacters } from '@shared/studio/text'
 import { ColourChoice } from './ColourChoice'
 import { ExportPanel } from './ExportPanel'
@@ -94,7 +96,9 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
     else if (event.key === '-') zoom(-ZOOM_STEP)
   }
 
-  const slides = composition.canvasCount
+  // A carousel draws one canvas per slide; a seamless carousel draws one wide design, cut into slides.
+  const slides = composition.mode === 'seamless' ? composition.slices : composition.canvasCount
+  const seams = seamNotes(composition)
   // Tall shapes are previewed narrower, so the whole canvas fits on screen beside the controls.
   const previewWidth = (widest: number, tallest: number) => Math.round(Math.min(widest, (tallest * composition.width) / composition.height))
   const resolution = printResolution(
@@ -116,7 +120,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
       label={
         composition.mode === 'carousel'
           ? `Preview of slide ${canvasIndex + 1} of ${slides}`
-          : `Preview: ${template.name.toLowerCase()}, ${FORMATS[design.format].label.toLowerCase()}, ${colourName(resolved.background)} background${
+          : `Preview: ${template.name.toLowerCase()}, ${composition.mode === 'seamless' ? `${slides} ${FORMATS[design.format].label.toLowerCase()} slides` : FORMATS[design.format].label.toLowerCase()}, ${colourName(resolved.background)} background${
               resolved.borderWidth > 0 ? `, ${colourName(resolved.borderColor)} border` : ''
             }${(template.captions ?? [])
               // Line breaks are read as pauses: "Same brunch, Different adventure".
@@ -148,7 +152,7 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
         </h2>
         <p className="review__note">
           {template.name} · {design.items.length} photos · {sizeOf(design.format)}
-          {composition.mode === 'carousel' ? ` · ${slides} slides` : ''}
+          {composition.mode !== 'single' ? ` · ${slides} slides` : ''}
         </p>
       </div>
 
@@ -173,9 +177,27 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
         <div className="studio__previews">
           {composition.mode === 'carousel' ? (
             <div className="studio__slides">{Array.from({ length: slides }, (_, i) => preview(i, previewWidth(220, 300)))}</div>
+          ) : composition.mode === 'seamless' ? (
+            preview(0, previewWidth(760, 320 * slides))
           ) : (
             preview(0, previewWidth(480, 560))
           )}
+          {/* Seamless carousels: where photos meet a cut, said plainly. Crossing a cut is the point; the gap is a fact. */}
+          {seams.length > 0 ? (
+            <div className="library__confirm" role="status">
+              <p className="library__confirm-title">Where photos meet a slide edge</p>
+              <ul className="review__note">
+                {seams.map((note) => (
+                  <li key={`${note.slot}-${note.cut}`}>
+                    Photo {note.slot + 1}{' '}
+                    {note.kind === 'crosses'
+                      ? `runs across the edge between slides ${note.cut} and ${note.cut + 1}. Apps show a small gap between slides, so it may not line up perfectly there.`
+                      : `has an edge just beside the cut between slides ${note.cut} and ${note.cut + 1}, so a thin sliver of it may show on the next slide.`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {/* Prints: photos enlarged so much they may look soft, named before export with what can help. */}
           {weak.length > 0 ? (
             <div className="library__confirm" role="status">
@@ -248,7 +270,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
                     aria-pressed={t.id === design.templateId}
                     title={t.description}
                     onClick={() => {
-                      if (t.id !== design.templateId) change({ ...design, templateId: t.id, templateVersion: t.version }, `Layout changed to ${t.name}`)
+                      // A seamless layout comes in sharing shapes only, so switching to one may change the size too.
+                      if (t.id !== design.templateId) change({ ...design, templateId: t.id, templateVersion: t.version, format: formatFor(t, design.format) }, `Layout changed to ${t.name}`)
                     }}
                   >
                     <TemplateIcon template={t} format={design.format} />
@@ -287,10 +310,10 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
           })}
 
           {/* Sizes for screens and sizes for printing, as two groups of one choice. */}
-          {(['share', 'print'] as const).map((use) => (
+          {(['share', 'print'] as const).filter((use) => formatsFor(template).some((id) => FORMATS[id].use === use)).map((use) => (
             <fieldset key={use} className="studio__choice">
-              <legend>{use === 'share' ? 'Shape for sharing' : 'Print size (300 pixels per inch)'}</legend>
-              {FORMAT_IDS.filter((id) => FORMATS[id].use === use).map((value) => (
+              <legend>{use === 'share' ? (composition.mode === 'seamless' ? 'Shape of each slide' : 'Shape for sharing') : 'Print size (300 pixels per inch)'}</legend>
+              {formatsFor(template).filter((id) => FORMATS[id].use === use).map((value) => (
                 <label key={value} className="library__check">
                   <input type="radio" name="format" checked={design.format === value} onChange={() => change({ ...design, format: value }, 'Size changed')} />
                   <span>{formatLabel(value)}</span>
@@ -307,8 +330,8 @@ export function ProjectEditor({ projectId, onClose, onDeleted }: { projectId: st
             onLive={(colour) => live(setParams({ background: colour }), 'Background changed')}
           />
 
-          {/* Carousel slides are one photo edge to edge, so spacing only applies to collages. */}
-          {composition.mode === 'single' ? (
+          {/* Carousel slides are one photo edge to edge, so spacing only applies to collages and seamless designs. */}
+          {composition.mode !== 'carousel' ? (
             <fieldset className="studio__choice studio__choice--column">
               <legend>Spacing</legend>
               {slider('Margin', resolved.margin, MAX_SPACING, (margin) => setParams({ margin }))}

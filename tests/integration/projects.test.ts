@@ -48,6 +48,21 @@ describe('creating projects', () => {
     )
   })
 
+  it('makes seamless carousels at sharing shapes only, when created and when the size or layout changes (S5a)', async () => {
+    const { db, assets } = await library()
+    const at = (format: string) => codeOf(() => createProject(db, { templateId: 'seamless-across-the-seam', format, assetIds: assets.slice(0, 3) }))
+    expect(at('print-8x10')).toBe('INVALID_INPUT')
+    expect(at('landscape')).toBe('INVALID_INPUT')
+    expect(at('portrait')).toBeUndefined()
+    // A three-photo carousel at a print size can't switch to it without a sharing shape either.
+    const carousel = createProject(db, { templateId: 'carousel-full', format: 'print-8x10', assetIds: assets.slice(0, 3) })
+    const switchTo = (format: 'print-8x10' | 'square') =>
+      codeOf(() => edit(db, carousel.id, (d) => ({ ...d, templateId: 'seamless-across-the-seam', templateVersion: 1, format })))
+    expect(switchTo('print-8x10')).toBe('INVALID_INPUT')
+    expect(getProject(db, carousel.id).templateId).toBe('carousel-full')
+    expect(switchTo('square')).toBeUndefined()
+  })
+
   it('starts with the template’s name as title, centred crops, fill, default settings and the template’s version', async () => {
     const { db, assets } = await library()
     const project = createProject(db, { templateId: 'quartet-classic-grid', format: 'portrait', assetIds: assets.slice(0, 4) })
