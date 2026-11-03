@@ -1,7 +1,8 @@
 /**
- * Loads a Memory Studio project and keeps its design, undo list and saving in step. Every edit is shown at once and
- * saved as a whole design; drags and pinches are shown live and saved (and added to undo) once they pause, so one
- * gesture is one undo step. If a save fails, the project is reloaded as saved, so the screen never shows unsaved work as safe.
+ * Loads a Memory Studio project and keeps its design, undo list and saving in step. Every edit is shown and saved at
+ * once as a whole design, including each moment of a drag, pinch or typing, so quitting never loses an edit; a whole
+ * gesture still becomes one undo step once it pauses. If a save fails, the project is reloaded as saved, so the screen
+ * never shows unsaved work as safe.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -11,7 +12,7 @@ import * as History from './design-history'
 
 export type Project = CommandOutput<'projects:get'>
 
-/** How long a drag or pinch must pause before it's saved and becomes one undo step. */
+/** How long a drag, pinch or burst of typing must pause before it becomes one undo step. */
 const SETTLE_MS = 300
 
 // Text fields keep ⌘Z for their own typing; everywhere else on the editor screen it undoes the last edit.
@@ -26,6 +27,8 @@ export function useProjectEditing(projectId: string) {
   const historyRef = useRef<History.History | null>(null)
   const gesture = useRef<{ base: History.Entry; label: string; timer: number } | null>(null)
   const latestSave = useRef(0)
+  // True while a drag, pinch or typing burst hasn't yet become an undo step: Undo is still offered (it closes it first).
+  const [gesturing, setGesturing] = useState(false)
 
   const setHistory = (next: History.History) => {
     historyRef.current = next
@@ -47,17 +50,6 @@ export function useProjectEditing(projectId: string) {
   useEffect(() => {
     void load()
   }, [load])
-
-  // Leaving the editor mid-gesture still saves what's on screen.
-  useEffect(
-    () => () => {
-      const pending = gesture.current
-      if (!pending || !historyRef.current) return
-      window.clearTimeout(pending.timer)
-      void window.nearmora.setProjectDesign({ projectId, design: historyRef.current.present.design })
-    },
-    [projectId],
-  )
 
   // ⌘Z undoes and ⇧⌘Z redoes (Ctrl on other systems) while the editor is open, wherever the focus is.
   const shortcuts = useRef({ undo: () => {}, redo: () => {} })
@@ -84,15 +76,15 @@ export function useProjectEditing(projectId: string) {
     setStatus(`${message}. All changes saved.`)
   }
 
-  // Ends a pending drag or pinch: it becomes one undo step and is saved.
+  // Ends a drag, pinch or burst of typing: it becomes one undo step. (Each change in it was already saved.)
   function settle() {
     const pending = gesture.current
     const current = historyRef.current
     if (!pending || !current) return
     window.clearTimeout(pending.timer)
     gesture.current = null
+    setGesturing(false)
     setHistory(History.record(current, current.present.design, pending.label, pending.base))
-    if (!sameDesign(pending.base.design, current.present.design)) void save(current.present.design, pending.label)
   }
 
   /** An edit made in one step (a button or choice): shown, added to undo and saved. */
@@ -104,7 +96,10 @@ export function useProjectEditing(projectId: string) {
     void save(next, label)
   }
 
-  /** Part of a drag or pinch: shown now, saved and added to undo once it pauses. */
+  /**
+   * Part of a drag, pinch or typing: shown and saved at once, so quitting mid-gesture never loses it. The whole gesture
+   * becomes one undo step once it pauses.
+   */
   function live(next: Design, label: string) {
     const current = historyRef.current
     if (!current) return
@@ -112,7 +107,10 @@ export function useProjectEditing(projectId: string) {
     const base = gesture.current?.base ?? historyRef.current!.present
     if (gesture.current) window.clearTimeout(gesture.current.timer)
     gesture.current = { base, label, timer: window.setTimeout(settle, SETTLE_MS) }
+    if (sameDesign(historyRef.current!.present.design, next)) return
+    setGesturing(true)
     setHistory(History.preview(historyRef.current!, next))
+    void save(next, label)
   }
 
   function undo() {
@@ -141,7 +139,7 @@ export function useProjectEditing(projectId: string) {
     project,
     setProject,
     design: history?.present.design ?? null,
-    canUndo: (history?.past.length ?? 0) > 0,
+    canUndo: (history?.past.length ?? 0) > 0 || gesturing,
     canRedo: (history?.future.length ?? 0) > 0,
     status,
     setStatus,
