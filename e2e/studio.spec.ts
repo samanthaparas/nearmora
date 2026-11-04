@@ -128,6 +128,7 @@ test('choosing Memory Studio in the sidebar from an open project goes back to th
   const page = await app.firstWindow()
   await nav(page, 'Memory Studio')
   const cards = page.locator('.moments__card')
+  await expect(cards.first()).toBeVisible() // the list loads after the screen opens; count it once it's there
   const count = await cards.count()
   await cards.first().click()
   await expect(page.getByRole('button', { name: '← All projects' })).toBeVisible()
