@@ -1,6 +1,6 @@
 /**
  * End-to-end test of albums (AC12) in the built app: select photos, add them to a new album, rearrange it with
- * the keyboard only, undo, rename, restart, delete and undo the delete, with every original photo unchanged.
+ * the keyboard only, undo, rename, restart, leave an album or moment from the sidebar, delete and undo the delete, with every original photo unchanged.
  */
 
 import { join } from 'node:path'
@@ -54,6 +54,20 @@ test('albums: add, rearrange by keyboard, undo, rename, restart, delete and undo
   await expect(page.getByRole('list', { name: 'Photos in Beach day, 3 in total' })).toBeVisible()
   const original = await albumOrder(page)
   expect(original).toHaveLength(3)
+
+  // Choosing Library in the sidebar from an open album, or an open moment, goes back to all photos.
+  const library = page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Library' })
+  const back = page.getByRole('button', { name: '← All photos' })
+  await expect(back).toBeVisible()
+  await library.click()
+  await expect(back).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Photos, 5 in total' })).toBeVisible()
+  await page.getByRole('region', { name: 'Your moments' }).getByRole('button').first().click()
+  await expect(back).toBeVisible()
+  await library.click()
+  await expect(back).toHaveCount(0)
+  await albums.getByRole('button', { name: /Beach day/ }).click()
+  await expect(page.getByRole('list', { name: 'Photos in Beach day, 3 in total' })).toBeVisible()
 
   // Rearrange with the keyboard only: focus the first photo's "Move later" and press Return twice.
   await page.getByRole('button', { name: 'Arrange' }).click()
