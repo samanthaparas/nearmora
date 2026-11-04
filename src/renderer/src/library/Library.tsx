@@ -1,7 +1,7 @@
 /**
  * The Library screen: add a photo folder, follow its scan, browse "Your moments" and Albums, search and filter,
  * select photos to add to an album or to Favorites or to mark as "Don't need" for Clean up, and scroll every photo in a virtualized grid. Thumbnails load from
- * nm-media:// by picture id; this screen never sees a file path.
+ * nm-media:// by picture id; this screen never sees a file path. Choosing Library in the sidebar always comes back to all photos.
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'

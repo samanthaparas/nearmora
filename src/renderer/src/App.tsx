@@ -64,9 +64,9 @@ export function App() {
   const [section, setSection] = useState<Section>('Library')
   // A project to open when arriving in Memory Studio from Favorites.
   const [studioProjectId, setStudioProjectId] = useState<string | null>(null)
-  // Counts sidebar visits to Memory Studio, so choosing it there always shows the project list, even from an open
-  // project (its edits are already saved as they happen).
-  const [studioVisit, setStudioVisit] = useState(0)
+  // Counts sidebar choices, so choosing Library or Memory Studio there always starts it afresh: Library at all photos
+  // (not an open album or moment), Studio at its project list. Edits in both are saved as they happen, so nothing is lost.
+  const [sidebarVisit, setSidebarVisit] = useState(0)
   const info = useAppInfo()
 
   return (
@@ -90,7 +90,7 @@ export function App() {
               onClick={() =>
                 navigate(() => {
                   setStudioProjectId(null)
-                  if (name === 'Memory Studio') setStudioVisit((n) => n + 1)
+                  setSidebarVisit((n) => n + 1)
                   setSection(name)
                 })
               }
@@ -116,7 +116,7 @@ export function App() {
 
       <main id="main" className="content" tabIndex={-1}>
         {section === 'Library' ? (
-          <Library />
+          <Library key={sidebarVisit} />
         ) : section === 'Sources' ? (
           <Sources />
         ) : section === 'Best Moments' ? (
@@ -131,7 +131,7 @@ export function App() {
         ) : section === 'Clean up' ? (
           <CleanUp />
         ) : section === 'Memory Studio' ? (
-          <MemoryStudio key={`${studioProjectId ?? 'list'}-${studioVisit}`} initialProjectId={studioProjectId} onGoToFavorites={() => setSection('Favorites')} />
+          <MemoryStudio key={`${studioProjectId ?? 'list'}-${sidebarVisit}`} initialProjectId={studioProjectId} onGoToFavorites={() => setSection('Favorites')} />
         ) : (
           <Settings />
         )}
