@@ -1,11 +1,12 @@
 /**
  * The Settings screen: what Nearmora stores on this Mac and how big it is, clearing the caches that can be rebuilt
- * (AC9), plain statements of what Nearmora does with the person's data, and the licences of the fonts and open-source
- * software it includes, as their licences ask.
+ * (AC9), backing up and restoring the catalog (AC11), plain statements of what Nearmora does with the person's data,
+ * and the licences of the fonts and open-source software it includes, as their licences ask.
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import type { CommandOutput } from '@shared/ipc-contract'
+import { BackupSection } from './BackupSection'
 import '../library/Library.css'
 
 type Usage = CommandOutput<'settings:storage'>
@@ -87,6 +88,8 @@ export function Settings() {
         </p>
         <p className="library__skipped">Clearing never touches your photos, your catalog or anything you’ve exported.</p>
       </section>
+
+      <BackupSection />
 
       <section className="moments" aria-labelledby="privacy-title">
         <h2 id="privacy-title" className="moments__title">

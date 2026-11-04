@@ -5,7 +5,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { expect, test, type ElectronApplication, type Page } from '@playwright/test'
@@ -211,6 +211,16 @@ test('every screen passes automated accessibility checks (WCAG 2.1 AA), at norma
     ['Clean up', () => nav(page, 'Clean up')],
     ['Sources', () => nav(page, 'Sources')],
     ['Settings', () => page.getByRole('button', { name: 'Settings', exact: true }).click()],
+    ['Settings: a backup made, and one chosen to restore', async () => {
+      const backups = tempFolder('a11y-backups')
+      await page.getByRole('button', { name: 'Settings', exact: true }).click()
+      await pickFolderNextTime(app, backups)
+      await page.getByRole('button', { name: 'Back up the catalog…' }).click()
+      await expect(page.getByText('Backed up to', { exact: false })).toBeVisible()
+      await pickFolderNextTime(app, join(backups, readdirSync(backups)[0]!))
+      await page.getByRole('button', { name: 'Restore from a backup…' }).click()
+      await expect(page.getByRole('group', { name: /^Restore the backup made on/ })).toBeVisible()
+    }],
   ]
 
   const problems: string[] = []

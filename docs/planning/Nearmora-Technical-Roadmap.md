@@ -319,7 +319,7 @@ Alternative (location-level) would show the same image multiple times in Favorit
 - Migrations: `migrations/0001_init.sql`, `0002_*.sql`… applied in a transaction; version in `PRAGMA user_version`.
 - Before any migration: `db.backup()` to `catalog-premigrate-<version>-<timestamp>.sqlite` in the app-data folder; keep the last 3.
 - On migration failure: transaction rolls back; app shows a recovery screen offering to restore the pre-migration backup. Tested with an intentionally broken migration fixture.
-- User backup: `db.backup()` to a user-chosen location → `PRAGMA integrity_check` on the copy → write a small manifest (app version, schema version, counts). Restore into a clean profile in tests. Thumbnails are not included (rebuildable). Copy states plainly that original photos are not in the backup.
+- User backup: `db.backup()` to a user-chosen location → `PRAGMA integrity_check` on the copy → write a small manifest (app version, schema version, counts). Restore into a clean profile in tests. Thumbnails are not included (rebuildable). Copy states plainly that original photos are not in the backup. *Added 2026-11-03:* Settings → Backup makes backups and restores them. A restore is scheduled, the app restarts, and the backup is put in place before the catalog opens, keeping a copy of the catalog it replaces so the restore can be undone; a backup that fails its checks leaves the catalog exactly as it was.
 
 ### 6.5 IPC contract (complete V0.1 list)
 

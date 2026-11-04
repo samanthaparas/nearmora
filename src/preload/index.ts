@@ -62,6 +62,11 @@ const api: NearmoraApi = {
   listDuplicates: () => ipcRenderer.invoke(channelFor('cleanup:duplicates')),
   removePhotos: (input) => ipcRenderer.invoke(channelFor('cleanup:remove'), input),
   removalHistory: () => ipcRenderer.invoke(channelFor('cleanup:history')),
+  backupStatus: () => ipcRenderer.invoke(channelFor('backup:status')),
+  createBackup: () => ipcRenderer.invoke(channelFor('backup:create')),
+  chooseBackup: () => ipcRenderer.invoke(channelFor('backup:choose')),
+  restoreBackup: (input) => ipcRenderer.invoke(channelFor('backup:restore'), input),
+  undoRestore: () => ipcRenderer.invoke(channelFor('backup:undoRestore')),
   // The listener gets only the event data, never Electron's event object (which carries `sender`).
   onEvent: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: MainEvent) => listener(payload)

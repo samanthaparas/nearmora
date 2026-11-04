@@ -9,6 +9,8 @@ import { basename, join } from 'node:path'
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import { EVENT_CHANNEL } from '@shared/ipc-channels'
 import { replaceCatalogFile } from './catalog/backup'
+import { createBackupService } from './catalog/backup-service'
+import { applyPendingRestore } from './catalog/restore-on-start'
 import { openCatalog, type Catalog } from './catalog/database'
 import { CatalogError, MigrationError } from './catalog/errors'
 import { createHandlers, registerIpc } from './ipc/register'
@@ -88,6 +90,15 @@ function appDataPaths() {
 }
 
 /**
+ * Restarts Nearmora so a scheduled restore or undo is applied before the catalog opens. End-to-end tests ask for a
+ * plain quit instead (NEARMORA_NO_RELAUNCH, unpackaged builds only), so no app is left running outside the test.
+ */
+function restartApp(): void {
+  if (app.isPackaged || !process.env['NEARMORA_NO_RELAUNCH']) app.relaunch()
+  app.quit()
+}
+
+/**
  * How Clean up moves a file to the Trash: the macOS Trash, through Electron. End-to-end tests point it at a stand-in
  * Trash folder instead, so tests never put anything in the real Trash; honoured only in unpackaged builds.
  */
@@ -144,6 +155,8 @@ function startApp(): void {
     if (devServerOrigin) applyDevelopmentCsp(devServerOrigin)
 
     const paths = appDataPaths()
+    // A restore chosen in Settings is applied now, before the catalog opens, so the catalog is never swapped in use.
+    const startup = await applyPendingRestore(paths)
     const db = await openCatalogOrExplain(paths)
     if (!db) {
       app.quit()
@@ -186,9 +199,10 @@ function startApp(): void {
       thumbnail: (assetId) => thumbnailPathForAsset(db, paths.thumbnailsDir, assetId),
       preview: createPreviewResolver({ db, previewsDir, makePreview: (request) => worker.preview(request) }),
     })
+    const backups = createBackupService({ db, appDataDir: paths.appDataDir, appVersion: app.getVersion(), startup, restart: restartApp })
     const removal = { db, appDataDir: paths.appDataDir, thumbnailsDir: paths.thumbnailsDir, previewsDir, trash: trashStep() }
     registerIpc(
-      createHandlers({ db, library, exports, removal, paths: { catalogFile: paths.catalogFile, thumbnailsDir: paths.thumbnailsDir, previewsDir } }),
+      createHandlers({ db, library, exports, removal, backups, paths: { catalogFile: paths.catalogFile, thumbnailsDir: paths.thumbnailsDir, previewsDir } }),
       (url) => isTrustedRendererUrl(url, trustedOrigins),
     )
 
