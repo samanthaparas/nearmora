@@ -112,6 +112,9 @@ const MyTemplate = z.object({
   photos: count,
 })
 
+// Catalog backup and restore (AC11). Main opens the folder pickers; a backup chosen for restoring is known by a token.
+const BackupCounts = z.object({ sources: count, assets: count, favorites: count, similaritySets: count, albums: count, projects: count })
+
 /** Album edits return an undo id: passing it to albums:undo puts the album back as it was before that edit. */
 const UndoResult = z.object({ undoId: z.number().int().positive() })
 
@@ -369,6 +372,36 @@ export const commands = {
     input: z.object({ cache: z.enum(['previews', 'thumbnails']) }),
     output: z.object({ removed: count, rescanning: count }),
   },
+  'backup:status': {
+    input: z.undefined(),
+    output: z.object({
+      lastBackup: z.object({ at: z.iso.datetime(), folderName: z.string(), counts: z.record(z.string(), count) }).nullable(),
+      /** After a restore: when the backup was made, and its photo folders that aren't on this Mac. */
+      restored: z.object({ backupMadeAt: z.iso.datetime(), appVersion: z.string(), missingFolders: z.array(z.string()) }).nullable(),
+      /** What happened to a restore or undo scheduled for this start. */
+      startup: z.enum(['restored', 'undone', 'failed']).nullable(),
+    }),
+  },
+  'backup:create': {
+    input: z.undefined(),
+    output: z.discriminatedUnion('status', [
+      z.object({ status: z.literal('cancelled') }),
+      z.object({ status: z.literal('refused'), reason: z.enum(['inside_source', 'app_data', 'unwritable']) }),
+      z.object({ status: z.literal('done'), folderName: z.string(), counts: BackupCounts }),
+    ]),
+  },
+  // Checks the chosen backup and describes it; nothing changes until backup:restore.
+  'backup:choose': {
+    input: z.undefined(),
+    output: z.discriminatedUnion('status', [
+      z.object({ status: z.literal('cancelled') }),
+      z.object({ status: z.literal('invalid'), reason: z.enum(['damaged', 'too_new']) }),
+      z.object({ status: z.literal('ready'), token: id, madeAt: z.iso.datetime(), appVersion: z.string(), counts: BackupCounts, missingFolders: z.array(z.string()) }),
+    ]),
+  },
+  // Schedules the restore and restarts the app; the backup is put in place before the catalog opens.
+  'backup:restore': { input: z.object({ token: id }), output: z.object({ status: z.enum(['restarting', 'expired']) }) },
+  'backup:undoRestore': { input: z.undefined(), output: z.object({ status: z.enum(['restarting', 'unavailable']) }) },
   'albums:photos': {
     input: z.object({ albumId: id, afterPosition: z.number().int().nullable().optional(), limit: z.number().int().min(1).max(500) }),
     output: z.object({ items: z.array(LibraryItem), total: count, nextAfter: z.number().int().nullable() }),

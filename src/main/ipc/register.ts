@@ -35,6 +35,7 @@ import {
 import { saveReview, undoReview } from '../catalog/repositories/review'
 import { addToSet, nearbyPhotos, removeFromSet, ungroupSet } from '../catalog/repositories/set-edits'
 import { getSetDetail, listSets } from '../catalog/repositories/sets'
+import type { BackupService } from '../catalog/backup-service'
 import type { LibraryService } from '../library/library-service'
 import { planRemoval, removePhotos, type RemoveDeps } from '../library/remove-photos'
 import { clearCacheFolder, storageUsage } from '../library/storage'
@@ -48,10 +49,11 @@ export interface HandlerContext {
   paths: { catalogFile: string; thumbnailsDir: string; previewsDir: string }
   /** What Clean up needs to remove files: app-data folders to stay out of, and the Trash step. */
   removal: RemoveDeps
+  backups: BackupService
 }
 
 // One handler per command in ipc-contract.ts. The Handlers type makes a missing one a compile error.
-export function createHandlers({ db, library, exports, paths, removal }: HandlerContext): Handlers {
+export function createHandlers({ db, library, exports, paths, removal, backups }: HandlerContext): Handlers {
   return {
     'app:getInfo': () => ({ name: app.getName(), version: app.getVersion() }),
     // Written next to the main bundle by the build. A development run started without it shows none, not an error.
@@ -174,7 +176,31 @@ export function createHandlers({ db, library, exports, paths, removal }: Handler
       return outcome === 'busy' ? { status: 'busy' as const } : { status: 'done' as const, mode, ...outcome }
     },
     'cleanup:history': () => listRemovals(db),
+    'backup:status': () => backups.status(),
+    // The pickers run here in main, so no path passes through the UI.
+    'backup:create': async () => {
+      const path = await pickFolder({ title: 'Choose where to save the catalog backup', buttonLabel: 'Back up here', create: true })
+      return path ? backups.create(path) : { status: 'cancelled' as const }
+    },
+    'backup:choose': async () => {
+      const path = await pickFolder({ title: 'Choose a Nearmora catalog backup folder', buttonLabel: 'Choose backup', create: false })
+      return path ? backups.inspect(path) : { status: 'cancelled' as const }
+    },
+    'backup:restore': ({ token }) => ({ status: backups.restore(token) ? ('restarting' as const) : ('expired' as const) }),
+    'backup:undoRestore': () => ({ status: backups.undoRestore() ? ('restarting' as const) : ('unavailable' as const) }),
   }
+}
+
+// A folder picked in the macOS dialog, or null if the person cancelled.
+async function pickFolder(options: { title: string; buttonLabel: string; create: boolean }): Promise<string | null> {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const dialogOptions: Electron.OpenDialogOptions = {
+    title: options.title,
+    buttonLabel: options.buttonLabel,
+    properties: options.create ? ['openDirectory', 'createDirectory'] : ['openDirectory'],
+  }
+  const picked = window ? await dialog.showOpenDialog(window, dialogOptions) : await dialog.showOpenDialog(dialogOptions)
+  return picked.canceled ? null : (picked.filePaths[0] ?? null)
 }
 
 // "Cancel" is the default and the Escape choice, so pressing Return or Escape out of habit never deletes anything.

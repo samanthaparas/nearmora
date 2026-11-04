@@ -66,6 +66,13 @@ export interface NearmoraApi {
   /** Removes the chosen pictures and copies, by catalogue id. Main checks each file and confirms "forever" natively. */
   removePhotos(input: CommandInput<'cleanup:remove'>): Promise<IpcResult<CommandOutput<'cleanup:remove'>>>
   removalHistory(): Promise<IpcResult<CommandOutput<'cleanup:history'>>>
+  backupStatus(): Promise<IpcResult<CommandOutput<'backup:status'>>>
+  /** Opens the macOS folder picker and writes a new catalog backup there. */
+  createBackup(): Promise<IpcResult<CommandOutput<'backup:create'>>>
+  /** Opens the folder picker for a backup to restore, and checks it; nothing changes yet. */
+  chooseBackup(): Promise<IpcResult<CommandOutput<'backup:choose'>>>
+  restoreBackup(input: CommandInput<'backup:restore'>): Promise<IpcResult<CommandOutput<'backup:restore'>>>
+  undoRestore(): Promise<IpcResult<CommandOutput<'backup:undoRestore'>>>
   /** Subscribes to events from main. Returns a function that unsubscribes. */
   onEvent(listener: (event: MainEvent) => void): () => void
 }

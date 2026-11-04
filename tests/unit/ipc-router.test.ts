@@ -66,6 +66,11 @@ function makeRouter(overrides: Partial<Handlers> = {}) {
     'cleanup:duplicates': () => ({ groups: [], total: 0 }),
     'cleanup:remove': () => ({ status: 'cancelled' }),
     'cleanup:history': () => [],
+    'backup:status': () => ({ lastBackup: null, restored: null, startup: null }),
+    'backup:create': () => ({ status: 'cancelled' }),
+    'backup:choose': () => ({ status: 'cancelled' }),
+    'backup:restore': () => ({ status: 'expired' }),
+    'backup:undoRestore': () => ({ status: 'unavailable' }),
     'myTemplates:list': () => [],
     'myTemplates:save': () => {
       throw new Error('not used')
