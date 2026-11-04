@@ -1,6 +1,6 @@
 /**
- * The Memory Studio screen: saved collage and carousel projects, and the editor for one of them.
- * New projects start from Favorites; export (writing the finished files) arrives in the next milestone part.
+ * The Memory Studio screen: saved collage and carousel projects, and the editor for one of them, where they're also
+ * exported. New projects start from Favorites. Choosing Memory Studio in the sidebar always comes back to this list.
  */
 
 import { useCallback, useEffect, useState } from 'react'

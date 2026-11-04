@@ -54,11 +54,9 @@ async function unexpectedSockets(app: ElectronApplication): Promise<{ unexpected
 
 const nav = (page: Page, name: string) => page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name }).click()
 
-// Opens a project from Memory Studio's list. The sidebar keeps an open project open, so go back to the list first.
+// Opens a project from Memory Studio's list (choosing Memory Studio in the sidebar always shows the list).
 async function openProject(page: Page, name: RegExp) {
   await nav(page, 'Memory Studio')
-  const back = page.getByRole('button', { name: '← All projects' })
-  if ((await back.count()) > 0) await back.click()
   await page.locator('.moments__card', { hasText: name }).first().click()
 }
 
