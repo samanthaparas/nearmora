@@ -6,9 +6,48 @@ Nearmora is a local-first macOS desktop app for finding your favorite photos, ch
 
 > Nearmora is a working name and has not been legally cleared.
 
+## What it does
+
+- **Library.** Add photo folders and drives. Nearmora scans them, makes thumbnails in a separate worker process, and groups photos into date moments you can rename and give a cover. Search by file, folder or moment, filter by date, folder and favorites, and scroll any size of library smoothly (only the visible rows are in the page). Albums are your own ordered collections, rearrangeable from the keyboard, with undo.
+- **Offline drives.** Unplugged drives keep showing their photos from saved previews, and reconnect only after a check that the files are the same ones.
+- **Best Moments.** Finds photos that look alike and were taken moments apart, so you can compare them side by side (with zoom), pick zero, one or several favorites, decide later, and fix sets that grouped the wrong photos. Leaving with unsaved picks always asks first.
+- **Memory Studio.** Turns favorites into a collage (2 or 4 photos: 18 everyday layouts and 20 playful ones, with tilted postcards, film strips, arches, captions and more), a carousel (2–10 photos), or a seamless carousel (one wide design cut into matching slides). Five sharing sizes and five print sizes, with a warning when a photo is too small to print sharply.
+- **Editing.** Quick edits for background, margins, gutters, borders, crop, zoom and photo order. Customize moves, resizes, tilts, rounds, flips, locks and hides photos, adds or removes places, and saves the result as your own template. Every change saves as you go, with undo and redo.
+- **Export.** Full-resolution JPEGs into a fresh folder you choose, with no location or camera data. Checked first, never overwriting, and never leaving a half-finished set behind.
+- **Clean up.** Mark photos "Don't need", choose which identical copy stays, and remove them: to the Trash by default, or forever after its own confirmation. Every file is re-checked first, and a local record lists what was removed.
+- **Backup and restore.** Settings backs up the catalog (your folders, choices, albums, projects and templates, not the photos) and restores a backup on restart, with undo.
+
+## Privacy and safety
+
+- **Local-first.** Everything stays on your Mac. The app makes no network requests, and an automated test checks that no app process opens a network socket.
+- **Originals stay put.** Browsing, favoriting, organizing and making projects never move, edit or upload a photo. The only way a photo leaves its folder is Clean up, when you choose it and confirm ([ADR-0019](docs/decisions/ADR-0019-removing-photos.md)).
+- **A locked-down app.** The interface runs sandboxed with a strict content security policy, and every request it makes to the rest of the app is validated first ([ADR-0002](docs/decisions/ADR-0002-renderer-security.md)).
+
 ## Status
 
-R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (indexing slice) R3b (scan control, offline folders, moments, search and a virtualized grid) and R3c (albums) are done, R4 (Best Moments) and R5 (Memory Studio and export) are done: every feature milestone of the MVP. R6 part 1 (beta hardening) is in: a quit prompt for unsaved picks, a Settings screen with cache controls, automated network-off and accessibility checks, and measured performance. Signing and notarization (R6 part 2) need an Apple Developer account. You can add a photo folder: Nearmora scans it read-only, makes thumbnails in a separate worker process and shows them in a grid, explaining any files it skipped. Scans can be paused and resumed (also after quitting), unplugged drives show their photos as offline and reconnect only after a fingerprint check, and the Sources screen removes a folder from the catalog after showing what that changes. Photos are grouped into date moments you can rename and give a cover, you can search by file, folder or moment and filter by date, folder and favorites, and the grid keeps only the visible rows in the page (tested with 1,200 photos). Albums are your own ordered collections: select photos to add them, rearrange with buttons that work from the keyboard, and undo any album change. Best Moments groups photos that look alike and were taken moments apart, so you can compare two side by side (with zoom), pick zero, one or several favorites, save with undo or decide later, and fix sets that grouped the wrong photos. Leaving with unsaved picks always asks first. Favorites gathers your picks, and Memory Studio turns 2 or 4 of them into a collage (18 everyday layouts, plus 20 playful pairs and quartets with tilted postcards, film strips, arches, circles, tape, labels and captions), or 2–10 into a carousel, or 3 or 5 into a seamless carousel (one wide design cut into exactly matching slides, with photos running across the cuts), with a swipe preview and a mat for standard carousels, at five sharing sizes or five print sizes (with a warning for photos too small to print sharply). Quick edits change the background colour, margin, gutter and photo borders, and per photo the order, swap, replace, fit or fill, crop and zoom, by mouse or keyboard; Customize moves, resizes, tilts, rounds, flips, locks and hides photos (dragged with snapping, nudged with the arrow keys, or typed exactly), changes which is in front, can leave a place empty, add or remove places, and save the result as one of your own templates; every change is saved, can be undone and redone, and "Reset to layout defaults" brings back the layout's own look. Export writes JPEGs at the chosen size (full-resolution colour, no location or camera data) into a fresh folder you choose: checked first, never overwriting, and never leaving a half-finished set behind. Clean up (milestone C1) helps clear clutter: mark photos "Don't need" in the Library, choose which identical copy stays, and remove them, to the Trash by default or forever after a macOS confirmation. Every file is re-checked first (in a folder you added, an ordinary file, unchanged since the scan), a photo used in a Studio project keeps its last copy, and a local record lists what was removed. Settings backs up the catalog (your folders, choices, albums, projects and templates, not the photos) and restores a backup after showing what's in it; the restore happens on restart and can be undone. See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+Every MVP milestone is done: the secure app shell, CI and packaging, the catalog, indexing, scan control and offline drives, moments, search, albums, Best Moments, Memory Studio and export, beta hardening, and Clean up.
+
+In progress:
+
+- A visual refresh of the interface: a deep plum sidebar with icons, a photo-led Library, and a photos-first way to start a project, with layout previews drawn from your own photos.
+
+Not done yet:
+
+- Signing and notarization, which need an Apple Developer account. Until then, builds are unsigned and only for testing.
+- A manual VoiceOver walk-through of Memory Studio. Automated accessibility checks (WCAG 2.1 AA, at normal size and 200% zoom) run on every screen.
+
+See the [roadmap](docs/planning/Nearmora-Technical-Roadmap.md) for what comes next.
+
+## Getting started
+
+You need macOS on Apple silicon and Node.js 24 or later.
+
+```bash
+npm install
+npm run dev
+```
+
+The app opens with live reload. The first time, add a folder of photos from the Library screen.
 
 ## Commands
 
@@ -19,7 +58,7 @@ R1a (secure app shell), R1b (CI and packaging), R2 (the catalog database), R3a (
 | `npm run build` | Builds the app into `out/`, then the licence notices of everything it ships (fails if one lacks a licence text) |
 | `npm run typecheck` | Checks every TypeScript file without running anything |
 | `npm test` | Runs the unit, integration and component tests (real SQLite files and generated photos in a temporary folder; the private fixture pack too, if it's present) |
-| `npm run test:e2e` | Builds the app, then launches it with a throwaway profile and runs the security and Library tests inside it |
+| `npm run test:e2e` | Builds the app, then launches it with a throwaway profile and runs every end-to-end test inside it: security, Library, Best Moments, Studio, export, Clean up, backup, accessibility and network-off checks |
 | `npm run lint` | Checks code for likely mistakes (ESLint, including type-aware rules) |
 | `npm run package:mac` | Builds an unsigned `Nearmora.app` into `release/` |
 | `npm run test:packaged` | Checks the packaged app: native libraries, catalog migrations, the media worker, security fuses, launch, shipped files, and the self-test with networking denied |
@@ -88,12 +127,19 @@ Every source file starts with a short comment explaining its purpose. These file
 | [Technical Roadmap](docs/planning/Nearmora-Technical-Roadmap.md) | Stack, schema, IPC contract, milestones and open decisions |
 | [Technical Requirements](docs/planning/Nearmora-Technical-Requirements-Source.md) | Original stack and learning requirements, kept word for word |
 | [Mockup Prompts](docs/planning/Nearmora-Mockup-Prompts.md) | How the concept images were generated, and their limits |
+| [Decision records](docs/decisions/) | Why each key technical choice was made (ADR-0001 to ADR-0024) |
+| [Evidence](docs/evidence/) | Test results, measurements and screenshots for each milestone |
 
 The concept images in `docs/planning/` are design references only, and the photos in them are synthetic. The "Moments" concept board is the owner's own work, kept as a picture of the wider product vision; the app ships none of its assets.
 
 ## Stack
 
-In use: Electron · React · TypeScript · Vite · Zod · ESLint · Vitest · React Testing Library · Playwright · electron-builder · GitHub Actions
+- **App:** Electron · React · TypeScript · Vite (electron-vite) · Zod
+- **Data and photos:** SQLite (better-sqlite3) · sharp · exifr (reads the date a photo was taken)
+- **Quality:** ESLint · Vitest · React Testing Library · Playwright · axe-core
+- **Build and CI:** electron-builder · GitHub Actions (macOS)
 
-In use: SQLite (better-sqlite3) · sharp · exifr (reads the date a photo was taken)
+## Licence
+
+Nearmora is not open source. The code is published for reference and as a portfolio piece; all rights are reserved. The third-party packages it ships keep their own licences, listed in the app's Settings screen.
 
